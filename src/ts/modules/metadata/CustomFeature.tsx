@@ -13,7 +13,7 @@ interface TooltipProps extends PropsWithChildren
 	bDisabled: boolean
 }
 
-const TooltipSource: ComponentClass<TooltipProps> = findModuleExport((e) => e?.toString()?.includes("tool-tip-source"));
+const TooltipSource: ComponentClass<TooltipProps> = findModuleExport((e) => e?.toString?.()?.includes("tool-tip-source"));
 
 export interface CustomFeatureProps
 {

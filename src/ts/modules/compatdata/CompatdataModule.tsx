@@ -145,12 +145,16 @@ export class CompatdataModule extends Module<
 
 	progressDescription(data?: CompatdataData): string
 	{
-		return format(t("foundCompatdata"), {
+		const compat = (cat: SteamDeckCompatCategory) => ({
 			0: t("unknown"),
 			1: t("unsupported"),
 			2: t("playable"),
 			3: t("verified")
-		}[data?.compat_category ?? SteamDeckCompatCategory.UNKNOWN]);
+		}[cat]);
+
+		return format(t("foundCompatdata"),
+			`Deck: ${compat(data?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN)} - ` +
+			`Machine: ${compat(data?.machine_compat_category ?? data?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN)}`);
 	}
 
 	get verified(): boolean
@@ -208,8 +212,17 @@ export class CompatdataModule extends Module<
 
 	async applyOverview(overview: SteamAppOverview): Promise<void>
 	{
-		if (this.verified)
-			overview.steam_hw_compat_category_packed = this.data[overview.appid]?.compat_category ?? SteamDeckCompatCategory.UNKNOWN
+		if (this.verified){
+			// Compatibility is for Steam Deck, so it is inherited by Steam OS and Steam Machine
+			let deck_category = this.data[overview.appid]?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN;
+			let machine_category = this.data[overview.appid]?.machine_compat_category ?? deck_category;
+
+			// 32 bit (uint): Deck | Steam OS | Steam Machine
+			// Steam OS gets max of deck/machine
+			overview.steam_hw_compat_category_packed = (deck_category << 0) |
+				((deck_category > machine_category ? deck_category : machine_category) << 4) |
+				(machine_category << 6);
+		}
 	}
 
 
@@ -217,12 +230,14 @@ export class CompatdataModule extends Module<
 	{
 		const compatdata = this.data[details.unAppID]
 
-		if (this.verified && this.notes && compatdata?.compat_notes)
+		if (this.verified && this.notes && compatdata?.notes?.length)
 		{
-			details.vecDeckCompatTestResults = [{
-				test_loc_token: compatdata.compat_notes,
+			// DEV: maybe add detailed test results (gui, controller, ...)?
+			details.vecDeckCompatTestResults = compatdata.notes.map(n => ({
+				test_loc_token: n,
 				test_result: 1
-			}];
+			}));
+			details.vecSteamMachineCompatTestResults = details.vecDeckCompatTestResults;
 		}
 	}
 }

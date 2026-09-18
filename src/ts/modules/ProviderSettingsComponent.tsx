@@ -22,18 +22,24 @@ export const ProviderSettingsComponent: FC = () => {
 		pages.push({
 			title: provider.title,
 			content: (
-				   <PanelSection title={format(t("settingsModule"), provider.title)}>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("settingsEnabled")}
-								 description={t("settingsEnabledDesc")}
-								 checked={enabled} onChange={(checked) => {
-							   setEnabled(checked);
-							   provider.enabled = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <ProviderSettings/>
-				   </PanelSection>
+				<PanelSection title={format(t("settingsModule"), provider.title)}>
+					<PanelSectionRow>
+						<ToggleField
+								label={t("settingsEnabled")}
+								description={t("settingsEnabledDesc")}
+								checked={enabled} onChange={async (checked) => {
+							setEnabled(checked);
+							if(checked != provider.enabled){
+								if(checked)
+									await provider.mount();
+								else
+									await provider.dismount();
+							}
+							provider.enabled = checked;
+						}}/>
+					</PanelSectionRow>
+					<ProviderSettings/>
+				</PanelSection>
 			)
 		})
 	}

@@ -151,7 +151,15 @@ type SteamAppDetails = {
 	vecDLC: any[],
 	vecDeckCompatTestResults: {
 		test_loc_token: string,
+		test_result: number // 1: notes, 0: unknown, 2: unsupported, 3: playable, 4: verified
+	}[],
+	vecSteamOSCompatTestResults: {
+		test_loc_token: string,
 		test_result: number
+	}[],
+	vecSteamMachineCompatTestResults: {
+		test_loc_token: string,
+		test_result: number // 1: notes, 0: unknown, 2: unsupported, 3: playable, 4: verified
 	}[],
 	vecLanguages: AppLanguages[],
 	vecLegacyCDKeys: any[],

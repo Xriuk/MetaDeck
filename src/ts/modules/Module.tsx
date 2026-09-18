@@ -338,16 +338,19 @@ export abstract class Module<
 
 	async provide(appId: number): Promise<Data | undefined>
 	{
-		for (const provider of this.providers.filter((provider) => provider.enabled))
+		for (const provider of this.providers)
 		{
 			if (provider.enabled && await provider.test(appId))
 			{
 				const data = await provider.provide(appId);
-				if (data)
+				if (data){
+					this.logger.debug(appId, provider.identifier, data);
 					await this.provideAdditional(appId, data);
-				return data;
+					return data;
+				}
 			}
 		}
+		this.logger.debug(appId, "no provider");
 		return this.provideDefault(appId);
 	}
 
@@ -358,7 +361,7 @@ export abstract class Module<
 
 	async provideAdditional(appId: number, data: Data): Promise<void>
 	{
-		for (const provider of this.providers.filter((provider) => provider.enabled))
+		for (const provider of this.providers)
 		{
 			if (provider.enabled && await provider.test(appId))
 			{

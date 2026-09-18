@@ -7,9 +7,7 @@ from metadeck.Utils import read_file, file_size, file_date, directory_size
 
 import decky
 
-
 class Plugin:
-
 	async def read_config(self) -> dict:
 		with open(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json"), "r") as f:
 			try:
@@ -59,10 +57,6 @@ class Plugin:
 	async def heroic_gog_data(self, id: int) -> dict | None:
 		if Heroic.gog is not None and id in Heroic.gog:
 			return Heroic.gog[id]
-
-	async def hash(self, path: str) -> str:
-		return os.popen(
-			f"'{os.path.join(decky.DECKY_PLUGIN_DIR, 'bin', 'hash')}' \"{path}\"").read().strip()
 
 	async def _main(self) -> None:
 		"""

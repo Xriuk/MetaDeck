@@ -40,24 +40,7 @@ export class Settings
 				install_size: true,
 				install_date: true,
 				providers: {
-					egs: {
-						enabled: true,
-						ordinal: 0,
-						resolvers: {
-							junk: {
-								enabled: true,
-								ordinal: 0
-							},
-							nsl: {
-								enabled: true,
-								ordinal: 1
-							},
-							heroic: {
-								enabled: true,
-								ordinal: 2
-							}
-						}
-					},
+					// Id-based
 					gog: {
 						enabled: true,
 						ordinal: 1,
@@ -74,16 +57,34 @@ export class Settings
 								enabled: true,
 								ordinal: 2
 							}
-						}
+						},
+						language: "english"
+					},
+					// Fuzzy search
+					steam: {
+						enabled: true,
+						ordinal: 2,
+						fuzziness: 5,
+						overrides: {},
+						resolvers: {},
+						language: "english"
 					},
 					igdb: {
 						enabled: true,
-						ordinal: 2,
+						ordinal: 3,
 						fuzziness: 5,
 						api_server: undefined,
 						custom_api_servers: [],
 						overrides: {},
 						resolvers: {}
+					},
+					rawg: {
+						enabled: false,
+						ordinal: 4,
+						fuzziness: 5,
+						overrides: {},
+						resolvers: {},
+						api_key: ''
 					}
 				}
 			},
@@ -108,13 +109,6 @@ export class Settings
 			metadata: {
 				data: {},
 				providers: {
-					egs: {
-						resolvers: {
-							junk: {},
-							nsl: {},
-							heroic: {}
-						}
-					},
 					gog: {
 						resolvers: {
 							junk: {},
@@ -123,6 +117,12 @@ export class Settings
 						}
 					},
 					igdb: {
+						resolvers: {}
+					},
+					steam: {
+						resolvers: {}
+					},
+					rawg: {
 						resolvers: {}
 					}
 				}
@@ -235,7 +235,7 @@ export class Settings
 		const start = systemClock.getTimeMs();
 		await this.write_config(this.configData);
 		const end = systemClock.getTimeMs();
-		this.logger.debug("Wrote settings in " + (end - start) + "ms", this.configData);
+		this.logger.debug("Wrote config in " + (end - start) + "ms", this.configData);
 	}
 
 	async readCache(): Promise<void>

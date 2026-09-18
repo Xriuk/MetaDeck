@@ -1,25 +1,20 @@
-import {MetadataProvider} from "../../MetadataProvider";
 import {
 	CustomStoreCategory,
 	Developer,
-	IDDictionary,
 	MetadataData,
 	Publisher,
 	StoreCategory
 } from "../../../../Interfaces";
-import {ProviderCache, ProviderConfig} from "../../../Provider";
 import {Company, Game, GameMode, InvolvedCompany, MultiplayerMode} from "igdb-api-types";
 import Logger from "../../../../logger";
 import {FC, Fragment, useState} from "react";
 import {PanelSectionRow, SliderField} from "@decky/ui";
-import {closestWithLimit, distanceWithLimit} from "../../../../util";
 import {Entry, IdOverrideComponent} from "../../../IdOverrideComponent";
-import {callable} from "@decky/api";
+import {fetchNoCors} from "@decky/api";
 import {t} from "../../../../useTranslations";
-import {getLaunchCommand, getShortcutCategories, isEmulatedGame, romRegex} from "../../../../shortcuts";
-import {ResolverCache, ResolverConfig} from "../../../Resolver";
 import {MetadataProviderConfigs} from "../../MetadataModule";
 import {IGDBApiServerComponent} from "./IGDBApiServerComponent";
+import { FuzzySearchMetadataProvider, type FuzzySearchMetadataProviderCache, type FuzzySearchMetadataProviderConfig } from "../FuzzySearchMetadataProvider";
 
 export interface APIServer
 {
@@ -27,27 +22,22 @@ export interface APIServer
 	url: string
 }
 
-export interface IGDBMetadataProviderConfig extends ProviderConfig<{}, ResolverConfig>
+export interface IGDBMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
-	fuzziness: number,
 	api_server: APIServer | undefined,
 	custom_api_servers: APIServer[]
-	overrides: IDDictionary
 }
 
-export interface IGDBMetadataProviderCache extends ProviderCache<{}, ResolverCache>
+export interface IGDBMetadataProviderCache extends FuzzySearchMetadataProviderCache
 {
 }
 
-export class IGDBMetadataProvider extends MetadataProvider<any>
+export class IGDBMetadataProvider extends FuzzySearchMetadataProvider
 {
-
 	static identifier: keyof MetadataProviderConfigs = "igdb";
 	static title: string = t("providerMetadataIGDB");
 	identifier: keyof MetadataProviderConfigs = IGDBMetadataProvider.identifier;
 	title: string = IGDBMetadataProvider.title;
-
-	resolvers = []
 
 	logger: Logger = new Logger(IGDBMetadataProvider.identifier)
 
@@ -73,54 +63,6 @@ export class IGDBMetadataProvider extends MetadataProvider<any>
 		void this.module.saveData();
 	}
 
-	get overrides(): IDDictionary
-	{
-		return this.module.config.providers.igdb.overrides;
-	}
-
-	set overrides(data: IDDictionary)
-	{
-		this.module.config.providers.igdb.overrides = data;
-		void this.module.saveData();
-	}
-
-	get fuzziness(): number
-	{
-		return this.module.config.providers.igdb.fuzziness;
-	}
-
-	set fuzziness(fuzziness: number)
-	{
-		this.module.config.providers.igdb.fuzziness = fuzziness;
-		void this.module.saveData();
-	}
-
-
-	async provide(appId: number): Promise<MetadataData | undefined>
-	{
-		return this.throttle(() => this.getMetadataForGame(appId));
-	}
-
-	async test(appId: number): Promise<boolean>
-	{
-		if (this.overrides[appId] == 0)
-			return false;
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
-		const results = await this.throttle(() => this.search(display_name));
-		const names = results.map(value => value.title);
-		const closest_names = distanceWithLimit(this.fuzziness, display_name, names);
-		return closest_names.length > 0;
-	}
-
-	public normalize(str: string): string
-	{
-		return str
-			   ?.toLowerCase()
-			   ?.replace(/[^a-z\d \x7f-\xff]/gi, ' ')
-			   ?.replace(/\s+/gi, ' ')
-			   ?.trim();
-	}
-
 
 	private gameToMetadataData(game: Game): MetadataData
 	{
@@ -128,7 +70,7 @@ export class IGDBMetadataProvider extends MetadataProvider<any>
 		const gamePubs: Publisher[] = []
 		const gameCats: (StoreCategory | CustomStoreCategory)[] = [CustomStoreCategory.NonSteam]
 
-		if (game.game_modes && game.game_modes.length > 0)
+		if (game.game_modes?.length)
 		{
 			for (let gameMode of game.game_modes)
 			{
@@ -148,7 +90,7 @@ export class IGDBMetadataProvider extends MetadataProvider<any>
 			}
 		}
 
-		if (game.multiplayer_modes && game.multiplayer_modes.length > 0)
+		if (game.multiplayer_modes?.length)
 		{
 			for (let multiplayerMode of game.multiplayer_modes)
 			{
@@ -161,7 +103,7 @@ export class IGDBMetadataProvider extends MetadataProvider<any>
 			}
 		}
 
-		if (game.involved_companies && game.involved_companies.length > 0)
+		if (game.involved_companies?.length)
 		{
 			for (let involvedCompany of game.involved_companies)
 			{
@@ -206,9 +148,9 @@ export class IGDBMetadataProvider extends MetadataProvider<any>
 		// }
 
 		return {
-			title: game.name ?? "No Title",
+			title: game.name || "No Title",
 			id: game.id,
-			description: game.summary ?? t("noDescription"),
+			description: game.summary || t("noDescription"),
 			developers: gameDevs,
 			publishers: gamePubs,
 			rating: game.aggregated_rating,
@@ -217,10 +159,10 @@ export class IGDBMetadataProvider extends MetadataProvider<any>
 		}
 	}
 
-	private async search(title: string): Promise<MetadataData[]>
+	protected async search(title: string): Promise<MetadataData[]>
 	{
 		if (this.apiServer == undefined) return[]
-		const response = (await fetch(`${this.apiServer.url}/search`, {
+		const response = (await fetchNoCors(`${this.apiServer.url}/search`, {
 			method: "POST",
 			headers: {
 				"Accept": "application/json",
@@ -239,87 +181,8 @@ export class IGDBMetadataProvider extends MetadataProvider<any>
 		} else if (response.status == 429)
 		{
 			return this.throttle(() => this.search(title));
-		} else if (response.status == 500) return[]
+		} else if (response.status >= 500) return[]
 		else throw Error(`Could not find metadata for "${title}": \n${await response.text()}`);
-	}
-
-	public async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
-	{
-		this.logger.debug(`Fetching metadata for game ${appId}`)
-
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
-		const data_id = this.overrides[appId];
-		this.logger.debug("data_id", data_id);
-		const results = await this.search(display_name);
-		if (results.length > 0)
-		{
-			this.logger.debug("results", results);
-			let games: MetadataData[];
-			if (data_id === undefined)
-			{
-				const names = results.map(value => value.title);
-				const closest_name = closestWithLimit(this.fuzziness, display_name, names)
-				this.logger.debug(closest_name, results.map(value => value.title))
-				const games1 = results.filter(value => value.title === closest_name)
-				this.logger.debug("Games: ", games1)
-				games = games1.filter(value => value.description !== "")
-				// this.metadata_id[appId] = games.length > 0 ? games[0].id : 0;
-				// await this.module.removeCache(appId);
-			} else if (data_id === 0)
-			{
-				return undefined;
-			} else
-			{
-				games = results.filter(value => value.id === data_id)
-			}
-			const game = games.reverse().pop();
-			if (game)
-			{
-				game.store_categories = game.store_categories.concat(await getShortcutCategories(appId));
-			}
-			this.logger.debug(game);
-			return game
-
-		} else return undefined;
-		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
-	}
-
-	public async getAllMetadataForGame(appId: number): Promise<Record<number, MetadataData> | undefined>
-	{
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
-		const results = await this.search(display_name);
-		if (results.length > 0)
-		{
-			const names = results.map(value => value.title);
-			const closest_names = distanceWithLimit(this.fuzziness, display_name, names);
-			const games = results.filter(value => closest_names.includes(value.title));
-			// const closest_name = closest(this.normalize(display_name), results.map(value => value.name) as string[])
-			// const games = results.filter(value => (distance(display_name, value.title) < this.fuzziness))
-
-			let ret: Record<number, MetadataData> = {};
-			for (let game of games)
-			{
-				ret[+game.id] = game;
-			}
-			return ret;
-		} else return undefined;
-	}
-
-	private file_size: (path: string) => Promise<number> = callable("file_size");
-	private file_date: (path: string) => Promise<number> = callable("file_date");
-
-	async apply(appId: number, data: MetadataData): Promise<void>
-	{
-		const launchCommand = await getLaunchCommand(appId);
-		if (await isEmulatedGame(appId))
-		{
-			const path = launchCommand.match(romRegex)?.[0]
-			if (path)
-			{
-				data.install_size = await this.file_size(path);
-				data.install_date = await this.file_date(path);
-			}
-		}
 	}
 
 	settingsComponent(): FC

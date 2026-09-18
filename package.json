@@ -1,6 +1,6 @@
 {
 	"name": "metadeck",
-	"version": "3.0.1",
+	"version": "4.0.0",
 	"description": "Plugin for viewing metadata for non steam games from IGDB. Part of the EmuDeck Project",
 	"type": "module",
 	"scripts": {
@@ -48,7 +48,7 @@
 	},
 	"dependencies": {
 		"@decky/api": "^1.0.5",
-		"@decky/ui": "^4.0.3",
+		"@decky/ui": "^4.12.0",
 		"@mdxeditor/editor": "^3.11.5",
 		"@retroachievements/api": "^2.1.0",
 		"async-mutex": "^0.4.0",
@@ -62,7 +62,8 @@
 		"react-markdown": "^8.0.6",
 		"remark-gfm": "^3.0.1",
 		"throttled-queue": "^2.1.4",
-		"tslib": "^2.6.3"
+		"tslib": "^2.6.3",
+		"type-steamapi": "^0.9.47"
 	},
 	"pnpm": {
 		"peerDependencyRules": {

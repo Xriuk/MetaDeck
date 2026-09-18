@@ -20,8 +20,9 @@ export interface MetadataData
 
 export interface CompatdataData
 {
-	compat_category?: SteamDeckCompatCategory,
-	compat_notes?: string,
+	deck_compat_category?: SteamDeckCompatCategory;
+	machine_compat_category?: SteamDeckCompatCategory; // Will default to deck_compat_category if not provided
+	notes?: string[];
 }
 
 export type ID = number | string
@@ -60,22 +61,49 @@ export enum StoreCategory
 	MultiPlayer = 1,
 	SinglePlayer = 2,
 	CoOp = 9,
+	Demo = 10,
+	HdrRendering = 12,
+	CaptionsAvailable = 13,
+	CommentaryAvailable = 14,
 	PartialController = 18,
 	MMO = 20,
 	Achievements = 22,
-	SteamCloud = 23,
 	SplitScreen = 24,
 	CrossPlatformMultiPlayer = 27,
 	FullController = 28,
-	TradingCards = 29,
-	Workshop = 30,
 	VRSupport = 31,
 	OnlineMultiPlayer = 36,
 	LocalMultiPlayer = 37,
 	OnlineCoOp = 38,
-	LocalCoOp = 392,
-	RemotePlayTogether = 44,
-	HighQualitySoundtrackAudio = 50
+	LocalCoOp = 39,
+	LANPVP = 47,
+	LANCoOp = 48,
+	PVP = 49,
+	HighQualitySoundtrackAudio = 50,
+	TrackedControllerSupport = 52,
+	VRSupported = 53,
+	VROnly = 54,
+	GamepadPreferred = 60,
+	HDRSupported = 61,
+	AdjustableTextSize = 64,
+	SubtitleOptions = 65,
+	ColorAlternatives = 66,
+	CameraComfort = 67,
+	CustomVolumeControls = 68,
+	StereoSound = 69,
+	SurroundSound = 70,
+	NarratedGameMenus = 71,
+	ChatSTT = 72,
+	ChatTTS = 73,
+	PlayableWithoutTimedInput = 74,
+	KeyboardOnlyOption = 75,
+	MouseOnlyOption = 76,
+	TouchOnlyOption = 77,
+	AdjustableDifficulty = 78,
+	SaveAnytime = 79,
+	PlayableAtYourOwnPace = 80,
+	PlayableWithoutVision = 81,
+	ContrastControls = 82
 }
 
 export enum CustomStoreCategory
@@ -98,6 +126,7 @@ export interface VerifiedDBResults
 	"Console": string,
 	"Game": string,
 	"Emulator": string,
+	"Platform": string, // Steam Deck
 	"Boots": YesNo,
 	"Playable": YesNo,
 	"Notes": string

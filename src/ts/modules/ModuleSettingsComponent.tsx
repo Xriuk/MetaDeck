@@ -25,38 +25,41 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 	const disabled = module.dependencies.map((key) => modules[key]).some(mod => !mod.isValid)
 
 	const missing = module.dependencies.map((key) => modules[key])
-		   .filter((mod) => !mod.isValid )
-		   .map((mod) => mod.title)
+		.filter((mod) => !mod.isValid )
+		.map((mod) => mod.title)
 
 	return (
-		   <PanelSection title={format(t("settingsModule"), module.title)}>
-			   <PanelSectionRow>
-				   <ToggleField
-						 label={t("settingsEnabled")}
-						 checked={enabled}
-						 onChange={(checked) => {
-							 setEnabled(checked);
-							 module.enabled = checked;
-							 for (let mod of Object.values(modules))
-							 {
-								 mod.unmetDependency = mod.dependencies.map((key: keyof Modules) => modules[key]).some((mod2: Modules[keyof Modules]) => !mod2.isValid)
-							 }
-						 }}
-						 description={disabled ?
-							    format(t("settingsDependencyNotMet"), module.title, missing.join(", "))
-							    : t("settingsEnabledDesc")}
-						 disabled={disabled}
-				   />
-			   </PanelSectionRow>
-			   <ModuleSettings/>
-			   <PanelSectionRow>
-				   <ButtonItem
-						 label={format(t("settingsModuleProvider"), module.title)}
-						 layout={"inline"}
-						 children={t("settingsProvider")}
-						 onClick={() => Navigation.Navigate(`/metadeck/${module.identifier}`)}
-				   />
-			   </PanelSectionRow>
-		   </PanelSection>
+		<PanelSection title={format(t("settingsModule"), module.title)}>
+			<PanelSectionRow>
+				<ToggleField
+						label={t("settingsEnabled")}
+						checked={enabled}
+						onChange={(checked) => {
+							setEnabled(checked);
+							module.enabled = checked;
+							for (let mod of Object.values(modules))
+							{
+								mod.unmetDependency = mod.dependencies.map((key: keyof Modules) => modules[key]).some((mod2: Modules[keyof Modules]) => !mod2.isValid)
+							}
+						}}
+						description={disabled ?
+							format(t("settingsDependencyNotMet"), module.title, missing.join(", "))
+							: t("settingsEnabledDesc")}
+						disabled={disabled}
+				/>
+			</PanelSectionRow>
+			<PanelSectionRow>
+				<ButtonItem
+						label={format(t("settingsModuleProvider"), module.title)}
+						layout={"inline"}
+						children={t("settingsProvider")}
+						onClick={() => {
+						Navigation.CloseSideMenus();
+						Navigation.Navigate(`/metadeck/${module.identifier}`);
+					}}
+				/>
+			</PanelSectionRow>
+			<ModuleSettings/>
+		</PanelSection>
 	)
 }

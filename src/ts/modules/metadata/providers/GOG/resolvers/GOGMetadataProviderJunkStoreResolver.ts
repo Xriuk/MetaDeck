@@ -2,7 +2,7 @@ import {ID, MetadataData} from "../../../../../Interfaces";
 import {ResolverCache, ResolverConfig} from "../../../../Resolver";
 import {t} from "../../../../../useTranslations";
 import {GOGMetadataProviderResolver} from "../GOGMetadataProviderResolver";
-import {getLaunchCommand, isJunkStoreGame} from "../../../../../shortcuts";
+import {getExe, getLaunchCommand, isEpicGame, isGOGGame, isJunkStoreGame} from "../../../../../shortcuts";
 import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../GamesDBResult";
 import {getAppDetails} from "../../../../../util";
 import {GOGMetadataProviderResolverConfigs} from "../GOGMetadataProvider";
@@ -25,24 +25,29 @@ export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderRes
 
 	async test(appId: number): Promise<boolean>
 	{
-		return await isJunkStoreGame(appId);
+		const details = await getAppDetails(appId);
+		if (!details)
+			return false;
+		return isJunkStoreGame(getLaunchCommand(details));
 	}
 
 	async resolve(appId: number): Promise<ID | undefined>
 	{
 		const details = await getAppDetails(appId);
-		if (details == null) return undefined;
-		const launchCommand = await getLaunchCommand(appId);
-		let exe: string;
-		if (
-			   details.strShortcutExe.replace(/['"]+/g, "").startsWith("/") ||
-			   details.strShortcutExe.replace(/['"]+/g, "").startsWith("~") ||
-			   details.strShortcutExe.replace(/['"]+/g, "").charAt(1) === ':'
-		)
-			exe = details.strShortcutExe;
+		if (!details)
+			return undefined;
+		const launchCommand = getLaunchCommand(details);
+		let exe = getExe(details);
+		if (!exe) return undefined;
+		let prefix;
+		if(isGOGGame(launchCommand))
+			prefix = "gog";
+		else if(isEpicGame(launchCommand))
+			prefix = "epic";
 		else
-			exe = `${details.strShortcutStartDir}/${details.strShortcutExe}`
-		return removeAfterAndIncluding(removeBeforeAndIncluding(launchCommand, "gog-launcher.sh"), exe).trim();
+			return undefined; // DEV: add support for other launchers
+		
+		return prefix + removeAfterAndIncluding(removeBeforeAndIncluding(launchCommand, prefix + "-launcher.sh"), exe).trim();
 	}
 
 	private directory_size: (path: string) => Promise<number> = callable("directory_size");
@@ -50,18 +55,14 @@ export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderRes
 
 	async apply(appId: number, data: MetadataData): Promise<void>
 	{
-		const details = await getAppDetails(appId);
-		if (!details) return;
-		let exe: string;
-		if (
-			   details.strShortcutExe.replace(/['"]+/g, "").startsWith("/") ||
-			   details.strShortcutExe.replace(/['"]+/g, "").startsWith("~") ||
-			   details.strShortcutExe.replace(/['"]+/g, "").charAt(1) === ':'
-		)
-			exe = details.strShortcutExe;
-		else
-			exe = `${details.strShortcutStartDir}/${details.strShortcutExe}`
-		data.install_size = await this.directory_size(exe.replace(/['"]+/g, ""));
-		data.install_date = await this.file_date(exe.replace(/['"]+/g, ""));
+		let details = await getAppDetails(appId);
+		if(!details)
+			return undefined;
+		let exe = getExe(details)?.replace(/['"]+/g, "");
+		if (!exe)
+			return undefined;
+
+		data.install_size = await this.directory_size(exe);
+		data.install_date = await this.file_date(exe);
 	}
 }

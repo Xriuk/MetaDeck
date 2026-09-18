@@ -6,11 +6,6 @@ import {
 	IGDBMetadataProviderConfig
 } from "./providers/IGDB/IGDBMetadataProvider";
 import {CustomStoreCategory, MetadataData, StoreCategory} from "../../Interfaces";
-import {
-	EGSMetadataProvider,
-	EGSMetadataProviderCache,
-	EGSMetadataProviderConfig, EGSMetadataProviderResolverCaches, EGSMetadataProviderResolverConfigs
-} from "./providers/Epic/EGSMetadataProvider";
 import {truncate} from "lodash-es";
 import {
 	GOGMetadataProvider,
@@ -31,7 +26,7 @@ import {
 	ToggleField
 } from "@decky/ui";
 import {format, t} from "../../useTranslations";
-import {stateTransaction} from "../../util";
+import {getAppDetails, stateTransaction} from "../../util";
 import {FC, Fragment, ReactElement, ReactNode, useState} from "react";
 import {Markdown} from "../../markdown";
 import {SteamAppDetails, SteamAppOverview} from "../../SteamTypes";
@@ -39,9 +34,12 @@ import {routePatch} from "../../RoutePatches";
 // import {addStyle, removeStyle} from "../../styleInjector";
 import Logger from "../../logger";
 import {
+	getLaunchCommand,
 	getShortcutCategories
 } from "../../shortcuts";
 import {CustomFeature} from "./CustomFeature";
+import { SteamMetadataProvider, type SteamMetadataProviderCache, type SteamMetadataProviderConfig } from "./providers/Steam/SteamMetadataProvider";
+import { RAWGMetadataProvider, type RAWGMetadataProviderCache, type RAWGMetadataProviderConfig } from "./providers/RAWG/RAWGMetadataProvider";
 
 // import mdx from "@mdxeditor/editor/style.css";
 
@@ -68,28 +66,32 @@ export interface MetadataProviderConfigs
 {
 	igdb: IGDBMetadataProviderConfig,
 	gog: GOGMetadataProviderConfig,
-	egs: EGSMetadataProviderConfig
+	steam: SteamMetadataProviderConfig,
+	rawg: RAWGMetadataProviderConfig
 }
 
 export interface MetadataProviderCaches
 {
 	igdb: IGDBMetadataProviderCache,
 	gog: GOGMetadataProviderCache,
-	egs: EGSMetadataProviderCache
+	steam: SteamMetadataProviderCache,
+	rawg: RAWGMetadataProviderCache
 }
 
 export interface MetadataProviderResolverConfigs
 {
 	igdb: {},
 	gog: GOGMetadataProviderResolverConfigs,
-	egs: EGSMetadataProviderResolverConfigs
+	steam: {},
+	rawg: {}
 }
 
 export interface MetadataProviderResolverCaches
 {
 	igdb: {},
 	gog: GOGMetadataProviderResolverCaches,
-	egs: EGSMetadataProviderResolverCaches
+	steam: {},
+	rawg: {}
 }
 
 export type MetadataProviderConfigTypes = MetadataProviderConfigs[keyof MetadataProviderConfigs]
@@ -118,9 +120,10 @@ export class MetadataModule extends Module<
 	logger: Logger = new Logger(MetadataModule.identifier)
 
 	providers: MetadataProvider<any>[] = [
-		new EGSMetadataProvider(this),
 		new GOGMetadataProvider(this),
-		new IGDBMetadataProvider(this)
+		new SteamMetadataProvider(this),
+		new IGDBMetadataProvider(this),
+		new RAWGMetadataProvider(this)
 	];
 
 	get config(): MetadataConfig
@@ -823,138 +826,28 @@ export class MetadataModule extends Module<
 	async applyOverview(overview: SteamAppOverview): Promise<void>
 	{
 		if (this.rating)
-			overview.metacritic_score = this.data[overview.appid]?.rating;
+			overview.metacritic_score = Math.round(this.data[overview.appid]?.rating ?? 0);
 		if (this.categories)
 			this.data[overview.appid]?.store_categories?.forEach(category => overview.m_setStoreCategories.add(category));
 		if (this.installSize)
-			overview.size_on_disk = this.data[overview.appid]?.install_size?.toString() ?? "0"
+			overview.size_on_disk = this.data[overview.appid]?.install_size?.toString() ?? "0";
 		if (this.installDate)
-			overview.rt_purchased_time = this.data[overview.appid]?.install_date
+			overview.rt_purchased_time = this.data[overview.appid]?.install_date;
 	}
-
 
 	async provideDefault(appId: number): Promise<MetadataData | undefined>
 	{
-		const overview = appStore.GetAppOverviewByAppID(appId);
-		const cats: (StoreCategory | CustomStoreCategory)[] = await getShortcutCategories(appId);
+		const details = await getAppDetails(appId);
+		if(!details)
+			return undefined;
+		const launchCommand = await getLaunchCommand(details);
+		const cats: (StoreCategory | CustomStoreCategory)[] = await getShortcutCategories(launchCommand);
 
 		return {
-			title: overview.display_name,
+			title: details.strDisplayName,
 			id: 0,
 			description: t("noDescription"),
 			store_categories: cats
 		}
 	}
-
-	// private file_size: (path: string) => Promise<number> = callable("file_size");
-	// private directory_size: (path: string) => Promise<number> = callable("directory_size");
-	// private file_date: (path: string) => Promise<number> = callable("file_date");
-	// private nsl_egs_data: (id: string) => Promise<{
-	// 	"namespace": string,
-	// 	"install_size": number,
-	// 	"install_date": number,
-	// 	'install_path': string
-	// }> = callable("nsl_egs_data");
-	// private nsl_gog_data: (id: number) => Promise<{
-	// 	"install_size": number,
-	// 	"install_date": number,
-	// 	'install_path': string
-	// }> = callable("nsl_gog_data");
-	// private heroic_egs_data: (id: string) => Promise<{
-	// 	"namespace": string,
-	// 	"install_size": number,
-	// 	"install_date": number,
-	// 	'install_path': string
-	// }> = callable("heroic_egs_data");
-	// private heroic_gog_data: (id: number) => Promise<{
-	// 	"install_size": number,
-	// 	"install_date": number,
-	// 	'install_path': string
-	// }> = callable("heroic_gog_data");
-
-	// private dirname(path: string): string
-	// {
-	// 	if (path.length === 0) return '.';
-	// 	let code = path.charCodeAt(0);
-	// 	let hasRoot = code === 47 /*/*/;
-	// 	let end = -1;
-	// 	let matchedSlash = true;
-	// 	for (let i = path.length - 1; i >= 1; --i)
-	// 	{
-	// 		code = path.charCodeAt(i);
-	// 		if (code === 47 /*/*/)
-	// 		{
-	// 			if (!matchedSlash)
-	// 			{
-	// 				end = i;
-	// 				break;
-	// 			}
-	// 		} else
-	// 		{
-	// 			// We saw the first non-path separator
-	// 			matchedSlash = false;
-	// 		}
-	// 	}
-	//
-	// 	if (end === -1) return hasRoot ? '/' : '.';
-	// 	if (hasRoot && end === 1) return '//';
-	// 	return path.slice(0, end);
-	// }
-
-	// async provideAdditional(appId: number, _data: MetadataData): Promise<void>
-	// {
-	// 	const details = await getAppDetails(appId);
-	// 	if (details)
-	// 	{
-	// 		// let launchCommand: string = await getLaunchCommand(appId);
-	//
-	// 		if (await isEmulatedGame(appId))
-	// 		{
-	// 			// data.install_size = await this.file_size(launchCommand.match(romRegex)?.[0]!!)
-	// 			// data.install_date = await this.file_date(launchCommand.match(romRegex)?.[0]!!)
-	// 		}
-	// 		else if (await isJunkStoreGame(appId))
-	// 		{
-	// 			// data.install_size = await this.directory_size(details.strShortcutStartDir.replace(/['"]+/g, ""));
-	// 			// data.install_date = await this.file_date(details.strShortcutExe.replace(/['"]+/g, ""));
-	// 		}
-	// 		else if (await isNSLGame(appId))
-	// 		{
-	// 			if (await isEpicGame(appId))
-	// 			{
-	// 				// const id = removeAfterAndIncluding(removeBeforeAndIncluding(launchCommand, "com.epicgames.launcher://apps/"), "?action").trim();
-	// 				// const egs_data = await this.nsl_egs_data(id);
-	// 				// data.install_size = egs_data.install_size;
-	// 				// data.install_date = egs_data.install_date;
-	// 			}
-	// 			else if (await isGOGGame(appId))
-	// 			{
-	// 				// const path = details.strShortcutStartDir.replace(/['"]+/g, "") + removeAfterAndIncluding(removeBeforeAndIncluding(launchCommand, "/path=\"C:\\Program Files (x86)\\GOG Galaxy\\"), "\"").trim().replace(/\\+/g, "/");
-	// 				// data.install_size = await this.directory_size(this.dirname(path));
-	// 				// data.install_date = await this.file_date(path);
-	// 				// const id = removeAfterAndIncluding(removeBeforeAndIncluding(launchCommand, "/gameId="), "/path=").trim();
-	// 				// const gog_data = await this.nsl_gog_data(+id);
-	// 				// data.install_size = gog_data.install_size;
-	// 				// data.install_date = gog_data.install_date;
-	// 			}
-	// 		}
-	// 		else if (await isHeroicGame(appId))
-	// 		{
-	// 			if (await isEpicGame(appId))
-	// 			{
-	// 				// const id = removeAfterAndIncluding(removeBeforeAndIncluding(launchCommand, "heroic://launch/legendary/"), "\"").trim();
-	// 				// const egs_data = await this.heroic_egs_data(id);
-	// 				// data.install_size = egs_data.install_size;
-	// 				// data.install_date = egs_data.install_date;
-	// 			}
-	// 			else if (await isGOGGame(appId))
-	// 			{
-	// 				// const id = removeAfterAndIncluding(removeBeforeAndIncluding(launchCommand, "heroic://launch/gog/"), "\"").trim();
-	// 				// const gog_data = await this.heroic_gog_data(+id);
-	// 				// data.install_size = gog_data.install_size;
-	// 				// data.install_date = gog_data.install_date;
-	// 			}
-	// 		}
-	// 	}
-	// }
 }

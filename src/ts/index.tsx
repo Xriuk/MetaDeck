@@ -1,5 +1,6 @@
 import {
-	definePlugin, Plugin
+	definePlugin, Plugin,
+	type DeckyRequestInit
 } from "@decky/api";
 
 import {
@@ -62,6 +63,13 @@ declare global
 			set bypassCounter(count: number)
 		};
 		MetaDeck: MetaDeckStateContext | undefined
+	}
+
+	let DeckyPluginLoader: {
+		legacyFetchNoCors(url: string, request?: DeckyRequestInit | any): Promise<{
+			success: boolean;
+			result: { status: number; headers: { [key: string]: string }; body: string } | string | undefined
+		}>
 	}
 }
 
@@ -154,7 +162,8 @@ export default definePlugin(() => {
 				   <DialogButton
 						 style={{height: '28px', width: '40px', minWidth: 0, padding: '10px 12px'}}
 						 onClick={() => {
-							 Navigation.Navigate("/metadeck/settings")
+							Navigation.CloseSideMenus();
+							Navigation.Navigate("/metadeck/settings");
 						 }}
 				   >
 					   <BsGearFill style={{marginTop: '-4px', display: 'block'}}/>

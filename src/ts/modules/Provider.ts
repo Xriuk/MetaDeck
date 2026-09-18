@@ -112,30 +112,33 @@ export abstract class Provider<
 
 	get enabled(): boolean
 	{
-		return this.module.config.providers[this.identifier as keyof ProvConfigs].enabled
+		return this.config.enabled;
 	}
 
 	set enabled(enabled: boolean)
 	{
-		this.module.config.providers[this.identifier as keyof ProvConfigs].enabled = enabled
+		this.config.enabled = enabled;
 		void this.module.saveData();
 	}
 
 	async resolve(appId: number): Promise<ID | undefined>
 	{
-		for (const resolver of this.resolvers.filter((provider) => provider.enabled))
+		for (const resolver of this.resolvers)
 		{
 			if (resolver.enabled && await resolver.test(appId))
 			{
-				return await resolver.resolve(appId);
+				let data = await resolver.resolve(appId);
+				if(data !== undefined)
+					return data;
 			}
 		}
-		return;
+
+		return undefined;
 	}
 
 	async apply(appId: number, data: Data): Promise<void>
 	{
-		for (const resolver of this.resolvers.filter((resolver) => resolver.enabled))
+		for (const resolver of this.resolvers)
 		{
 			if (resolver.enabled && await resolver.test(appId))
 			{

@@ -18,7 +18,9 @@ const MetaDeckChangeMetadata: FC<{ appId: number }> = ({appId}) =>
 	return <MenuItem
 		   onSelected={async () =>
 		   {
-			   Navigation.Navigate(`/metadeck/metadata/${appId}`)
+				
+				Navigation.CloseSideMenus();
+				Navigation.Navigate(`/metadeck/metadata/${appId}`);
 		   }}
 	>
 		{t("changeMetadata")}...

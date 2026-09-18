@@ -29,6 +29,7 @@ export const Markdown: FC<MarkdownProps> = (props) =>
 												onOKButton={() =>
 												{
 													props.onDismiss?.();
+													Navigation.CloseSideMenus();
 													if (aRef.current!.href.startsWith("http://") || aRef.current!.href.startsWith("https://"))
 														Navigation.NavigateToExternalWeb(aRef.current!.href);
 													else
