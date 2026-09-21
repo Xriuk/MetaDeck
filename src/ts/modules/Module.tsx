@@ -300,7 +300,7 @@ export abstract class Module<
 	}
 
 
-	abstract settingsComponent(): FC
+	abstract settingsComponent: FC
 
 	async mount(): Promise<void>
 	{

@@ -1,53 +1,144 @@
 import {useMetaDeckState} from "./MetaDeckState";
-import {FC} from "react";
+import {FC, useEffect, useState, type CSSProperties} from "react";
 import {useTranslations} from "./useTranslations";
-import {ButtonItem, PanelSection, PanelSectionRow, ProgressBarWithInfo} from "@decky/ui";
-import {FaSync, FaTrash} from "react-icons/fa";
+import {ButtonItem, PanelSection, PanelSectionRow, Navigation, Field, ProgressBar} from "@decky/ui";
+import {FaCog, FaSync, FaTrash} from "react-icons/fa";
+import React from "react";
 
-export const MetaDeckComponent: FC = () =>
+const SettingsButton: FC = () =>
 {
-	const t = useTranslations()
-	const { loadingData, refresh, clear } = useMetaDeckState()
-	console.debug(loadingData)
-	return (loadingData.loading || loadingData.currentModule?.error ?
-			<PanelSection>
-				<PanelSectionRow>
-					<ProgressBarWithInfo
-							label={t("loading")}
-							layout="inline"
-							bottomSeparator="none"
-							sOperationText={loadingData.currentModule?.module.title}
-							nProgress={loadingData.percentage}
-							sTimeRemaining={<div style={{
-								paddingRight: "10px"
-							}}>{`${loadingData.processed}/${loadingData.total}`}</div>}
-					/>
-				</PanelSectionRow>
-				<PanelSectionRow>
-					<ProgressBarWithInfo
-						   label={loadingData.currentModule.module.title}
-						   layout="inline"
-						   bottomSeparator="none"
-						   sOperationText={loadingData.currentModule?.error ? <div style={{color: "red"}}>{`Error loading ${loadingData?.currentModule?.module?.title} for ${loadingData.currentModule?.game}: ${loadingData.currentModule?.error.name}`}</div> : loadingData.currentModule?.game}
-						   description={loadingData.currentModule?.error ? <div style={{color: "red"}}>{loadingData.currentModule?.error.stack}</div> : loadingData.currentModule?.description}
-						   nProgress={loadingData.currentModule?.percentage}
-						   sTimeRemaining={<div style={{
-							   paddingRight: "10px"
-						   }}>{`${loadingData.currentModule?.processed}/${loadingData.currentModule?.total}`}</div>}
-					/>
-				</PanelSectionRow>
-			</PanelSection> :
-			<PanelSection>
-				<PanelSectionRow>
-					<ButtonItem
-						   onClick={() => void clear()}
-					><FaTrash/> {t("clear")}</ButtonItem>
-				</PanelSectionRow>
-				<PanelSectionRow>
-					<ButtonItem
-							onClick={() => void refresh()}
-					><FaSync/> {t("refresh")}</ButtonItem>
-				</PanelSectionRow>
-			</PanelSection>
+	const t = useTranslations();
+
+	return (
+		<ButtonItem
+			layout="below"
+			onClick={() =>
+			{
+				Navigation.CloseSideMenus();
+				Navigation.Navigate("/metadeck/settings");
+			}}
+		>
+			<div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+				<FaCog />
+				<span style={{ marginLeft: "auto", textAlign: "right", width: "100%" }}>{t("settings")}</span>
+			</div>
+		</ButtonItem>
 	);
-}
+};
+
+const RefreshButton: FC = () =>
+{
+	const t = useTranslations();
+	const { refresh } = useMetaDeckState();
+
+	return (
+		<ButtonItem
+			layout="below"
+			onClick={() => 
+			{
+				void refresh();
+			}}
+		>
+			<div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+				<FaSync />
+				<span style={{ marginLeft: "auto", textAlign: "right", width: "100%" }}>{t("refresh")}</span>
+			</div>
+		</ButtonItem>
+	);
+};
+
+const CacheButton: FC = () =>
+{
+	const t = useTranslations();
+	const { clear } = useMetaDeckState();
+
+	return (
+		<ButtonItem 
+			layout="below"
+			onClick={() => 
+			{
+				void clear();
+			}}
+		>
+			<div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+				<FaTrash />
+				<span style={{ marginLeft: "auto", textAlign: "right", width: "100%" }}>{t("clear")}</span>
+			</div>
+		</ButtonItem>
+	);
+};
+
+const LoadingProgressBar: FC = () =>
+{
+	const t = useTranslations();
+	const { loadingData } = useMetaDeckState();
+	const [css, setCss] = useState<CSSProperties>();
+	useEffect(() =>
+	{
+		const def: CSSProperties = { };
+		if (loadingData.currentModule?.error) 
+			def.color = "red";
+		setCss(def);
+	}, [loadingData]);
+	return <>
+		<Field
+			label={t("loading")}
+			description={`${loadingData.currentModule?.module.title} - ${loadingData.processed}/${loadingData.total}`}
+			bottomSeparator="none"
+		/>
+		<ProgressBar
+			focusable={false}
+			nProgress={loadingData.percentage}
+		/>
+		<Field
+			label={loadingData.currentModule?.game}
+			description={
+				<div style={css} className="ProgressBarDescription_debug">
+					{(loadingData.currentModule?.error) ? <>{t("error")}<br /></> : undefined}
+					{loadingData.currentModule?.error ? <>{loadingData.currentModule.error.name}<br />{loadingData.currentModule.error.stack}</> : loadingData.currentModule?.description}
+				</div>}
+			bottomSeparator="none"
+		/>
+	</>;
+};
+
+export const MetaDeckComponent: FC = () => {
+	const { loadingData } = useMetaDeckState();
+
+	return (
+		loadingData.loading ?
+			<PanelSection>
+				<PanelSectionRow>
+					<SettingsButton />
+				</PanelSectionRow>
+				<PanelSectionRow>
+					<LoadingProgressBar />
+				</PanelSectionRow>
+			</PanelSection> : (loadingData.currentModule.error ?
+				<PanelSection>
+					<PanelSectionRow>
+						<SettingsButton />
+					</PanelSectionRow>
+					<PanelSectionRow>
+						<RefreshButton />
+					</PanelSectionRow>
+					<PanelSectionRow>
+						<CacheButton />
+					</PanelSectionRow>
+					<PanelSectionRow>
+						<LoadingProgressBar />
+					</PanelSectionRow>
+				</PanelSection> :
+				<PanelSection>
+					<PanelSectionRow>
+						<SettingsButton />
+					</PanelSectionRow>
+					<PanelSectionRow>
+						<RefreshButton />
+					</PanelSectionRow>
+					<PanelSectionRow>
+						<CacheButton />
+					</PanelSectionRow>
+				</PanelSection>)
+	);
+};

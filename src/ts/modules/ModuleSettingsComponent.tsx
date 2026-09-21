@@ -1,9 +1,11 @@
 import {FC, useState} from "react";
 import {
-	ButtonItem,
+	DialogBody,
+	DialogButton,
+	DialogControlsSection,
+	Field,
 	Navigation,
-	PanelSection,
-	PanelSectionRow, ToggleField
+	Toggle
 } from "@decky/ui";
 import {Module} from "./Module";
 import {Provider} from "./Provider";
@@ -17,8 +19,7 @@ export interface ModuleSettingsProps
 }
 
 export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
-	const {modules} = useMetaDeckState()
-	const ModuleSettings = module.settingsComponent()
+	const {modules, loadingData} = useMetaDeckState();
 
 	const [enabled, setEnabled] = useState(module.enabled)
 
@@ -29,11 +30,16 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 		.map((mod) => mod.title)
 
 	return (
-		<PanelSection title={format(t("settingsModule"), module.title)}>
-			<PanelSectionRow>
-				<ToggleField
-						label={t("settingsEnabled")}
-						checked={enabled}
+		<DialogBody>
+			<DialogControlsSection>
+				<Field
+					label={t("settingsEnabled")}
+					description={disabled ?
+						format(t("settingsDependencyNotMet"), module.title, missing.join(", ")) :
+						t("settingsEnabledDesc")}>
+					<Toggle
+						value={enabled}
+						disabled={disabled || loadingData.loading}
 						onChange={(checked) => {
 							setEnabled(checked);
 							module.enabled = checked;
@@ -41,25 +47,24 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 							{
 								mod.unmetDependency = mod.dependencies.map((key: keyof Modules) => modules[key]).some((mod2: Modules[keyof Modules]) => !mod2.isValid)
 							}
-						}}
-						description={disabled ?
-							format(t("settingsDependencyNotMet"), module.title, missing.join(", "))
-							: t("settingsEnabledDesc")}
-						disabled={disabled}
-				/>
-			</PanelSectionRow>
-			<PanelSectionRow>
-				<ButtonItem
-						label={format(t("settingsModuleProvider"), module.title)}
-						layout={"inline"}
-						children={t("settingsProvider")}
+						}}/>
+				</Field>
+			</DialogControlsSection>
+			
+			<DialogControlsSection>
+				<Field label={format(t("settingsModuleProvider"), module.title)}>
+					<DialogButton
+						disabled={loadingData.loading}
 						onClick={() => {
-						Navigation.CloseSideMenus();
-						Navigation.Navigate(`/metadeck/${module.identifier}`);
-					}}
-				/>
-			</PanelSectionRow>
-			<ModuleSettings/>
-		</PanelSection>
+							Navigation.CloseSideMenus();
+							Navigation.Navigate(`/metadeck/${module.identifier}`);
+						}}>
+						{t("settingsProvider")}
+					</DialogButton>
+				</Field>
+			</DialogControlsSection>
+
+			<module.settingsComponent/>
+		</DialogBody>
 	)
 }

@@ -79,7 +79,7 @@ export class Settings
 						resolvers: {}
 					},
 					rawg: {
-						enabled: false,
+						enabled: true,
 						ordinal: 4,
 						fuzziness: 5,
 						overrides: {},
@@ -93,10 +93,34 @@ export class Settings
 				verified: true,
 				notes: true,
 				providers: {
-					emudeck: {
+					// Fuzzy search (platform-specific)
+					pcsx2: {
 						enabled: true,
 						ordinal: 0,
 						fuzziness: 5,
+						overrides: {},
+						resolvers: {}
+					},
+					rpcs3: {
+						enabled: true,
+						ordinal: 1,
+						fuzziness: 5,
+						overrides: {},
+						resolvers: {}
+					},
+					xenia: {
+						enabled: true,
+						ordinal: 2,
+						fuzziness: 5,
+						overrides: {},
+						resolvers: {}
+					},
+					// Fuzzy search generic
+					emudeck: {
+						enabled: true,
+						ordinal: 3,
+						fuzziness: 5,
+						overrides: {},
 						resolvers: {}
 					}
 				}
@@ -131,6 +155,15 @@ export class Settings
 				data: {},
 				providers: {
 					emudeck: {
+						resolvers: {}
+					},
+					pcsx2: {
+						resolvers: {}
+					},
+					rpcs3: {
+						resolvers: {}
+					},
+					xenia: {
 						resolvers: {}
 					}
 				}

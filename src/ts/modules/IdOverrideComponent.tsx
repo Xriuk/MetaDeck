@@ -8,10 +8,10 @@ import {FaPlus, FaTrash} from "react-icons/fa";
 import {IDDictionary} from "../Interfaces";
 import {t} from "../useTranslations";
 
-export interface IdOverrideProps<T extends number | string>
+interface IdOverrideProps<T extends number | string>
 {
 	value: IDDictionary,
-	resultsForApp: (appId: number) => Promise<Record<number, Entry<T>>>,
+	resultsForApp: (appId: number) => Promise<Record<T, Entry<T>>>,
 	onChange: (overrides: IDDictionary) => void
 }
 
@@ -37,7 +37,7 @@ export const IdOverrideComponent = <T extends number | string>({
 													   onChange,
 													   value
 												   }: IdOverrideProps<T>) => {
-	const {apps, modules} = useMetaDeckState();
+	const {apps, modules, loadingData } = useMetaDeckState();
 	const [app, setApp] = useState<number>();
 	const [id, setId] = useState<Entry<T>>();
 	const [appOptions, setAppOptions] = useState<DropdownOption[]>([]);
@@ -48,17 +48,18 @@ export const IdOverrideComponent = <T extends number | string>({
 	useEffect(() => {
 		(async () => {
 			setLoaded(false)
-			const ret: Record<number, Entry<T>> = {};
+			const ret: Record<T, Entry<T>> = {} as any;
 			for (const [key, val] of Object.entries(value))
 			{
 				if (val === 0 || val === "")
-					ret[+key] = {
+					ret[key as T] = {
 						label: appStore.GetAppOverviewByAppID(+key).display_name,
 						title: "None",
 						id: 0 as T,
 						appId: +key
 					};
-				else ret[+key] = (await resultsForApp(+key))[+val];
+				else
+					ret[key as T] = (await resultsForApp(+key))[val as T];
 			}
 			setEntries(ret);
 			setLoaded(true);
@@ -78,7 +79,7 @@ export const IdOverrideComponent = <T extends number | string>({
 
 	useEffect(() => {
 		(async () => {
-			setIdOptions(!!app ? Object.values(await resultsForApp(app)).map((value) => ({
+			setIdOptions(!!app ? Object.values<Entry<T>>(await resultsForApp(app)).map(value => ({
 				label: `${value.title} (${value.id})`,
 				data: value
 			})).concat({
@@ -109,41 +110,44 @@ export const IdOverrideComponent = <T extends number | string>({
 			>
 				<div style={{height: '40px', minWidth: '60px', marginRight: '10px', flexGrow: "2"}}>
 					<Dropdown
-						   rgOptions={appOptions}
-						   selectedOption={app}
-						   onChange={(value) => {
-							   setApp(value.data)
-							   setId(undefined)
-						   }}
+							disabled={loadingData.loading}
+							rgOptions={appOptions}
+							selectedOption={app}
+							onChange={(value) => {
+								setApp(value.data)
+								setId(undefined)
+							}}
 					/>
 				</div>
 				<div style={{height: '40px', minWidth: '60px', marginRight: '10px', flexGrow: "2"}}>
 					<Dropdown
-						   rgOptions={idOptions}
-						   selectedOption={id}
-						   onChange={(value) => {
-							   setId(value.data)
-						   }}
+							disabled={loadingData.loading}
+							rgOptions={idOptions}
+							selectedOption={id}
+							onChange={(value) => {
+								setId(value.data)
+							}}
 					/>
 				</div>
 				<DialogButton
-					   style={{
-						   height: '40px',
-						   width: '40px',
-						   padding: '10px 12px',
-						   minWidth: '40px',
-						   display: 'flex',
-						   flexDirection: 'column',
-						   justifyContent: 'center',
-					   }}
-					   onClick={() => {
-						   if (!!id)
-						   {
-							   const obj = (entries)
-							   obj[id.appId] = id
-							   onChange(objectMap(entries, (_, value) => value.id))
-						   }
-					   }}
+						disabled={loadingData.loading}
+						style={{
+							height: '40px',
+							width: '40px',
+							padding: '10px 12px',
+							minWidth: '40px',
+							display: 'flex',
+							flexDirection: 'column',
+							justifyContent: 'center',
+						}}
+						onClick={() => {
+							if (!!id)
+							{
+								const obj = (entries)
+								obj[id.appId] = id
+								onChange(objectMap(entries, (_, value) => value.id))
+							}
+						}}
 				>
 					<FaPlus/>
 				</DialogButton>

@@ -3,7 +3,7 @@ import {MetadataProvider} from "../../MetadataProvider";
 import {MetadataData, StoreCategory} from "../../../../Interfaces";
 import {getAppDetails} from "../../../../util";
 import {GamesDBResult} from "../GamesDBResult";
-import {FC, Fragment, useState} from "react";
+import {useState} from "react";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../../useTranslations";
 import {
@@ -32,7 +32,9 @@ import {
 } from "./resolvers/GOGMetadataProviderHeroicResolver";
 import {MetadataProviderConfigs} from "../../MetadataModule";
 import type { AppDetailsResponse } from "type-steamapi";
-import { PanelSectionRow, TextField } from "@decky/ui";
+import { DialogControlsSection, Field, TextField } from "@decky/ui";
+import React from "react";
+import { useMetaDeckState } from "../../../../MetaDeckState";
 
 export interface GOGMetadataProviderConfig extends ProviderConfig<GOGMetadataProviderResolverConfigs, GOGMetadataProviderResolverConfig>
 {
@@ -175,23 +177,27 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 		return isGOGGame(launchCommand) || isEpicGame(launchCommand) || isUbisoftGame(launchCommand);
 	}
 
-	settingsComponent(): FC
-		{
-			const [language, setLanguage] = useState(this.language);
-			return () => (
-				   <Fragment>
-					   <PanelSectionRow>
-						   <TextField
-								 label={"Language"}
-								 description={"English language name (eg: english, italian, french, ...)"}
-								 value={language}
-								 onChange={(value) => {
-									 setLanguage(value.target.value);
-									 this.language = value.target.value;
-								 }}
-						   />
-					   </PanelSectionRow>
-				   </Fragment>
-			)
-		}
+	settingsComponent = () => {
+		const { loadingData } = useMetaDeckState();
+		const [language, setLanguage] = useState(this.language);
+		return (
+			<DialogControlsSection>
+				<Field
+					label={t("language")}
+					description={
+						<>
+							<TextField
+								value={language}
+								disabled={loadingData.loading}
+								onChange={(event) => {
+									setLanguage(event.target.value);
+									this.language = event.target.value;
+								}}/>
+							<br/>
+							<span>{t("languageDescription")}</span>
+						</>
+					} />
+			</DialogControlsSection>
+		)
+	}
 }

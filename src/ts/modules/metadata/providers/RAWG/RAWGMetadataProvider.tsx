@@ -1,7 +1,7 @@
 import { fetchNoCors } from "@decky/api";
-import { PanelSectionRow, SliderField, TextField } from "@decky/ui";
-import { FC, useState, Fragment } from "react";
-import { StoreCategory, type MetadataData } from "../../../../Interfaces";
+import { DialogControlsSection, Field, SliderField, TextField } from "@decky/ui";
+import { useState } from "react";
+import { StoreCategory, type ID, type MetadataData } from "../../../../Interfaces";
 import Logger from "../../../../logger";
 import {
 	getShortcutCategories, isXeniaGame, isRPCS3Game, isXemuGame,
@@ -16,6 +16,8 @@ import { IdOverrideComponent, type Entry } from "../../../IdOverrideComponent";
 import type { MetadataProviderConfigs } from "../../MetadataModule";
 import { Markdown } from "../../../../markdown";
 import { FuzzySearchMetadataProvider, type FuzzySearchMetadataProviderCache, type FuzzySearchMetadataProviderConfig } from "../FuzzySearchMetadataProvider";
+import { useMetaDeckState } from "../../../../MetaDeckState";
+import React from "react";
 
 export interface RAWGMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -147,8 +149,6 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 					'controller-support': StoreCategory.PartialController, // DEV: maybe full?
 				'mmo': StoreCategory.MMO,
 					'mmorpg': StoreCategory.MMO,
-				'achievements': StoreCategory.Achievements,
-					'steam-achievements': StoreCategory.Achievements,
 				'split-screen': StoreCategory.SplitScreen,
 				'cross-platform-multiplayer': StoreCategory.CrossPlatformMultiPlayer,
 				'full-controller-support': StoreCategory.FullController,
@@ -245,7 +245,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
 	}
 
-	protected override async getAllMetadataForGame(appId: number): Promise<Record<number, MetadataData> | undefined>
+	protected override async getAllMetadataForGame(appId: number): Promise<Record<ID, MetadataData> | undefined>
 	{
 		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
 		const platform_ids = await this.getPlatformIds(appId);
@@ -254,39 +254,48 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		// We add all results without limiting them for overrides
 		if (results.length > 0)
 		{
-			let ret: Record<number, MetadataData> = {};
+			let ret: Record<ID, MetadataData> = {};
 			for (let game of results)
 			{
-				ret[+game.id] = game;
+				ret[game.id] = game;
 			}
 			return ret;
 		} else return undefined;
 	}
 
-	override settingsComponent(): FC
-	{
+	override settingsComponent = () => {
+		const { loadingData } = useMetaDeckState();
 		const [apiKey, setApiKey] = useState(this.api_key);
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
-		return () => (
-				<Fragment>
-					<PanelSectionRow>
-						<Markdown>
-							To get your API key go to [rawg.io](https://rawg.io/login/?forward=developer) and log in to your account. Register for an API key, fill in the email and the use with something like "Extract games metadata for emulation purposes". After submitting you should see your api key in that page, you can copy the token and paste it below.
-						</Markdown>
-						<TextField
-								label={"API Key"}
+		return (
+			<>
+				<DialogControlsSection>
+					<Field
+						label={t("apiKey")}
+						description={
+							<TextField
 								value={apiKey}
-								onChange={(value) => {
-									setApiKey(value.target.value);
-									this.api_key = value.target.value;
-								}}
-						/>
-					</PanelSectionRow>
-					<PanelSectionRow>
-						<SliderField
-								label={"Search Fuzziness"}
+								disabled={loadingData.loading}
+								onChange={(event) => {
+									setApiKey(event.target.value);
+									this.api_key = event.target.value;
+								}}/>
+						} />
+					<Field description={
+						<Markdown>
+							{t("rawgApiKeyInstructionsMD")}
+						</Markdown>
+					} />
+				</DialogControlsSection>
+
+				<DialogControlsSection>
+					<Field
+						label={t("fuzziness")}
+						description={
+							<SliderField
 								value={fuzziness}
+								disabled={loadingData.loading}
 								min={0}
 								max={20}
 								step={1}
@@ -298,31 +307,32 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 									setFuzziness(value);
 									this.fuzziness = value;
 								}}
-						/>
-					</PanelSectionRow>
-					<PanelSectionRow>
-						<IdOverrideComponent
-								value={overrides}
-								onChange={(value) => {
-									setOverrides(value)
-									this.overrides = value
-								}}
-								resultsForApp={async (appId) => {
-									const ret: Record<number, Entry<number>> = {}
-									for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
-									{
-										ret[+id] = {
-											label: appStore.GetAppOverviewByAppID(appId).display_name,
-											title: value.title,
-											id: +id,
-											appId: appId
-										}
-									}
-									return ret;
-								}}
-						/>
-					</PanelSectionRow>
-				</Fragment>
+							/>
+						} />
+				</DialogControlsSection>
+					
+				<DialogControlsSection>
+					<IdOverrideComponent
+						value={overrides}
+						onChange={(value) => {
+							setOverrides(value)
+							this.overrides = value
+						}}
+						resultsForApp={async (appId) => {
+							const ret: Record<ID, Entry<ID>> = {}
+							for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
+							{
+								ret[id] = {
+									label: appStore.GetAppOverviewByAppID(appId).display_name,
+									title: value.title,
+									id: id,
+									appId: appId
+								}
+							}
+							return ret;
+						}} />
+				</DialogControlsSection>
+			</>
 		)
 	}
 }

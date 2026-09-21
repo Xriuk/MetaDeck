@@ -1,13 +1,15 @@
 // https://blog.hloth.dev/moreofme/#reverse-engineering-steams-secret-apis
 
-import { PanelSectionRow, SliderField, TextField } from "@decky/ui";
-import { FC, useState, Fragment } from "react";
-import { StoreCategory, type MetadataData } from "../../../../Interfaces";
+import { DialogControlsSection, Field, SliderField, TextField } from "@decky/ui";
+import { useState } from "react";
+import { StoreCategory, type ID, type MetadataData } from "../../../../Interfaces";
 import Logger from "../../../../logger";
 import { t } from "../../../../useTranslations";
 import { IdOverrideComponent, type Entry } from "../../../IdOverrideComponent";
 import type { MetadataProviderConfigs } from "../../MetadataModule";
 import { FuzzySearchMetadataProvider, type FuzzySearchMetadataProviderCache, type FuzzySearchMetadataProviderConfig } from "../FuzzySearchMetadataProvider";
+import React from "react";
+import { useMetaDeckState } from "../../../../MetaDeckState";
 
 export interface SteamMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -116,64 +118,73 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 		else throw Error(`Could not find metadata for "${title}": \n${(typeof response.result === 'string' ? response.result : response.result?.body)}`);
 	}
 
-	settingsComponent(): FC
-	{
+	settingsComponent = () => {
+		const { loadingData } = useMetaDeckState();
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
 		const [language, setLanguage] = useState(this.language);
-		return () => (
-			<Fragment>
-				<PanelSectionRow>
-					<SliderField
-							label={"Search Fuzziness"}
-							value={fuzziness}
-							min={0}
-							max={20}
-							step={1}
-							showValue={true}
-							resetValue={5}
-							editableValue={true}
-							validValues={'steps'}
-							onChange={(value) => {
-								setFuzziness(value);
-								this.fuzziness = value;
-							}}
-					/>
-				</PanelSectionRow>
-				<PanelSectionRow>
+
+		return (
+			<>
+				<DialogControlsSection>
+					<Field
+						label={t("language")}
+						description={
+							<>
+								<TextField
+									value={language}
+									disabled={loadingData.loading}
+									onChange={(event) => {
+										setLanguage(event.target.value);
+										this.language = event.target.value;
+									}}/>
+								<br/>
+								<span>{t("languageDescription")}</span>
+							</>
+						} />
+					<Field
+						label={t("fuzziness")}
+						description={
+							<SliderField
+								value={fuzziness}
+								disabled={loadingData.loading}
+								min={0}
+								max={20}
+								step={1}
+								showValue={true}
+								resetValue={5}
+								editableValue={true}
+								validValues={'steps'}
+								onChange={(value) => {
+									setFuzziness(value);
+									this.fuzziness = value;
+								}}
+							/>
+						} />
+				</DialogControlsSection>
+
+				<DialogControlsSection>
 					<IdOverrideComponent
-							value={overrides}
-							onChange={(value) => {
-								setOverrides(value)
-								this.overrides = value
-							}}
-							resultsForApp={async (appId) => {
-								const ret: Record<number, Entry<number>> = {}
-								for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
-								{
-									ret[+id] = {
-										label: appStore.GetAppOverviewByAppID(appId).display_name,
-										title: value.title,
-										id: +id,
-										appId: appId
-									}
+						value={overrides}
+						onChange={(value) => {
+							setOverrides(value)
+							this.overrides = value
+						}}
+						resultsForApp={async (appId) => {
+							const ret: Record<ID, Entry<ID>> = {}
+							for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
+							{
+								ret[id] = {
+									label: appStore.GetAppOverviewByAppID(appId).display_name,
+									title: value.title,
+									id: id,
+									appId: appId
 								}
-								return ret;
-							}}
-					/>
-				</PanelSectionRow>
-				<PanelSectionRow>
-					<TextField
-							label={"Language"}
-							description={"English language name (eg: english, italian, french, ...)"}
-							value={language}
-							onChange={(value) => {
-								setLanguage(value.target.value);
-								this.language = value.target.value;
-							}}
-					/>
-				</PanelSectionRow>
-			</Fragment>
+							}
+							return ret;
+						}} />
+				</DialogControlsSection>
+			</>
 		)
 	}
 }

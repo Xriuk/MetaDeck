@@ -1,32 +1,23 @@
-import {
-	definePlugin, Plugin,
-	type DeckyRequestInit
-} from "@decky/api";
-
-import {
-	name
-} from "@decky/manifest"
-
-import {
-	version
-} from "@decky/pkg"
-
+import { definePlugin, Plugin, type DeckyRequestInit } from "@decky/api";
+import { name } from "@decky/manifest"
 import {FaDatabase} from "react-icons/fa";
 import Logger from "./logger";
 import {MetaDeckComponent} from "./MetaDeckComponent";
 import {AppDetailsStore, AppStore} from "./SteamTypes";
 import {Mounts} from "./System";
-import {Fragment, ReactNode} from "react";
+import {ReactNode} from "react";
 import {MetaDeckState, MetaDeckStateContext, MetaDeckStateContextProvider} from "./MetaDeckState";
 import {EventBus} from "./events";
-import {DialogButton, Navigation} from "@decky/ui";
-import {BsGearFill} from "react-icons/bs";
+import {staticClasses} from "@decky/ui";
 import {SettingsComponent} from "./modules/SettingsComponent";
 import {ProviderSettingsComponent} from "./modules/ProviderSettingsComponent";
 
 declare global
 {
+	// @ts-ignore
+	let SteamClient: SteamClient;
 	let appStore: AppStore;
+	// @ts-ignore
 	let appDetailsStore: AppDetailsStore;
 
 	let appDetailsCache: {
@@ -150,25 +141,12 @@ export default definePlugin(() => {
 
 	return {
 		name,
-		version,
+		titleView: <div className={staticClasses.Title}>{name}</div>,
 		content:
-			   <MetaDeckStateContextProvider metaDeckState={state}>
-				   <MetaDeckComponent/>
-			   </MetaDeckStateContextProvider>,
+			<MetaDeckStateContextProvider metaDeckState={state}>
+				<MetaDeckComponent/>
+			</MetaDeckStateContextProvider>,
 		icon: <FaDatabase/>,
-		titleView:
-			   <Fragment>
-				   <div style={{ marginRight: 'auto', flex: 0.9}}>{name}</div>
-				   <DialogButton
-						 style={{height: '28px', width: '40px', minWidth: 0, padding: '10px 12px'}}
-						 onClick={() => {
-							Navigation.CloseSideMenus();
-							Navigation.Navigate("/metadeck/settings");
-						 }}
-				   >
-					   <BsGearFill style={{marginTop: '-4px', display: 'block'}}/>
-				   </DialogButton>
-			   </Fragment>,
 		onDismount()
 		{
 			unregister();

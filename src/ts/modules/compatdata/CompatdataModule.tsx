@@ -1,20 +1,22 @@
 import {Module, ModuleCache, ModuleConfig} from "../Module";
-
 import {CompatdataData, SteamDeckCompatCategory} from "../../Interfaces";
 import {CompatdataProvider} from "./CompatdataProvider";
-import {FC, Fragment, ReactNode, useState} from "react";
+import {ReactNode, useState} from "react";
 import {Mounts} from "../../System";
 import Logger from "../../logger";
 import {routePatch} from "../../RoutePatches";
 import {format, t} from "../../useTranslations";
-import {Modules} from "../../MetaDeckState";
+import {Modules, useMetaDeckState} from "../../MetaDeckState";
 import {
 	EmuDeckCompatdataProvider,
 	EmuDeckCompatdataProviderCache,
 	EmuDeckCompatdataProviderConfig
 } from "./providers/EmuDeckCompatdataProvider";
-import {afterPatch, PanelSectionRow, Patch, ToggleField} from "@decky/ui";
+import {afterPatch, DialogControlsSection, Field, Patch, Toggle} from "@decky/ui";
 import {SteamAppDetails, SteamAppOverview} from "../../SteamTypes";
+import { PCSX2CompatdataProvider, type PCSX2CompatdataProviderCache, type PCSX2CompatdataProviderConfig } from "./providers/PCSX2CompatdataProvider";
+import { RPCS3CompatdataProvider, type RPCS3CCompatdataProviderCache, type RPCS3CompatdataProviderConfig } from "./providers/RPCS3CompatdataProvider";
+import { XeniaCompatdataProvider, type XeniaCCompatdataProviderCache, type XeniaCompatdataProviderConfig } from "./providers/XeniaCompatdataProvider";
 
 export interface CompatdataConfig extends ModuleConfig<CompatdataProviderConfigs, CompatdataProviderConfigTypes>
 {
@@ -29,22 +31,34 @@ export interface CompatdataCache extends ModuleCache<CompatdataProviderCaches, C
 
 export interface CompatdataProviderConfigs
 {
-	emudeck: EmuDeckCompatdataProviderConfig
+	emudeck: EmuDeckCompatdataProviderConfig;
+	pcsx2: PCSX2CompatdataProviderConfig;
+	rpcs3: RPCS3CompatdataProviderConfig;
+	xenia: XeniaCompatdataProviderConfig;
 }
 
 export interface CompatdataProviderCaches
 {
-	emudeck: EmuDeckCompatdataProviderCache
+	emudeck: EmuDeckCompatdataProviderCache;
+	pcsx2: PCSX2CompatdataProviderCache;
+	rpcs3: RPCS3CCompatdataProviderCache;
+	xenia: XeniaCCompatdataProviderCache;
 }
 
 export interface CompatdataProviderResolverConfigs
 {
-	emudeck: {}
+	emudeck: {};
+	pcsx2: {};
+	rpcs3: {};
+	xenia: {};
 }
 
 export interface CompatdataProviderResolverCaches
 {
-	emudeck: {}
+	emudeck: {};
+	pcsx2: {};
+	rpcs3: {};
+	xenia: {};
 }
 
 export type CompatdataProviderConfigTypes = CompatdataProviderConfigs[keyof CompatdataProviderConfigs]
@@ -73,6 +87,9 @@ export class CompatdataModule extends Module<
 	logger: Logger = new Logger(CompatdataModule.identifier)
 
 	providers: CompatdataProvider<any>[] = [
+		new PCSX2CompatdataProvider(this),
+		new RPCS3CompatdataProvider(this),
+		new XeniaCompatdataProvider(this),
 		new EmuDeckCompatdataProvider(this)
 	];
 
@@ -177,38 +194,40 @@ export class CompatdataModule extends Module<
 		this.config.notes = notes
 	}
 
-	settingsComponent(): FC
-	{
-		return () => {
-			const [verified, setVerified] = useState(this.verified)
-			const [notes, setNotes] = useState(this.notes)
+	settingsComponent = () => {
+		const { loadingData } = useMetaDeckState();
+		const [verified, setVerified] = useState(this.verified)
+		const [notes, setNotes] = useState(this.notes)
 
-			return (
-				   <Fragment>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("compatdataSettingsVerified")}
-								 description={t("compatdataSettingsVerifiedDesc")}
-								 checked={verified} onChange={(checked) => {
-							   setVerified(checked);
-							   this.verified = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("compatdataSettingsNotes")} disabled={!verified}
-								 description={!verified ?
-									    format(t("settingsDependencyNotMet"), t("compatdataSettingsNotes"), t("compatdataSettingsVerified"))
-									    : t("compatdataSettingsNotesDesc")}
-								 checked={notes} onChange={(checked) => {
-							   setNotes(checked);
-							   this.notes = checked;
-						   }}/>
-					   </PanelSectionRow>
-				   </Fragment>
-			)
-		};
-	}
+		return (
+				<DialogControlsSection>
+					<Field
+						label={t("compatdataSettingsVerified")}
+						description={t("compatdataSettingsVerifiedDesc")}>
+						<Toggle
+							value={verified}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setVerified(checked);
+								this.verified = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("compatdataSettingsNotes")}
+						description={!verified ?
+							format(t("settingsDependencyNotMet"), t("compatdataSettingsNotes"), t("compatdataSettingsVerified")) :
+							t("compatdataSettingsNotesDesc")}>
+						<Toggle
+							value={notes}
+							disabled={loadingData.loading || !verified}
+							onChange={(checked) => {
+								setNotes(checked);
+								this.notes = checked;
+							}}/>
+					</Field>
+				</DialogControlsSection>
+		)
+	};
 
 	async applyOverview(overview: SteamAppOverview): Promise<void>
 	{
@@ -232,11 +251,14 @@ export class CompatdataModule extends Module<
 
 		if (this.verified && this.notes && compatdata?.notes?.length)
 		{
+			// Take max 5 notes
 			// DEV: maybe add detailed test results (gui, controller, ...)?
-			details.vecDeckCompatTestResults = compatdata.notes.map(n => ({
-				test_loc_token: n,
-				test_result: 1
-			}));
+			details.vecDeckCompatTestResults = compatdata.notes
+				.slice(0, 5)
+				.map(n => ({
+					test_loc_token: n,
+					test_result: 1
+				}));
 			details.vecSteamMachineCompatTestResults = details.vecDeckCompatTestResults;
 		}
 	}

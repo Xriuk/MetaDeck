@@ -1,8 +1,5 @@
-import {ProviderCache, ProviderConfig} from "../../Provider";
-import {CompatdataProvider} from "../CompatdataProvider";
-import {CompatdataData, SteamDeckCompatCategory, VerifiedDBResults, YesNo} from "../../../Interfaces";
-import {FC} from "react";
-import {distanceWithLimit, getAppDetails} from "../../../util";
+import {CompatdataData, SteamDeckCompatCategory, VerifiedDBResults, YesNo, type ID} from "../../../Interfaces";
+import {closestWithLimit, distanceWithLimit, getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
@@ -10,26 +7,27 @@ import {
 	isMelonDSGame, isMGBAGame, isPCSX2Game, isPPSSPPGame, isRosaliesMupenGUIGame, isRPCS3Game,
 	isRyujinxGame, isShadPS4Game, isVita3KGame, isXemuGame, isXeniaGame
 } from "../../../shortcuts";
-import {ResolverCache, ResolverConfig} from "../../Resolver";
+import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
+import Logger from "../../../logger";
 
-export interface EmuDeckCompatdataProviderConfig extends ProviderConfig<{}, ResolverConfig>
-{
-	fuzziness: number
-}
-
-export interface EmuDeckCompatdataProviderCache extends ProviderCache<{}, ResolverCache>
+export interface EmuDeckCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig
 {
 
 }
 
-export class EmuDeckCompatdataProvider extends CompatdataProvider<any>
+export interface EmuDeckCompatdataProviderCache extends FuzzySearchCompatdataProviderCache
+{
+
+}
+
+export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 {
 	static identifier: string = "emudeck";
 	static title: string = t("providerCompatdataEmuDeck");
 	identifier: string = EmuDeckCompatdataProvider.identifier;
 	title: string = EmuDeckCompatdataProvider.title;
 
-	resolvers = [];
+	logger: Logger = new Logger(EmuDeckCompatdataProvider.identifier)
 
 	private verifiedDB: Record<string, VerifiedDBResults> = {};
 
@@ -43,15 +41,16 @@ export class EmuDeckCompatdataProvider extends CompatdataProvider<any>
 				const verifiedDB: VerifiedDBResults[] = await response.json()
 				this.verifiedDB = verifiedDB
 					.filter(r => !r.Platform || r.Platform.trim() === "Steam Deck")
-					.reduce<Record<string, VerifiedDBResults>>((acc, curr) => {
+					.reduce<Record<string, VerifiedDBResults>>((acc, curr, i) => {
 						acc[curr.Game] = curr;
+						acc[curr.Game].Row = i;
 						return acc;
 					}, {});
 			}
 		}
 	}
 
-	async mount(): Promise<void>
+	override async mount(): Promise<void>
 	{
 		await super.mount();
 		await this.getVerifiedDB();
@@ -101,44 +100,106 @@ export class EmuDeckCompatdataProvider extends CompatdataProvider<any>
 			return undefined; // Unknown (match all)
 	}
 
-	async provide(appId: number): Promise<CompatdataData | undefined>
-	{
-		return await this.throttle(async () => {
-			const overview = appStore.GetAppOverviewByAppID(appId);
-			const closest_names = distanceWithLimit(5, overview.display_name ?? "", Object.keys(this.verifiedDB));
-			let results = closest_names.map(n => this.verifiedDB[n]);
-			let consoleNames = await this.getConsoleNames(appId);
-			if(consoleNames?.length)
-				results = results.filter(r => consoleNames.indexOf(r.Console) !== -1);
+	protected async search(title: string, consoleNames?: string[]): Promise<CompatdataData[]>{
+		// Search with double the fuzziness to retrieve them all, they will be filtered later
+		const closest_names = distanceWithLimit(this.fuzziness * 2, title, Object.keys(this.verifiedDB));
+		let results = closest_names.map(n => this.verifiedDB[n]);
+		if(consoleNames?.length)
+			results = results.filter(r => consoleNames.indexOf(r.Console) !== -1);
 
-			return {
-				deck_compat_category: Math.max(
-					SteamDeckCompatCategory.UNKNOWN,
-					...results.map(r => {
-						if (r.Boots == YesNo.YES && r.Playable == YesNo.YES)
-							return SteamDeckCompatCategory.VERIFIED;
-						else if (r.Boots == YesNo.YES && (r.Playable == YesNo.NO || r.Playable == YesNo.PARTIAL))
-							return SteamDeckCompatCategory.PLAYABLE;
-						else
-							return SteamDeckCompatCategory.UNSUPPORTED;
-					})
-				),
-				notes: results.map(r => r.Notes).filter(n => n)
-			};
-		});
+		// Take max 5 results
+		results = results.slice(0, 5);
+
+		// Group by name
+		let dict: Record<string, VerifiedDBResults[]> = {};
+		for(let result of results){
+			if(!dict[result.Game])
+				dict[result.Game] = [];
+			dict[result.Game].push(result);
+		}
+
+		return Object.entries(dict).map(([name, res]) => ({
+			title: name,
+			id: Math.min(...res.map(r => r.Row)),
+			deck_compat_category: Math.max(
+				SteamDeckCompatCategory.UNKNOWN,
+				...res.map(r => {
+					if (r.Boots == YesNo.YES && r.Playable == YesNo.YES)
+						return SteamDeckCompatCategory.VERIFIED;
+					else if (r.Boots == YesNo.YES && (r.Playable == YesNo.NO || r.Playable == YesNo.PARTIAL))
+						return SteamDeckCompatCategory.PLAYABLE;
+					else
+						return SteamDeckCompatCategory.UNSUPPORTED;
+				})
+			),
+			notes: res.map(r => r.Notes)
+				.filter(n => n)
+		}));
 	}
 
-	async test(appId: number): Promise<boolean>
+	public override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
+	{
+		const details = await getAppDetails(appId);
+		if(!details)
+			return undefined;
+
+		this.logger.debug(`Fetching compatdata for game ${appId}`)
+
+		const display_name = details.strDisplayName;
+		const data_id = this.overrides[appId];
+		let consoleNames = await this.getConsoleNames(appId);
+		this.logger.debug("data_id", data_id);
+		const results = await this.search(display_name, consoleNames);
+		if (results.length > 0)
+		{
+			this.logger.debug("results", results);
+			let games: CompatdataData[];
+			if (data_id === undefined)
+			{
+				const names = results.map(value => value.title);
+				const closest_name = closestWithLimit(this.fuzziness, display_name, names);
+				this.logger.debug(closest_name, results.map(value => value.title));
+				const games1 = results.filter(value => value.title === closest_name);
+				this.logger.debug("Games: ", games1);
+				games = games1;
+			} else if (data_id === 0)
+			{
+				return undefined;
+			} else
+			{
+				games = results.filter(value => value.id === data_id)
+			}
+			const game = games.reverse().pop();
+			this.logger.debug(game);
+			return game;
+
+		} else return undefined;
+		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
+	}
+
+	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, CompatdataData> | undefined>
+	{
+		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
+		let consoleNames = await this.getConsoleNames(appId);
+		const results = await this.search(display_name, consoleNames);
+
+		// We add all results without limiting them for overrides
+		if (results.length > 0)
+		{
+			let ret: Record<ID, CompatdataData> = {};
+			for (let game of results)
+			{
+				ret[game.id] = game;
+			}
+			return ret;
+		} else return undefined;
+	}
+
+	override async test(appId: number): Promise<boolean>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return false;
 		return isEmulatedGame(getLaunchCommand(details));
 	}
-
-	settingsComponent(): FC
-	{
-		return () => undefined;
-	}
-
 }

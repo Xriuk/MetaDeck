@@ -9,6 +9,10 @@
 	"loading": "Loading",
 	"initializing": "Initializing",
 	"noData": "No %% Found",
+	"error": "Error",
+	"fuzziness": "Search fuzziness",
+	"language": "Language",
+	"languageDescription": "English language name (eg: english, italian, french, ...)",
 	"foundMetadata": "Description: %%",
 	"foundCompatdata": "Deck Verified: %%",
 	"currentGame": "%%: %%",
@@ -23,6 +27,9 @@
 	"providerMetadataRAWG": "RAWG",
 	"moduleCompatdata": "Compatibility Data",
 	"providerCompatdataEmuDeck": "EmuDeck Games DB",
+	"providerCompatdataPCSX2": "PCSX2",
+	"providerCompatdataRPCS3": "RPCS3",
+	"providerCompatdataXenia": "Xenia",
 	"storeCategoriesNonSteam": "Non Steam",
 	"storeCategoriesEmuDeck": "EmuDeck",
 	"storeCategoriesEGS": "Epic Games",
@@ -33,6 +40,7 @@
 	"storeCategoriesLutris": "Lutris",
 	"storeCategoriesPrime": "Amazon Prime Gaming",
 	"storeCategoriesFlatpak": "Flatpak",
+	"settings": "Settings",
 	"settingsModule": "%% Settings",
 	"settingsModuleProvider": "%% Provider Settings",
 	"settingsProvider": "Provider Settings",
@@ -64,5 +72,7 @@
 	"compatdataSettingsVerified": "Apply Deck Verified Status",
 	"compatdataSettingsVerifiedDesc": "Pulls compat data from providers and injects it into steam's deck verified indicators",
 	"compatdataSettingsNotes": "Apply Deck Verified Notes",
-	"compatdataSettingsNotesDesc": "Pulls additional compatibility information from providers and injects it into steam's deck verified indicators"
+	"compatdataSettingsNotesDesc": "Pulls additional compatibility information from providers and injects it into steam's deck verified indicators",
+	"apiKey": "API Key",
+	"rawgApiKeyInstructionsMD": "To get your API key go to [rawg.io](https://rawg.io/login/?forward=developer) and log in to your account. Register for an API key, fill in the email and the use with something like \"Extract games metadata for emulation purposes\". After submitting you should see your api key in that page, you can copy the token and paste it below."
 }

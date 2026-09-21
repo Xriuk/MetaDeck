@@ -1,14 +1,15 @@
 import {FC, useState} from "react";
 import {
-	PanelSection,
-	PanelSectionRow,
+	DialogBody,
+	DialogControlsSection,
+	Field,
 	SidebarNavigation,
 	SidebarNavigationPage,
-	ToggleField,
+	Toggle,
 	useParams
 } from "@decky/ui";
 import {useMetaDeckState} from "../MetaDeckState";
-import {format, t} from "../useTranslations";
+import {t} from "../useTranslations";
 
 export const ProviderSettingsComponent: FC = () => {
 	const state = useMetaDeckState();
@@ -18,28 +19,32 @@ export const ProviderSettingsComponent: FC = () => {
 	for (let provider of state.modules[module].providers)
 	{
 		const [enabled, setEnabled] = useState(provider.enabled)
-		const ProviderSettings = provider.settingsComponent();
 		pages.push({
 			title: provider.title,
 			content: (
-				<PanelSection title={format(t("settingsModule"), provider.title)}>
-					<PanelSectionRow>
-						<ToggleField
-								label={t("settingsEnabled")}
-								description={t("settingsEnabledDesc")}
-								checked={enabled} onChange={async (checked) => {
-							setEnabled(checked);
-							if(checked != provider.enabled){
-								if(checked)
-									await provider.mount();
-								else
-									await provider.dismount();
-							}
-							provider.enabled = checked;
-						}}/>
-					</PanelSectionRow>
-					<ProviderSettings/>
-				</PanelSection>
+				<DialogBody>
+					<DialogControlsSection>
+						<Field
+							label={t("settingsEnabled")}
+							description={t("settingsEnabledDesc")}>
+							<Toggle
+								value={enabled}
+								disabled={state.loadingData.loading}
+								onChange={async (checked) => {
+									setEnabled(checked);
+									if(checked != provider.enabled){
+										if(checked)
+											await provider.mount();
+										else
+											await provider.dismount();
+									}
+									provider.enabled = checked;
+								}}/>
+						</Field>
+					</DialogControlsSection>
+
+					<provider.settingsComponent/>
+				</DialogBody>
 			)
 		})
 	}

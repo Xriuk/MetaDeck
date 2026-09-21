@@ -6,20 +6,24 @@ import {FaRocket, FaTrash} from "react-icons/fa";
 
 export interface MetadataData
 {
-	title: string,
-	id: number | string,
-	description: string,
-	developers?: Developer[],
-	publishers?: Publisher[],
-	release_date?: number,
-	rating?: number,
-	install_size?: number,
-	install_date?: number,
-	store_categories: (StoreCategory | CustomStoreCategory)[]
+	title: string;
+	id: ID;
+
+	description: string;
+	developers?: Developer[];
+	publishers?: Publisher[];
+	release_date?: number;
+	rating?: number;
+	install_size?: number;
+	install_date?: number;
+	store_categories: (StoreCategory | CustomStoreCategory)[];
 }
 
 export interface CompatdataData
 {
+	title: string;
+	id: ID;
+
 	deck_compat_category?: SteamDeckCompatCategory;
 	machine_compat_category?: SteamDeckCompatCategory; // Will default to deck_compat_category if not provided
 	notes?: string[];
@@ -67,7 +71,6 @@ export enum StoreCategory
 	CommentaryAvailable = 14,
 	PartialController = 18,
 	MMO = 20,
-	Achievements = 22,
 	SplitScreen = 24,
 	CrossPlatformMultiPlayer = 27,
 	FullController = 28,
@@ -122,6 +125,7 @@ export enum CustomStoreCategory
 
 export interface VerifiedDBResults
 {
+	"Row": number,
 	"Timestamp": string,
 	"Console": string,
 	"Game": string,

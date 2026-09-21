@@ -3,18 +3,20 @@ import {
 	Developer,
 	MetadataData,
 	Publisher,
-	StoreCategory
+	StoreCategory,
+	type ID
 } from "../../../../Interfaces";
 import {Company, Game, GameMode, InvolvedCompany, MultiplayerMode} from "igdb-api-types";
 import Logger from "../../../../logger";
-import {FC, Fragment, useState} from "react";
-import {PanelSectionRow, SliderField} from "@decky/ui";
+import {useState} from "react";
+import {DialogControlsSection, Field, SliderField} from "@decky/ui";
 import {Entry, IdOverrideComponent} from "../../../IdOverrideComponent";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../../useTranslations";
 import {MetadataProviderConfigs} from "../../MetadataModule";
 import {IGDBApiServerComponent} from "./IGDBApiServerComponent";
 import { FuzzySearchMetadataProvider, type FuzzySearchMetadataProviderCache, type FuzzySearchMetadataProviderConfig } from "../FuzzySearchMetadataProvider";
+import { useMetaDeckState } from "../../../../MetaDeckState";
 
 export interface APIServer
 {
@@ -185,68 +187,64 @@ export class IGDBMetadataProvider extends FuzzySearchMetadataProvider
 		else throw Error(`Could not find metadata for "${title}": \n${await response.text()}`);
 	}
 
-	settingsComponent(): FC
-	{
+	settingsComponent = () => {
+		const { loadingData } = useMetaDeckState();
 		const [apiServer, setApiServer] = useState(this.apiServer);
 		const [customApiServers, setCustomApiServers] = useState(this.customApiServers);
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
-		return () => (
-			   <Fragment>
-				   <PanelSectionRow>
-					   <SliderField
-							 label={"Search Fuzziness"}
-							 value={fuzziness}
-							 min={0}
-							 max={20}
-							 step={1}
-							 showValue={true}
-							 resetValue={5}
-							 editableValue={true}
-							 validValues={'steps'}
-							 onChange={(value) => {
-								 setFuzziness(value);
-								 this.fuzziness = value;
-							 }}
-					   />
-				   </PanelSectionRow>
-				   <PanelSectionRow>
-					   <IGDBApiServerComponent
-							 server={apiServer}
-							 customServers={customApiServers}
-							 onServerChange={(server) => {
-								 setApiServer(server)
-								 this.apiServer = server
-							 }}
-							 onCustomServersChange={(servers) => {
-								 setCustomApiServers(servers)
-								 this.customApiServers = servers
-							 }}
-					   />
-				   </PanelSectionRow>
-				   <PanelSectionRow>
-					   <IdOverrideComponent
-							 value={overrides}
-							 onChange={(value) => {
-								 setOverrides(value)
-								 this.overrides = value
-							 }}
-							 resultsForApp={async (appId) => {
-								 const ret: Record<number, Entry<number>> = {}
-								 for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
-								 {
-									 ret[+id] = {
-										 label: appStore.GetAppOverviewByAppID(appId).display_name,
-										 title: value.title,
-										 id: +id,
-										 appId: appId
-									 }
-								 }
-								 return ret;
-							 }}
-					   />
-				   </PanelSectionRow>
-			   </Fragment>
+		return (
+			<DialogControlsSection>
+				<Field
+					label={t("fuzziness")}
+					description={
+						<SliderField
+							value={fuzziness}
+							disabled={loadingData.loading}
+							min={0}
+							max={20}
+							step={1}
+							showValue={true}
+							resetValue={5}
+							editableValue={true}
+							validValues={'steps'}
+							onChange={(value) => {
+								setFuzziness(value);
+								this.fuzziness = value;
+							}}
+						/>
+					} />
+				<IGDBApiServerComponent
+					server={apiServer}
+					customServers={customApiServers}
+					onServerChange={(server) => {
+						setApiServer(server)
+						this.apiServer = server
+					}}
+					onCustomServersChange={(servers) => {
+						setCustomApiServers(servers)
+						this.customApiServers = servers
+					}} />
+				<IdOverrideComponent
+					value={overrides}
+					onChange={(value) => {
+						setOverrides(value)
+						this.overrides = value
+					}}
+					resultsForApp={async (appId) => {
+						const ret: Record<ID, Entry<ID>> = {}
+						for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
+						{
+							ret[id] = {
+								label: appStore.GetAppOverviewByAppID(appId).display_name,
+								title: value.title,
+								id: id,
+								appId: appId
+							}
+						}
+						return ret;
+					}} />
+			</DialogControlsSection>
 		)
 	}
 }

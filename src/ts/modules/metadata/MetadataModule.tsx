@@ -17,17 +17,18 @@ import {
 	afterPatch,
 	beforePatch,
 	callOriginal,
+	DialogControlsSection,
+	Field,
 	findInReactTree,
 	findModuleExport,
-	PanelSectionRow,
 	Patch,
 	replacePatch,
 	Router,
-	ToggleField
+	Toggle
 } from "@decky/ui";
 import {format, t} from "../../useTranslations";
 import {getAppDetails, stateTransaction} from "../../util";
-import {FC, Fragment, ReactElement, ReactNode, useState} from "react";
+import {ReactElement, ReactNode, useState} from "react";
 import {Markdown} from "../../markdown";
 import {SteamAppDetails, SteamAppOverview} from "../../SteamTypes";
 import {routePatch} from "../../RoutePatches";
@@ -40,8 +41,8 @@ import {
 import {CustomFeature} from "./CustomFeature";
 import { SteamMetadataProvider, type SteamMetadataProviderCache, type SteamMetadataProviderConfig } from "./providers/Steam/SteamMetadataProvider";
 import { RAWGMetadataProvider, type RAWGMetadataProviderCache, type RAWGMetadataProviderConfig } from "./providers/RAWG/RAWGMetadataProvider";
-
-// import mdx from "@mdxeditor/editor/style.css";
+import { useMetaDeckState } from "../../MetaDeckState";
+import React from "react";
 
 export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs, MetadataProviderConfigTypes>
 {
@@ -704,124 +705,150 @@ export class MetadataModule extends Module<
 		this.config.title_header = title_header
 	}
 
-	settingsComponent(): FC
-	{
-		return () => {
-			const [typeOverride, setTypeOverride] = useState(this.typeOverride)
-			const [descriptions, setDescriptions] = useState(this.descriptions)
-			const [releaseDate, setReleaseDate] = useState(this.releaseDate)
-			const [associations, setAssociations] = useState(this.associations)
-			const [categories, setCategories] = useState(this.categories)
-			const [rating, setRating] = useState(this.rating)
-			const [installSize, setInstallSize] = useState(this.installSize)
-			const [installDate, setInstallDate] = useState(this.installDate)
-			const [markdown, setMarkdown] = useState(this.markdown)
-			const [titleHeader, setTitleHeader] = useState(this.titleHeader)
+	settingsComponent = () => {
+		const { loadingData } = useMetaDeckState();
+		const [typeOverride, setTypeOverride] = useState(this.typeOverride)
+		const [descriptions, setDescriptions] = useState(this.descriptions)
+		const [releaseDate, setReleaseDate] = useState(this.releaseDate)
+		const [associations, setAssociations] = useState(this.associations)
+		const [categories, setCategories] = useState(this.categories)
+		const [rating, setRating] = useState(this.rating)
+		const [installSize, setInstallSize] = useState(this.installSize)
+		const [installDate, setInstallDate] = useState(this.installDate)
+		const [markdown, setMarkdown] = useState(this.markdown)
+		const [titleHeader, setTitleHeader] = useState(this.titleHeader)
 
-			return (
-				   <Fragment>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsTypeOverride")}
-								 description={t("metadataSettingsTypeOverrideDesc")}
-								 checked={typeOverride} onChange={(checked) => {
-							   setTypeOverride(checked);
-							   this.typeOverride = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsDescriptions")} disabled={!typeOverride}
-								 description={!typeOverride ?
-									    format(t("settingsDependencyNotMet"), t("metadataSettingsDescriptions"), t("metadataSettingsTypeOverride"))
-									    : t("metadataSettingsDescriptionsDesc")}
-								 checked={descriptions} onChange={(checked) => {
-							   setDescriptions(checked);
-							   this.descriptions = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsReleaseDate")} disabled={!typeOverride}
-								 description={!typeOverride ?
-									    format(t("settingsDependencyNotMet"), t("metadataSettingsReleaseDate"), t("metadataSettingsTypeOverride"))
-									    : t("metadataSettingsReleaseDateDesc")}
-								 checked={releaseDate} onChange={(checked) => {
-							   setReleaseDate(checked);
-							   this.releaseDate = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsAssociations")} disabled={!typeOverride}
-								 description={!typeOverride ?
-									    format(t("settingsDependencyNotMet"), t("metadataSettingsAssociations"), t("metadataSettingsTypeOverride"))
-									    : t("metadataSettingsAssociationsDesc")}
-								 checked={associations} onChange={(checked) => {
-							   setAssociations(checked);
-							   this.associations = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsCategories")}
-								 description={t("metadataSettingsCategoriesDesc")}
-								 checked={categories} onChange={(checked) => {
-							   setCategories(checked);
-							   this.categories = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsRating")}
-								 description={t("metadataSettingsRatingDesc")}
-								 checked={rating} onChange={(checked) => {
-							   setRating(checked);
-							   this.rating = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsInstallSize")}
-								 description={t("metadataSettingsInstallSizeDesc")}
-								 checked={installSize} onChange={(checked) => {
-							   setInstallSize(checked);
-							   this.installSize = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsInstallDate")}
-								 description={t("metadataSettingsInstallDateDesc")}
-								 checked={installDate} onChange={(checked) => {
-							   setInstallDate(checked);
-							   this.installDate = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsMarkdown")}
-								 description={t("metadataSettingsMarkdownDesc")}
-								 checked={markdown} onChange={(checked) => {
-							   setMarkdown(checked);
-							   this.markdown = checked;
-						   }}/>
-					   </PanelSectionRow>
-					   <PanelSectionRow>
-						   <ToggleField
-								 label={t("metadataSettingsTitleHeader")} disabled={!markdown}
-								 description={!markdown ?
-									    format(t("settingsDependencyNotMet"), t("metadataSettingsTitleHeader"), t("metadataSettingsMarkdown"))
-									    : t("metadataSettingsTitleHeaderDesc")}
-								 checked={titleHeader} onChange={(checked) => {
-							   setTitleHeader(checked);
-							   this.titleHeader = checked;
-						   }}/>
-					   </PanelSectionRow>
-				   </Fragment>
-			);
-		}
-	}
+		return (
+			<>
+				<DialogControlsSection>
+					<Field
+						label={t("metadataSettingsTypeOverride")}
+						description={t("metadataSettingsTypeOverrideDesc")}>
+						<Toggle
+							value={typeOverride}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setTypeOverride(checked);
+								this.typeOverride = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("metadataSettingsDescriptions")}
+						description={!typeOverride ?
+							format(t("settingsDependencyNotMet"), t("metadataSettingsDescriptions"), t("metadataSettingsTypeOverride")) :
+							t("metadataSettingsDescriptionsDesc")}>
+						<Toggle
+							value={descriptions}
+							disabled={loadingData.loading || !typeOverride}
+							onChange={(checked) => {
+								setDescriptions(checked);
+								this.descriptions = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("metadataSettingsReleaseDate")}
+						description={!typeOverride ?
+							format(t("settingsDependencyNotMet"), t("metadataSettingsReleaseDate"), t("metadataSettingsTypeOverride")) :
+							t("metadataSettingsReleaseDateDesc")}>
+						<Toggle
+							value={releaseDate}
+							disabled={loadingData.loading || !typeOverride}
+							onChange={(checked) => {
+								setReleaseDate(checked);
+								this.releaseDate = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("metadataSettingsAssociations")}
+						description={!typeOverride ?
+							format(t("settingsDependencyNotMet"), t("metadataSettingsAssociations"), t("metadataSettingsTypeOverride")) :
+							t("metadataSettingsAssociationsDesc")}>
+						<Toggle
+							value={associations}
+							disabled={loadingData.loading || !typeOverride}
+							onChange={(checked) => {
+								setAssociations(checked);
+								this.associations = checked;
+							}}/>
+					</Field>
+				</DialogControlsSection>
+
+				<DialogControlsSection>
+					<Field
+						label={t("metadataSettingsCategories")}
+						description={t("metadataSettingsCategoriesDesc")}>
+						<Toggle
+							value={categories}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setCategories(checked);
+								this.categories = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("metadataSettingsRating")}
+						description={t("metadataSettingsRatingDesc")}>
+						<Toggle
+							value={rating}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setRating(checked);
+								this.rating = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("metadataSettingsInstallSize")}
+						description={t("metadataSettingsInstallSizeDesc")}>
+						<Toggle
+							value={installSize}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setInstallSize(checked);
+								this.installSize = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("metadataSettingsInstallDate")}
+						description={t("metadataSettingsInstallDateDesc")}>
+						<Toggle
+							value={installDate}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setInstallDate(checked);
+								this.installDate = checked;
+							}}/>
+					</Field>
+				</DialogControlsSection>
+
+				<DialogControlsSection>
+					<Field
+						label={t("metadataSettingsMarkdown")}
+						description={t("metadataSettingsMarkdownDesc")}>
+						<Toggle
+							value={markdown}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setMarkdown(checked);
+								this.markdown = checked;
+							}}/>
+					</Field>
+					<Field
+						label={t("metadataSettingsTitleHeader")}
+						description={!markdown ?
+							format(t("settingsDependencyNotMet"), t("metadataSettingsTitleHeader"), t("metadataSettingsMarkdown")) :
+							t("metadataSettingsTitleHeaderDesc")}>
+						<Toggle
+							value={titleHeader}
+							disabled={loadingData.loading || !markdown}
+							onChange={(checked) => {
+								setTitleHeader(checked);
+								this.titleHeader = checked;
+							}}/>
+					</Field>
+				</DialogControlsSection>
+			</>
+		);
+	};
 
 	async applyOverview(overview: SteamAppOverview): Promise<void>
 	{
@@ -840,7 +867,7 @@ export class MetadataModule extends Module<
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
-		const launchCommand = await getLaunchCommand(details);
+		const launchCommand = getLaunchCommand(details);
 		const cats: (StoreCategory | CustomStoreCategory)[] = await getShortcutCategories(launchCommand);
 
 		return {

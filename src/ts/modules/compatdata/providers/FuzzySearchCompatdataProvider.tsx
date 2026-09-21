@@ -1,57 +1,57 @@
-import { callable } from "@decky/api";
-import type { ID, IDDictionary, MetadataData } from "../../../Interfaces";
-import type Logger from "../../../logger";
-import { getLaunchCommand, getShortcutCategories, isEmulatedGame, romRegex } from "../../../shortcuts";
-import { closestWithLimit, distanceWithLimit, getAppDetails } from "../../../util";
-import type { ProviderConfig, ProviderCache } from "../../Provider";
-import type { ResolverConfig, ResolverCache } from "../../Resolver";
-import { MetadataProvider } from "../MetadataProvider";
-import { useState } from "react";
+import {ProviderCache, ProviderConfig} from "../../Provider";
+import {CompatdataProvider} from "../CompatdataProvider";
+import {CompatdataData, type ID, type IDDictionary} from "../../../Interfaces";
+import {useState} from "react";
+import {closestWithLimit, distanceWithLimit, getAppDetails} from "../../../util";
+import {ResolverCache, ResolverConfig} from "../../Resolver";
 import { DialogControlsSection, Field, SliderField } from "@decky/ui";
+import type Logger from "../../../logger";
 import { IdOverrideComponent, type Entry } from "../../IdOverrideComponent";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import { t } from "../../../useTranslations";
 
-export interface FuzzySearchMetadataProviderConfig extends ProviderConfig<{}, ResolverConfig>
+export interface FuzzySearchCompatdataProviderConfig extends ProviderConfig<{}, ResolverConfig>
 {
 	fuzziness: number,
 	overrides: IDDictionary
 }
 
-export interface FuzzySearchMetadataProviderCache extends ProviderCache<{}, ResolverCache>
+export interface FuzzySearchCompatdataProviderCache extends ProviderCache<{}, ResolverCache>
 {
+
 }
 
-export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
+export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<any>
+{
 	resolvers = [];
 
 	abstract logger: Logger;
 
 	get overrides(): IDDictionary
 	{
-		return (this.config as FuzzySearchMetadataProviderConfig).overrides;
+		return (this.config as FuzzySearchCompatdataProviderConfig).overrides;
 	}
 
 	set overrides(data: IDDictionary)
 	{
-		(this.config as FuzzySearchMetadataProviderConfig).overrides = data;
+		(this.config as FuzzySearchCompatdataProviderConfig).overrides = data;
 		void this.module.saveData();
 	}
 
 	get fuzziness(): number
 	{
-		return (this.config as FuzzySearchMetadataProviderConfig).fuzziness;
+		return (this.config as FuzzySearchCompatdataProviderConfig).fuzziness;
 	}
 
 	set fuzziness(fuzziness: number)
 	{
-		(this.config as FuzzySearchMetadataProviderConfig).fuzziness = fuzziness;
+		(this.config as FuzzySearchCompatdataProviderConfig).fuzziness = fuzziness;
 		void this.module.saveData();
 	}
 
-	provide(appId: number): Promise<MetadataData | undefined>
+	provide(appId: number): Promise<CompatdataData | undefined>
 	{
-		return this.throttle(() => this.getMetadataForGame(appId));
+		return this.throttle(() => this.getCompatdataForGame(appId));
 	}
 
 	async test(appId: number): Promise<boolean>
@@ -65,15 +65,15 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		return closest_names.length > 0;
 	}
 
-	protected abstract search(title: string): Promise<MetadataData[]>;
+	protected abstract search(title: string): Promise<CompatdataData[]>;
 
-	public async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
+	public async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
 
-		this.logger.debug(`Fetching metadata for game ${appId}`)
+		this.logger.debug(`Fetching compatdata for game ${appId}`)
 
 		const display_name = details.strDisplayName;
 		const data_id = this.overrides[appId];
@@ -82,7 +82,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		if (results.length > 0)
 		{
 			this.logger.debug("results", results);
-			let games: MetadataData[];
+			let games: CompatdataData[];
 			if (data_id === undefined)
 			{
 				const names = results.map(value => value.title);
@@ -99,10 +99,6 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 				games = results.filter(value => value.id === data_id)
 			}
 			const game = games.reverse().pop();
-			if (game)
-			{
-				game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
-			}
 			this.logger.debug(game);
 			return game;
 
@@ -110,7 +106,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
 	}
 
-	protected async getAllMetadataForGame(appId: number): Promise<Record<ID, MetadataData> | undefined>
+	protected async getAllCompatdataForGame(appId: number): Promise<Record<ID, CompatdataData> | undefined>
 	{
 		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
 		const results = await this.search(display_name);
@@ -118,7 +114,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		// We add all results without limiting them for overrides
 		if (results.length > 0)
 		{
-			let ret: Record<ID, MetadataData> = {};
+			let ret: Record<ID, CompatdataData> = {};
 			for (let game of results)
 			{
 				ret[game.id] = game;
@@ -127,29 +123,9 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		} else return undefined;
 	}
 
-	private file_size: (path: string) => Promise<number> = callable("file_size");
-	private file_date: (path: string) => Promise<number> = callable("file_date");
-
-	async apply(appId: number, data: MetadataData): Promise<void>
-	{
-		const details = await getAppDetails(appId);
-		if(!details)
-			return;
-		const launchCommand = getLaunchCommand(details);
-		if (isEmulatedGame(launchCommand))
-		{
-			const path = launchCommand.match(romRegex)?.[0]
-			if (path)
-			{
-				data.install_size = await this.file_size(path);
-				data.install_date = await this.file_date(path);
-			}
-		}
-	}
-
 	settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [fuzziness, setFuzziness] = useState(this.fuzziness);
+		const [fuzziness, setFuzziness] = useState(this.config.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
 		return (
 			<DialogControlsSection>
@@ -180,7 +156,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 					}}
 					resultsForApp={async (appId) => {
 						const ret: Record<ID, Entry<ID>> = {}
-						for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
+						for (const [id, value] of Object.entries(await this.throttle(() => this.getAllCompatdataForGame(appId)) ?? []))
 						{
 							ret[id] = {
 								label: appStore.GetAppOverviewByAppID(appId).display_name,
@@ -192,6 +168,6 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 						return ret;
 					}} />
 			</DialogControlsSection>
-		);
-	};
+		)
+	}
 }

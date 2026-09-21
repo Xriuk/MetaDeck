@@ -152,5 +152,5 @@ export abstract class Provider<
 
 	abstract provide(appId: number): Promise<Data | undefined>;
 
-	abstract settingsComponent(): FC
+	abstract settingsComponent: FC
 }
