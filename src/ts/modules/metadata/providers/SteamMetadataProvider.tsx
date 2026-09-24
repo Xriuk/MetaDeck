@@ -10,6 +10,8 @@ import { useMetaDeckState } from "../../../MetaDeckState";
 import { IdOverrideComponent, type Entry } from "../../IdOverrideComponent";
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
+import { fetchNoCors } from "@decky/api";
+import type { AppDetailsResponse } from "type-steamapi";
 
 export interface SteamMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -186,5 +188,36 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 				</DialogControlsSection>
 			</>
 		)
+	}
+
+	// Missing release_date
+	public async getAppMetadata(appId: number | string): Promise<MetadataData | undefined>{
+		const response = await fetchNoCors(
+			"https://store.steampowered.com/api/appdetails?appids={0}&l={1}"
+				.replace("{0}", appId.toString())
+				.replace("{1}", this.language));
+		if (!response.ok)
+			return undefined;
+
+		const result: Record<string, AppDetailsResponse> = await response.json();
+		if(!result || Object.values(result).length !== 1)
+			return undefined;
+		
+		let game = Object.values(result)[0];
+		if(!game.success)
+			return undefined;
+		
+		return {
+			id: game.data.steam_appid,
+			title: game.data.name,
+			description: game.data.short_description || t("noDescription"),
+			rating: game.data.metacritic?.score,
+			release_date: undefined, // Cannot parse
+			developers: game.data.developers.map(d => ({name: d, url: ""})),
+			publishers: game.data.publishers.map(p => ({name: p, url: ""})),
+			store_categories: game.data.categories
+				.filter(c => StoreCategory[c.id])
+				.map(c => StoreCategory[StoreCategory[c.id] as any] as unknown as StoreCategory)
+		};
 	}
 }

@@ -57,7 +57,7 @@ export class Settings
 						language: "EN"
 					},
 					// Id-based (english)
-					gog: {
+					gog: { // Can resolve to Steam if finds id
 						enabled: true,
 						ordinal: 1,
 						resolvers: {
@@ -73,8 +73,7 @@ export class Settings
 								enabled: true,
 								ordinal: 2
 							}
-						},
-						language: "english"
+						}
 					},
 					// Fuzzy search (localized)
 					steam: {
@@ -86,7 +85,7 @@ export class Settings
 						language: "english"
 					},
 					// Fuzzy search (english)
-					lizardbyte: {
+					lizardbyte: { // Can resolve to Steam if finds id
 						enabled: true,
 						ordinal: 3,
 						fuzziness: 5,
@@ -107,6 +106,7 @@ export class Settings
 				enabled: true,
 				verified: true,
 				notes: true,
+				test_results: true,
 				providers: {
 					// Id-based
 					pcsx2: {

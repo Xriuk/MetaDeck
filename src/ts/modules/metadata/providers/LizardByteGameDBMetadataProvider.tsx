@@ -4,8 +4,10 @@ import { t } from "../../../useTranslations";
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import { fetchNoCors } from "@decky/api";
-import { distanceWithLimit } from "../../../util";
-import {Company, Game, GameMode, InvolvedCompany, type ReleaseDate} from "igdb-api-types";
+import { distanceWithLimit, getAppDetails } from "../../../util";
+import type { Company, Game, GameMode, InvolvedCompany, ExternalGame, ReleaseDate} from "igdb-api-types";
+import { SteamMetadataProvider } from "./SteamMetadataProvider";
+import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
 
 export interface LizardByteGameDBMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -19,13 +21,24 @@ export interface LizardByteGameDBMetadataProviderCache extends FuzzySearchMetada
 // IGDB-like
 export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvider
 {
-
 	static identifier: keyof MetadataProviderConfigs = "lizardbyte";
 	static title: string = t("providerMetadataLizardByteGameDB");
 	identifier: keyof MetadataProviderConfigs = LizardByteGameDBMetadataProvider.identifier;
 	title: string = LizardByteGameDBMetadataProvider.title;
 
-	logger: Logger = new Logger(LizardByteGameDBMetadataProvider.identifier)	
+	logger: Logger = new Logger(LizardByteGameDBMetadataProvider.identifier)
+	
+	private _steamProvider?: SteamMetadataProvider;
+	get steamProvider(): SteamMetadataProvider
+	{
+		if(!this._steamProvider){
+			this._steamProvider = this.module.providers.find(p => p instanceof SteamMetadataProvider);
+			if(!this._steamProvider)
+				this._steamProvider = new SteamMetadataProvider(this.module);
+		}
+
+		return this._steamProvider;
+	}
 
 	protected async search(title: string): Promise<MetadataData[]>
 	{
@@ -76,6 +89,10 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 
 	public override async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
 	{
+		const details = await getAppDetails(appId);
+		if (!details)
+			return undefined;
+
 		let game = await super.getMetadataForGame(appId);
 
 		// Retrieve only missing details of a matching game instead of all of them
@@ -83,11 +100,25 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 			const response = await fetchNoCors(`https://app.lizardbyte.dev/GameDB/games/${game.id}.json`);
 			if (response.ok){
 				let gameR: Game = await response.json();
+
+				if(gameR.release_dates?.length)
+					game.release_date = Math.floor(new Date(Math.min(...gameR.release_dates.map(d => (d as ReleaseDate).date!)) * 1000).getTime() / 1000);
+				
+				const cats = await getShortcutCategories(getLaunchCommand(details));
+
+				// If we have a steam id we query that first to get more accurate results
+				if(gameR.external_games?.some(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1)){
+					let steam = await this.steamProvider.getAppMetadata((gameR.external_games?.find(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) as ExternalGame)?.uid ?? '');
+					if(steam){
+						steam.release_date = game.release_date;
+						steam.store_categories.push(...cats);
+
+						return steam;
+					}
+				}
 				
 				game.description = (gameR.summary ?? gameR.storyline) || t("noDescription");
 				game.rating = gameR.aggregated_rating;
-				if(gameR.release_dates?.length)
-					game.release_date = Math.floor(new Date(Math.min(...gameR.release_dates.map(d => (d as ReleaseDate).date!))).getTime() / 1000);
 				if(gameR.involved_companies?.some(c => typeof c !== 'number' && typeof c.company !== 'number' && c.company?.name && c.developer)){
 					game.developers = gameR.involved_companies
 						.filter(c => typeof c !== 'number' && typeof c.company !== 'number' && c.developer)

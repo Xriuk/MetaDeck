@@ -219,10 +219,10 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 			const game = games.reverse().pop();
 			if (game)
 			{
-				game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
-
 				// Retrieve only missing details of a matching game instead of all of them
 				if(!game.description && this.api_key){
+					game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
+
 					const response = await fetchNoCors(`https://api.rawg.io/api/games/${game.id}?key=${this.api_key}`);
 					if (response.ok){
 						let gameR: {

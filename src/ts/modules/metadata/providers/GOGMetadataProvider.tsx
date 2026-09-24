@@ -3,7 +3,6 @@ import {MetadataProvider} from "../MetadataProvider";
 import {MetadataData, StoreCategory} from "../../../Interfaces";
 import {getAppDetails} from "../../../util";
 import {GamesDBResult} from "./GamesDBResult";
-import {useState} from "react";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
@@ -31,14 +30,12 @@ import {
 	GOGMetadataProviderHeroicResolverConfig
 } from "../resolvers/GOG/GOGMetadataProviderHeroicResolver";
 import {MetadataProviderConfigs} from "../MetadataModule";
-import type { AppDetailsResponse } from "type-steamapi";
-import { DialogControlsSection, Field, TextField } from "@decky/ui";
-import React from "react";
-import { useMetaDeckState } from "../../../MetaDeckState";
+import { SteamMetadataProvider } from "./SteamMetadataProvider";
+import type { FC } from "react";
 
 export interface GOGMetadataProviderConfig extends ProviderConfig<GOGMetadataProviderResolverConfigs, GOGMetadataProviderResolverConfig>
 {
-	language: string
+	
 }
 
 export interface GOGMetadataProviderCache extends ProviderCache<GOGMetadataProviderResolverCaches, GOGMetadataProviderResolverCache>
@@ -82,15 +79,16 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 		new GOGMetadataProviderHeroicResolver(this)
 	]
 
-	get language(): string
+	private _steamProvider?: SteamMetadataProvider;
+	get steamProvider(): SteamMetadataProvider
 	{
-		return this.module.config.providers.gog.language;
-	}
+		if(!this._steamProvider){
+			this._steamProvider = this.module.providers.find(p => p instanceof SteamMetadataProvider);
+			if(!this._steamProvider)
+				this._steamProvider = new SteamMetadataProvider(this.module);
+		}
 
-	set language(language: string)
-	{
-		this.module.config.providers.gog.language = language;
-		void this.module.saveData();
+		return this._steamProvider;
 	}
 
 	async test(appId: number): Promise<boolean>
@@ -126,31 +124,12 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 
 				// If we have a steam id we query that first to get more accurate results
 				if(result.game.releases.some(r => r.platform_id === "steam")){
-					response = await fetchNoCors(
-						"https://store.steampowered.com/api/appdetails?appids={0}&l={1}"
-							.replace("{0}", result.game.releases.find(r => r.platform_id === "steam")?.external_id ?? '')
-							.replace("{1}", this.language));
-					if (response.ok){
-						const result2: Record<string, AppDetailsResponse> = await response.json();
-						if(result2 && Object.values(result2).length === 1){
-							let game = Object.values(result2)[0];
-							if(game.success){
-								cats.push(...game.data.categories
-									.filter(c => StoreCategory[c.id])
-									.map(c => StoreCategory[StoreCategory[c.id] as any] as unknown as StoreCategory));
+					let steam = await this.steamProvider.getAppMetadata(result.game.releases.find(r => r.platform_id === "steam")?.external_id ?? '');
+					if(steam){
+						steam.release_date = Math.floor(new Date(result.game.first_release_date).getTime() / 1000);
+						steam.store_categories.push(...cats);
 
-								return {
-									id: game.data.steam_appid,
-									title: game.data.name,
-									description: game.data.short_description || t("noDescription"),
-									rating: game.data.metacritic.score,
-									release_date: Math.floor(new Date(result.game.first_release_date).getTime() / 1000),
-									developers: game.data.developers.map(d => ({name: d, url: ""})),
-									publishers: game.data.publishers.map(p => ({name: p, url: ""})),
-									store_categories: cats
-								};
-							}
-						}
+						return steam;
 					}
 				}
 
@@ -177,27 +156,5 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 		});
 	}
 
-	settingsComponent = () => {
-		const { loadingData } = useMetaDeckState();
-		const [language, setLanguage] = useState(this.language);
-		return (
-			<DialogControlsSection>
-				<Field
-					label={t("language")}
-					description={
-						<>
-							<TextField
-								value={language}
-								disabled={loadingData.loading}
-								onChange={(event) => {
-									setLanguage(event.target.value);
-									this.language = event.target.value;
-								}}/>
-							<br/>
-							<span>{t("languageDescription")}</span>
-						</>
-					} />
-			</DialogControlsSection>
-		)
-	}
+	settingsComponent: FC = () => undefined;
 }

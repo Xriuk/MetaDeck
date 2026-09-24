@@ -1,4 +1,4 @@
-import {CompatdataData, SteamDeckCompatCategory} from "../../../Interfaces";
+import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
 import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
@@ -141,14 +141,82 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 
 		this.logger.debug("Compat data", appId, compatData);
 
-		return {
+		let result: CompatdataData = {
 			title: compatData.find(c => c.title)?.title || '',
 			id: titleIds![0],
+
 			deck_compat_category:
 				compatData.some(c => c.status === "Perfect" || c.status === "Playable") ? SteamDeckCompatCategory.VERIFIED :
 				compatData.some(c => c.status === "Ingame") ? SteamDeckCompatCategory.PLAYABLE :
-				SteamDeckCompatCategory.UNSUPPORTED
+				SteamDeckCompatCategory.UNSUPPORTED,
+			
+			deck_test_results: [
+				// Default resolution 480i (NTSC) or 576i (PAL)
+				{
+					test_loc_token: '#SteamDeckVerified_TestResult_NativeResolutionNotDefault',
+					test_result: SteamTestResult.Playable
+				}
+			],
+			machine_test_results: [],
+			os_test_results: []
 		};
+
+		const deckAndMachine = [
+			[result.deck_test_results!, "SteamDeckVerified" as string],
+			[result.machine_test_results!, "SteamMachine" as string]
+		] as const;
+
+		// The glyphs obviously do not match
+		// Controller works by default
+		result.deck_test_results!.push({
+			test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsDoNotMatchDeckDevice',
+			test_result: SteamTestResult.Playable
+		});
+		result.machine_test_results!.push({
+			test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsDoNotMatchDevice`,
+			test_result: SteamTestResult.Playable
+		});
+		deckAndMachine.forEach(([results, cat]) => {
+			results.push({
+				test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+				test_result: SteamTestResult.Verified
+			});
+		});
+
+		// Default configuration works fine for playable games
+		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
+			deckAndMachine.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
+						test_result: SteamTestResult.Verified
+					}
+				);
+			});
+		}
+
+		// If the game is not perfect, it might have minor issues
+		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED && !compatData.some(c => c.status === "Perfect")){
+			deckAndMachine.concat([[result.os_test_results!, "SteamOS"] as const])
+				.forEach(([results, cat]) => {
+					results.push(
+						{
+							test_loc_token: `#${cat}_TestResult_DisplayOutputHasNonblockingIssues`,
+							test_result: SteamTestResult.Playable
+						},
+						{
+							test_loc_token: `#${cat}_TestResult_VideoPlaybackHasNonblockingIssues`,
+							test_result: SteamTestResult.Playable
+						},
+						{
+							test_loc_token: `#${cat}_TestResult_AudioOutputHasNonblockingIssues`,
+							test_result: SteamTestResult.Playable
+						}
+					);
+				});
+		}
+
+		return result;
 	}
 
 	settingsComponent: FC = () => undefined;

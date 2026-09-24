@@ -3,6 +3,7 @@ import {SiEpicgames, SiFlatpak, SiLutris, SiPrime} from "react-icons/si";
 
 import languages from "./translations";
 import {FaRocket, FaTrash} from "react-icons/fa";
+import type { SteamAppDetails } from "./SteamTypes";
 
 export interface MetadataData
 {
@@ -26,7 +27,14 @@ export interface CompatdataData
 
 	deck_compat_category?: SteamDeckCompatCategory;
 	machine_compat_category?: SteamDeckCompatCategory; // Will default to deck_compat_category if not provided
+	os_compat_category?: SteamDeckCompatCategory; // Will default to max between deck_compat_category and machine_compat_category if not provided
+
 	notes?: string[];
+	
+	// test_result should not be 1 (notes), use notes
+	deck_test_results?: SteamAppDetails['vecDeckCompatTestResults'];
+	machine_test_results?: SteamAppDetails['vecSteamMachineCompatTestResults'];
+	os_test_results?: SteamAppDetails['vecSteamOSCompatTestResults'];
 }
 
 export type ID = number | string
@@ -58,6 +66,14 @@ export enum SteamDeckCompatCategory
 	UNSUPPORTED,
 	PLAYABLE,
 	VERIFIED
+}
+
+export enum SteamTestResult{
+	Unknown,
+	Notes,
+	Unsupported,
+	Playable,
+	Verified
 }
 
 export enum StoreCategory

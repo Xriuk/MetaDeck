@@ -10,10 +10,13 @@ import { MetadataProvider } from "../MetadataProvider";
 import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
 import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
-import { getLaunchCommand, isDolphinGame, isRPCS3Game } from "../../../shortcuts";
+import { getLaunchCommand, getShortcutCategories, isDolphinGame, isRPCS3Game } from "../../../shortcuts";
 import { getAppDetails } from "../../../util";
-import { call } from "@decky/api";
+import { callable } from "@decky/api";
 import { MetadataData, StoreCategory } from "../../../Interfaces";
+
+const wiiUrl = "https://www.gametdb.com/wiitdb.zip";
+const ps3Url = "https://www.gametdb.com/ps3tdb.zip";
 
 type GameTDBGame = {
 	id: string;
@@ -57,8 +60,8 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 
 	logger: Logger = new Logger(GameTDBMetadataProvider.identifier);
 
-	private wiiCache: Record<string, GameTDBGame> = {}; // ID6: Game
-	private ps3Cache: Record<string, GameTDBGame> = {}; // titleId: Game
+	gametdb_get_db = callable<[string]>("gametdb_get_db");
+	gametdb_get_entry = callable<[string, string], GameTDBGame | null>("gametdb_get_entry");
 
 	get language(): string
 	{
@@ -74,11 +77,14 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 	override async mount(): Promise<void> {
 		await super.mount();
 
-		let result = await call<[string], string>("gametdb_get_db", "https://www.gametdb.com/wiitdb.zip") ?? "{}";
-		this.wiiCache = JSON.parse(result);
-
-		result = await call<[string], string>("gametdb_get_db", "https://www.gametdb.com/ps3tdb.zip") ?? "{}";
-		this.ps3Cache = JSON.parse(result);
+		// Save in backend instead of returning because there's a lot of data
+		try{
+			await this.gametdb_get_db(wiiUrl);
+			await this.gametdb_get_db(ps3Url);
+		}
+		catch(e){
+			this.logger.error("Error while retrieving one or more zip file", e);
+		}
 	}
 
 	async test(appId: number): Promise<boolean>
@@ -125,16 +131,19 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			return undefined;
 
 		this.logger.debug("Games ids", appId, ids);
+
+		const cats = await getShortcutCategories(getLaunchCommand(details));
+		cats.push(StoreCategory.SinglePlayer);
 		
 		let entries: GameTDBGame[] = [];
-		let cats: StoreCategory[] = [
-			StoreCategory.SinglePlayer
-		];
 		if(isDolphinGame(launchCommand)){
-			if(ids.some(i => this.wiiCache[i])){
-				entries = ids.map(i => this.wiiCache[i])
-					.filter(e => e);
+			for(let id in ids){
+				let entry = await this.gametdb_get_entry(wiiUrl, id);
+				if(entry)
+					entries.push(entry);
+			}
 
+			if(entries.length){
 				cats.push(StoreCategory.TrackedControllerSupport);
 				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
 					cats.push(StoreCategory.MultiPlayer);
@@ -147,10 +156,13 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			}
 		}
 		else if(isRPCS3Game(launchCommand)){
-			if(ids.some(i => this.ps3Cache[i])){
-				let entries = ids.map(i => this.ps3Cache[i])
-					.filter(e => e);
-				
+			for(let id in ids){
+				let entry = await this.gametdb_get_entry(ps3Url, id);
+				if(entry)
+					entries.push(entry);
+			}
+
+			if(entries.length){
 				cats.push(StoreCategory.FullController);
 				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
 					cats.push(StoreCategory.MultiPlayer);
@@ -159,33 +171,31 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 				if(entries.some(e => e.controls?.some(c => c.type === 'move')))
 					cats.push(StoreCategory.TrackedControllerSupport);
 			}
-
-			if(!entries.length)
-				return undefined;
-
-			let locales = entries.flatMap(e => Object.entries(e.locales ?? {}));
-			let release = entries.find(e => e.date)?.date;
-
-			return {
-				id: entries[0].id,
-				title: this.getLocalized(locales, l => l.title)?.title
-					?? entries[0].name,
-				description: this.getLocalized(locales, l => l.title)?.synopsis || t("noDescription"),
-				rating: undefined, // DEV: maybe retrieve somehow?
-				release_date: release ? Math.floor(Date.parse(release) / 1000) : undefined,
-				developers: entries
-					.find(e => e.developer)?.developer
-					?.split(',')
-					.map(d => ({name: d.trim(), url: ""})),
-				publishers: entries
-					.find(e => e.publisher)?.publisher
-					?.split(',')
-					.map(d => ({name: d.trim(), url: ""})),
-				store_categories: cats
-			};
 		}
 
-		return undefined;
+		if(!entries.length)
+			return undefined;
+
+		let locales = entries.flatMap(e => Object.entries(e.locales ?? {}));
+		let release = entries.find(e => e.date)?.date;
+
+		return {
+			id: entries[0].id,
+			title: this.getLocalized(locales, l => l.title)?.title
+				?? entries[0].name,
+			description: this.getLocalized(locales, l => l.title)?.synopsis || t("noDescription"),
+			rating: undefined, // DEV: maybe retrieve somehow?
+			release_date: release ? Math.floor(Date.parse(release) / 1000) : undefined,
+			developers: entries
+				.find(e => e.developer)?.developer
+				?.split(',')
+				.map(d => ({name: d.trim(), url: ""})),
+			publishers: entries
+				.find(e => e.publisher)?.publisher
+				?.split(',')
+				.map(d => ({name: d.trim(), url: ""})),
+			store_categories: cats
+		};
 	}
 
 	settingsComponent = () => {
@@ -210,5 +220,30 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 					} />
 			</DialogControlsSection>
 		)
+	}
+
+	public async getDolphinGameEntries(appId: number): Promise<GameTDBGame[]>{
+		const details = await getAppDetails(appId);
+		if (!details)
+			return [];
+		const launchCommand = getLaunchCommand(details);
+		if(!isDolphinGame(launchCommand))
+			return [];
+		const resolved = await this.resolve(appId);
+		if (!resolved)
+			return [];
+
+		const ids = resolved.toString().split(separator);
+		if(!ids?.length)
+			return [];
+
+		let entries: GameTDBGame[] = [];
+		for(let id in ids){
+			let entry = await this.gametdb_get_entry(wiiUrl, id);
+			if(entry)
+				entries.push(entry);
+		}
+
+		return entries;
 	}
 }

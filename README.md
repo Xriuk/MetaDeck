@@ -4,7 +4,7 @@ Decky Loader Steam Deck and Steam Machine Plugin for viewing metadata for Non-St
 
 ```bash
 pnpm i # Installs dependencies
-pnpm package # Builds installable zip file
+decky plugin build # Builds installable zip file
 ```
 
 vscode and intellj IDEA run configs are included

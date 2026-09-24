@@ -7,8 +7,13 @@ import xmltodict
 import urllib.request
 import zipfile
 import sqlite3
+import ssl
+import struct
+import mmap
+import re
 from pathlib import Path
 from typing import Dict
+from helpers import get_ssl_context
 
 SFO_MAGIC = b"\x00\x50\x53\x46" # PSF
 
@@ -20,8 +25,10 @@ class Plugin:
 	egs_nsl: Dict[str, Dict[str, any]] | None = None
 	gog_nsl: Dict[int, Dict[str, any]] | None = None
 
-	egs: Dict[str, Dict[str, any]] | None = None
-	gog: Dict[int, Dict[str, any]] | None = None
+	egs_her: Dict[str, Dict[str, any]] | None = None
+	gog_her: Dict[int, Dict[str, any]] | None = None
+
+	gametdb = {} # url: { id: { game } }
 
 	async def read_config(self) -> dict:
 		with open(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json"), "r") as f:
@@ -89,74 +96,86 @@ class Plugin:
 			return Plugin.gog_her[id]
 
 	async def rpcs3_get_titleid(self, rom_path: str) -> str | None:
-		path = rom_path + "/PARAM.SFO"
-		if not os.path.isfile(path):
-			return None
-
-		with open(path, 'rb') as file:
-			sfo_bytes = file.read()
-			if sfo_bytes[0:4] != SFO_MAGIC:
+		try:
+			path = rom_path + "/PARAM.SFO"
+			if not os.path.isfile(path):
 				return None
 
-			key_table_start, data_table_start, tables_entries = struct.unpack_from("<III", sfo_bytes, 8)
+			with open(path, 'rb') as file:
+				sfo_bytes = file.read()
+				if sfo_bytes[0:4] != SFO_MAGIC:
+					return None
 
-			# Loop through keys to find TITLE_ID
-			title_id_index = -1
-			index = 0
-			start = key_table_start
-			while title_id_index == -1 and index < tables_entries:
-				end = start
-				while sfo_bytes[end] != b'\x00':
+				key_table_start, data_table_start, tables_entries = struct.unpack_from("<III", sfo_bytes, 8)
+
+				# Loop through keys to find TITLE_ID
+				title_id_index = -1
+				index = 0
+				start = key_table_start
+				while title_id_index == -1 and index < tables_entries:
+					end = start
+					while end < len(sfo_bytes) and sfo_bytes[end] != b'\x00':
+						end += 1
+					key = sfo_bytes[start:end].decode('utf-8')
+					if key == "TITLE_ID":
+						title_id_index = index
+					index += 1
+					start = end + 1
+
+				if title_id_index == -1:
+					return None
+
+
+				# Retrieve the data offset inside index
+				title_id_index_table_offset = 20 + (title_id_index * 16)
+				_, data_fmt, _, _, data_offset = struct.unpack_from("<HHIII", sfo_bytes, 8)
+				if data_fmt != b'\x04\x02': # Assert for utf-8
+					return None
+
+				# Find the entry inside data to retrieve the value
+				title_id_data_table_offset = data_table_start + data_offset
+				end = title_id_data_table_offset
+				while end < len(sfo_bytes) and sfo_bytes[end] != b'\x00':
 					end += 1
-				key = sfo_bytes[start:end].decode('utf-8')
-				if key == "TITLE_ID":
-					title_id_index = index
-				index += 1
-				start = end + 1
+				return sfo_bytes[start:end].decode('utf-8')
 
-			if title_id_index == -1:
-				return None
-
-			# Retrieve the data offset inside index
-			title_id_index_table_offset = 20 + (title_id_index * 16)
-			_, data_fmt, _, _, data_offset = struct.unpack_from("<HHIII", sfo_bytes, 8)
-			if data_fmt != b'\x04\x02': # Assert for utf-8
-				return None
-
-			# Find the entry inside data to retrieve the value
-			title_id_data_table_offset = data_table_start + data_offset
-			end = title_id_data_table_offset
-			while sfo_bytes[end] != b'\x00':
-				end += 1
-			return sfo_bytes[start:end].decode('utf-8')
+		except e:
+			raise Exception(traceback.format_exc())
 
 	# Inspired by https://github.com/valters-tomsons/PS2-Game-Title-Finder/tree/master
+	# Retrieves .iso and .bin
 	async def pcsx2_get_titleid(self, rom_path: str) -> str | None:
 		if not os.path.isfile(rom_path):
 			return None
 
-		ps2_regions = [
-			'ES',
-			'US',
-			'PS',
-			'PM'
-		]
-		ps2_licenses = [
-			'SL',
-			'SC'
-		]
-		with open(rom_path, 'rb') as file:
-			iso = pycdlib.PyCdlib()
-			iso.open_fp(file)
-			for child in iso.list_children(iso_path='/'):
-				if child is None:
-					continue
-				if child.is_file():
-					name = child.file_identifier().decode('utf-8')
-					for lic in ps2_licenses:
-						for reg in ps2_regions:
-							if name.startswith(lic + reg):
-								return name.replace('_', '').replace('.', '')
+		if rom_path.endswith(".iso"):
+			ps2_regions = [
+				'ES',
+				'US',
+				'PS',
+				'PM'
+			]
+			ps2_licenses = [
+				'SL',
+				'SC'
+			]
+			with open(rom_path, 'rb') as file:
+				iso = pycdlib.PyCdlib()
+				iso.open_fp(file)
+				for child in iso.list_children(iso_path='/'):
+					if child is None:
+						continue
+					if child.is_file():
+						name = child.file_identifier().decode('utf-8')
+						for lic in ps2_licenses:
+							for reg in ps2_regions:
+								if name.startswith(lic + reg):
+									return name.split(";")[0].replace('_', '').replace('.', '')
+		elif rom_path.endswith(".bin"):
+			with open(rom_path, 'r+') as file:
+				mm = mmap.mmap(file.fileno(), 0, prot=mmap.PROT_READ)
+				match = re.search(b"BOOT2 = cdrom0:", mm)
+				return mm[match.end()+1:match.end()+12].decode('ascii').replace('_', '').replace('.', '')
 		
 		return None
 
@@ -165,7 +184,7 @@ class Plugin:
 			return None
 
 		cmd = [
-			os.path.join(decky_plugin.DECKY_PLUGIN_DIR, "py_modules", "bin", "wit"),
+			os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "wit"),
 			"id6",
 			rom_path
 		]
@@ -278,25 +297,28 @@ class Plugin:
 		xex_bytes = await Plugin.xenia_get_defaultxex(self, iso_path)
 		if xex_bytes is None:
 			return None
-		return await Plugin.xenia_parse_xex(self, iso_path, titleid_filter)
+		return await Plugin.xenia_parse_xex(self, xex_bytes, titleid_filter)
 
-	async def gametdb_get_db(self, url: str) -> str:
+	async def gametdb_get_db(self, url: str) -> None:
 		if not url.startswith('https://www.gametdb.com/') or not url.endswith('.zip'):
-			return json.dumps({})
+			return
 
 		result = {}
 
 		filename = url.split('/')[-1] # aaatdb.zip
+		ssl_backup = ssl._create_default_https_context
+		ssl._create_default_https_context = get_ssl_context
 		temp_filename = urllib.request.urlretrieve(url)[0]
+		ssl._create_default_https_context = ssl_backup
 		with zipfile.ZipFile(temp_filename, 'r') as zip_ref:
-			xml_bytes = zip_ref.read('/' + filename.replace('.zip', '.xml'))
-			datafile = xmltodict.parse(xml_bytes)['datafile']
+			xml_bytes = zip_ref.read(filename.replace('.zip', '.xml'))
+			datafile = xmltodict.parse(xml_bytes, encoding='utf-8', force_list=['locale', 'control'])['datafile']
 			for game in datafile['game']:
 				if not 'id' in game:
 					continue
 
 				# Ignore "empty" entries
-				if not 'developer' in game and not 'publisher' in game and not ('date' in game and '@year' in game['date'] and '@month' in game['date'] and '@day' in game['date']) and not 'locale' in game:
+				if not 'developer' in game and not 'publisher' in game and not ('date' in game and '@year' in game['date'] and not (game['date']['@year'] is None) and game['date']['@year'] != "" and '@month' in game['date'] and not (game['date']['@month'] is None) and game['date']['@month'] != "" and '@day' in game['date'] and not (game['date']['@day'] is None) and game['date']['@day'] != "") and not 'locale' in game:
 					continue
 
 				locales = {}
@@ -306,51 +328,45 @@ class Plugin:
 							continue
 
 						locales[locale['@lang']] = {
-							'title': locale['title'].strip() if 'title' in locale else None,
-							'synopsis': locale['synopsis'].strip() if 'synopsis' in locale else None
+							'title': locale['title'].strip() if 'title' in locale and not (locale['title'] is None) and locale['title'] != "" else None,
+							'synopsis': locale['synopsis'].strip() if 'synopsis' in locale and not (locale['synopsis'] is None) and locale['synopsis'] != "" else None
 						}
-
+					
 				controls = []
 				if 'input' in game and 'control' in game['input']:
-					if isinstance(game['input']['control'], list):
-						for control in game['input']['control']:
-							if '@type' in control:
-								controls.append({
-									'type': control['@type'].strip(),
-									'required': control['@required'].strip() == 'true' if '@required' in control else None
-								})
-					elif '@type' in game['input']['control']:
-						controls.append({
-							'type': game['input']['control']['@type'].strip(),
-							'required': game['input']['control']['@required'].strip() == 'true' if '@required' in game['input']['control'] else None
-						})
+					for control in game['input']['control']:
+						if '@type' in control:
+							controls.append({
+								'type': control['@type'].strip(),
+								'required': control['@required'].strip() == 'true' if '@required' in control else None
+							})
 
 				result[game['id'].strip()] = {
 					'id': game['id'].strip(),
 					'name': game['@name'].strip(),
 					'developer': game['developer'] if 'developer' in game else None,
 					'publisher': game['publisher'] if 'publisher' in game else None,
-					'date': game['date']['@year'].strip() + "-" + game['date']['@month'].strip().rjust(2, '0') + game['date']['@day'].strip().rjust(2, '0') if 'date' in game and '@year' in game['date'] and '@month' in game['date'] and '@day' in game['date'] else None,
+					'date': game['date']['@year'].strip() + "-" + game['date']['@month'].strip().rjust(2, '0') + "-" + game['date']['@day'].strip().rjust(2, '0') if 'date' in game and '@year' in game['date'] and not (game['date']['@year'] is None) and game['date']['@year'] != "" and '@month' in game['date'] and not (game['date']['@month'] is None) and game['date']['@month'] != "" and '@day' in game['date'] and not (game['date']['@day'] is None) and game['date']['@day'] != "" else None,
 					'locales': locales if len(locales) > 0 else None,
 					'wi-fi-players': int(game['wi-fi']['@players']) if 'wi-fi' in game and '@players' in game['wi-fi'] else None,
 					'local-players': int(game['input']['@players']) if 'input' in game and '@players' in game['input'] else None,
 					'controls': controls if len(controls) > 0 else None
 				}
 
-		return json.dumps(result)
+		Plugin.gametdb[url] = result
+
+	async def gametdb_get_entry(self, url: str, id: str) -> str | None:
+		if not url in Plugin.gametdb or not id in Plugin.gametdb[url]:
+			return None
+		else:
+			return json.dumps(Plugin.gametdb[url][id])
 
 
 	def util_remove_c_drive_from_path(path):
-	"""Removes 'C:/' from the beginning of a path."""
-
-	if path.startswith("C:/") or path.startswith("C:\\"):
-		return path[3:]
-
+		if path.startswith("C:/") or path.startswith("C:\\"):
+			return path[3:]
 
 	async def _main(self) -> None:
-		"""
-		Load function
-		"""
 		decky.logger.info("Starting MetaDeck")
 		
 		# NSL

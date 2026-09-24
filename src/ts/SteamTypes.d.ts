@@ -1,5 +1,6 @@
 import React, {ReactElement, ReactNode} from "react";
 import {AppDetails, AppLanguages, LogoPosition} from "decky-frontend-lib";
+import { type SteamTestResult } from "./Interfaces";
 
 type Hook = {
 	unregister: () => void
@@ -151,15 +152,15 @@ type SteamAppDetails = {
 	vecDLC: any[],
 	vecDeckCompatTestResults: {
 		test_loc_token: string,
-		test_result: number // 1: notes, 0: unknown, 2: unsupported, 3: playable, 4: verified
+		test_result: SteamTestResult
 	}[],
 	vecSteamOSCompatTestResults: {
 		test_loc_token: string,
-		test_result: number
+		test_result: SteamTestResult
 	}[],
 	vecSteamMachineCompatTestResults: {
 		test_loc_token: string,
-		test_result: number // 1: notes, 0: unknown, 2: unsupported, 3: playable, 4: verified
+		test_result: SteamTestResult
 	}[],
 	vecLanguages: AppLanguages[],
 	vecLegacyCDKeys: any[],

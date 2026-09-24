@@ -1,5 +1,5 @@
 import {Module, ModuleCache, ModuleConfig} from "../Module";
-import {CompatdataData, SteamDeckCompatCategory} from "../../Interfaces";
+import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../Interfaces";
 import {CompatdataProvider} from "./CompatdataProvider";
 import {ReactNode, useState} from "react";
 import {Mounts} from "../../System";
@@ -13,7 +13,7 @@ import {
 	EmuDeckCompatdataProviderConfig
 } from "./providers/EmuDeckCompatdataProvider";
 import {afterPatch, DialogControlsSection, Field, Patch, Toggle} from "@decky/ui";
-import {SteamAppDetails, SteamAppOverview} from "../../SteamTypes";
+import {SteamAppDetails, SteamAppOverview } from "../../SteamTypes";
 import { PCSX2CompatdataProvider, type PCSX2CompatdataProviderCache, type PCSX2CompatdataProviderConfig } from "./providers/PCSX2CompatdataProvider";
 import { RPCS3CompatdataProvider, type RPCS3CompatdataProviderCache, type RPCS3CompatdataProviderConfig } from "./providers/RPCS3CompatdataProvider";
 import { XeniaCompatdataProvider, type XeniaCCompatdataProviderCache, type XeniaCompatdataProviderConfig } from "./providers/XeniaCompatdataProvider";
@@ -21,8 +21,9 @@ import { DolphinCompatdataProvider, type DolphinCompatdataProviderCache, type Do
 
 export interface CompatdataConfig extends ModuleConfig<CompatdataProviderConfigs, CompatdataProviderConfigTypes>
 {
-	verified: boolean,
-	notes: boolean
+	verified: boolean;
+	notes: boolean;
+	test_results: boolean;
 }
 
 export interface CompatdataCache extends ModuleCache<CompatdataProviderCaches, CompatdataProviderCacheTypes, CompatdataData>
@@ -182,28 +183,39 @@ export class CompatdataModule extends Module<
 
 	get verified(): boolean
 	{
-		return this.config.verified
+		return this.config.verified;
 	}
 
 	set verified(verified: boolean)
 	{
-		this.config.verified = verified
+		this.config.verified = verified;
 	}
 
 	get notes(): boolean
 	{
-		return this.config.notes
+		return this.config.notes;
 	}
 
 	set notes(notes: boolean)
 	{
-		this.config.notes = notes
+		this.config.notes = notes;
+	}
+
+	get test_results(): boolean
+	{
+		return this.config.test_results;
+	}
+
+	set test_results(test_results: boolean)
+	{
+		this.config.test_results = test_results;
 	}
 
 	settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [verified, setVerified] = useState(this.verified)
-		const [notes, setNotes] = useState(this.notes)
+		const [verified, setVerified] = useState(this.verified);
+		const [notes, setNotes] = useState(this.notes);
+		const [testResults, setTestResults] = useState(this.test_results);
 
 		return (
 				<DialogControlsSection>
@@ -231,6 +243,19 @@ export class CompatdataModule extends Module<
 								this.notes = checked;
 							}}/>
 					</Field>
+					<Field
+						label={t("compatdataSettingsTestResults")}
+						description={!verified ?
+							format(t("settingsDependencyNotMet"), t("compatdataSettingsTestResults"), t("compatdataSettingsVerified")) :
+							t("compatdataSettingsTestResultsDesc")}>
+						<Toggle
+							value={testResults}
+							disabled={loadingData.loading || !verified}
+							onChange={(checked) => {
+								setTestResults(checked);
+								this.test_results = checked;
+							}}/>
+					</Field>
 				</DialogControlsSection>
 		)
 	};
@@ -238,18 +263,18 @@ export class CompatdataModule extends Module<
 	async applyOverview(overview: SteamAppOverview): Promise<void>
 	{
 		if (this.verified){
-			// Compatibility is for Steam Deck, so it is inherited by Steam OS and Steam Machine
 			let deck_category = this.data[overview.appid]?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN;
 			let machine_category = this.data[overview.appid]?.machine_compat_category ?? deck_category;
 
 			// Steam OS gets max of deck/machine, Playable appears to be the max for Steam OS, so we cap it
-			let os_category = Math.min(Math.max(deck_category, machine_category), SteamDeckCompatCategory.PLAYABLE);
+			let os_category = this.data[overview.appid]?.os_compat_category
+				?? Math.min(Math.max(deck_category, machine_category), SteamDeckCompatCategory.PLAYABLE);
 
-			// 32 bit (uint): Deck | Steam OS | Steam Machine
+			// 32 bit (uint): ... | Steam Machine | Steam OS | ??? | Deck
 			overview.steam_hw_compat_category_packed =
-				(deck_category << 0) |
+				(machine_category << 6) |
 				(os_category << 4) |
-				(machine_category << 6);
+				(deck_category << 0);
 		}
 	}
 
@@ -258,17 +283,28 @@ export class CompatdataModule extends Module<
 	{
 		const compatdata = this.data[details.unAppID]
 
-		if (this.verified && this.notes && compatdata?.notes?.length)
+		if (this.verified && (this.notes || this.test_results))
 		{
 			// Take max 5 notes
-			// DEV: maybe add detailed test results (gui, controller, ...)?
-			details.vecDeckCompatTestResults = compatdata.notes
-				.slice(0, 5)
-				.map(n => ({
-					test_loc_token: n,
-					test_result: 1
-				}));
-			details.vecSteamMachineCompatTestResults = details.vecDeckCompatTestResults;
+			let notes = this.notes && compatdata?.notes?.length ?
+				compatdata.notes
+					.slice(0, 5)
+					.map(n => ({
+						test_loc_token: n,
+						test_result: SteamTestResult.Notes
+					})) :
+				[];
+
+			if(this.test_results){
+				details.vecDeckCompatTestResults = notes.concat(compatdata?.deck_test_results?.filter(r => r.test_result !== SteamTestResult.Notes) ?? []);
+				details.vecSteamMachineCompatTestResults = notes.concat(compatdata?.machine_test_results?.filter(r => r.test_result !== SteamTestResult.Notes) ?? []);
+				details.vecSteamOSCompatTestResults = notes.concat(compatdata?.os_test_results?.filter(r => r.test_result !== SteamTestResult.Notes) ?? []);
+			}
+			else{
+				details.vecDeckCompatTestResults = notes;
+				details.vecSteamMachineCompatTestResults = notes;
+				details.vecSteamOSCompatTestResults = notes;
+			}
 		}
 	}
 }

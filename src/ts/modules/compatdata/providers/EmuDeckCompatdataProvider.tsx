@@ -1,4 +1,4 @@
-import {CompatdataData, SteamDeckCompatCategory, VerifiedDBResults, YesNo, type ID} from "../../../Interfaces";
+import {CompatdataData, SteamDeckCompatCategory, SteamTestResult, VerifiedDBResults, YesNo, type ID} from "../../../Interfaces";
 import {closestWithLimit, distanceWithLimit, getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
@@ -104,6 +104,8 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		// Search with double the fuzziness to retrieve them all, they will be filtered later
 		const closest_names = distanceWithLimit(this.fuzziness * 2, title, Object.keys(this.verifiedDB));
 		let results = closest_names.map(n => this.verifiedDB[n]);
+
+		// If we have console(s), filter by them
 		if(consoleNames?.length)
 			results = results.filter(r => consoleNames.indexOf(r.Console) !== -1);
 
@@ -118,23 +120,29 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 			dict[result.Game].push(result);
 		}
 
-		return Object.entries(dict).map(([name, res]) => ({
-			title: name,
-			id: Math.min(...res.map(r => r.Row)),
-			deck_compat_category: Math.max(
-				SteamDeckCompatCategory.UNKNOWN,
-				...res.map(r => {
-					if (r.Boots == YesNo.YES && r.Playable == YesNo.YES)
-						return SteamDeckCompatCategory.VERIFIED;
-					else if (r.Boots == YesNo.YES && (r.Playable == YesNo.NO || r.Playable == YesNo.PARTIAL))
-						return SteamDeckCompatCategory.PLAYABLE;
-					else
-						return SteamDeckCompatCategory.UNSUPPORTED;
-				})
-			),
-			notes: res.map(r => r.Notes)
-				.filter(n => n)
-		}));
+		return Object.entries(dict).map(([name, res]) => {
+			let result: CompatdataData = {
+				title: name,
+				id: Math.min(...res.map(r => r.Row)),
+
+				deck_compat_category: Math.max(
+					SteamDeckCompatCategory.UNKNOWN,
+					...res.map(r => {
+						if (r.Boots == YesNo.YES && r.Playable == YesNo.YES)
+							return SteamDeckCompatCategory.VERIFIED;
+						else if (r.Boots == YesNo.YES && (r.Playable == YesNo.NO || r.Playable == YesNo.PARTIAL))
+							return SteamDeckCompatCategory.PLAYABLE;
+						else
+							return SteamDeckCompatCategory.UNSUPPORTED;
+					})
+				),
+
+				notes: res.map(r => r.Notes)
+					.filter(n => n)
+			};
+
+			return result;
+		});
 	}
 
 	public override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
@@ -142,6 +150,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
+		const launchCommand = getLaunchCommand(details);
 
 		this.logger.debug(`Fetching compatdata for game ${appId}`)
 
@@ -170,6 +179,101 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 				games = results.filter(value => value.id === data_id)
 			}
 			const game = games.reverse().pop();
+
+			// Retrieve missing info
+			if(game && game.deck_test_results === undefined){
+				game.deck_test_results = [];
+				game.machine_test_results = [];
+				game.os_test_results = [];
+
+				const deckAndMachine = [
+					[game.deck_test_results, "SteamDeckVerified" as string],
+					[game.machine_test_results, "SteamMachine" as string]
+				] as const;
+
+				// Only on Xbox and Xbox 360 the glyphs do match
+				if(isXemuGame(launchCommand) || isXeniaGame(launchCommand)){
+					game.deck_test_results!.push({
+						test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsMatchDeckDevice',
+						test_result: SteamTestResult.Verified
+					});
+					game.machine_test_results!.push({
+						test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsMatchDevice`,
+						test_result: SteamTestResult.Verified
+					});
+				}
+				else{
+					game.deck_test_results.push({
+						test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsDoNotMatchDeckDevice',
+						test_result: SteamTestResult.Playable
+					});
+					game.machine_test_results.push({
+						test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsDoNotMatchDevice`,
+						test_result: SteamTestResult.Playable
+					});
+				}
+
+				// Controller works on:
+				// PS1, PS2, PS3, PS4, PSP, PS Vita
+				// Xbox, Xbox 360
+				// N64
+				// Dreamcast
+				// Note: GameCube also has controller but we cannot detect it from Dolphin here
+				if(isDuckstationGame(launchCommand) || isPCSX2Game(launchCommand) || isRPCS3Game(launchCommand) || isShadPS4Game(launchCommand) ||
+						isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) ||
+					isXemuGame(launchCommand) || isXeniaGame(launchCommand) ||
+					isRosaliesMupenGUIGame(launchCommand) ||
+					isFlycastGame(launchCommand)){
+
+					deckAndMachine.forEach(([results, cat]) => {
+						results.push(
+							{
+								test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+								test_result: SteamTestResult.Verified
+							}
+						);
+					});
+				}
+				else{
+					deckAndMachine.forEach(([results, cat]) => {
+						results.push(
+							{
+								test_loc_token: `#${cat}_TestResult_DefaultControllerConfigNotFullyFunctional`,
+								test_result: SteamTestResult.Playable
+							}
+						);
+					});
+				}
+
+				// Default configuration works fine for playable games
+				if(game.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
+					deckAndMachine.forEach(([results, cat]) => {
+						results.push(
+							{
+								test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
+								test_result: SteamTestResult.Verified
+							}
+						);
+					});
+				}
+
+				// Portable consoles should have correct interface text size on Deck
+				if(isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) || isMelonDSGame(launchCommand) || isMGBAGame(launchCommand) || isRyujinxGame(launchCommand)){
+					game.deck_test_results.push({
+						test_loc_token: '#SteamDeckVerified_TestResult_InterfaceTextIsLegible',
+						test_result: SteamTestResult.Verified
+					});
+				}
+
+				// Only PS3, PS4, Xbox 360 and Switch should have the correct deck resolution
+				if(!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isXeniaGame(launchCommand) && !isRyujinxGame(launchCommand)){
+					game.deck_test_results.push({
+						test_loc_token: '#SteamDeckVerified_TestResult_NativeResolutionNotDefault',
+						test_result: SteamTestResult.Playable
+					});
+				}
+			}
+
 			this.logger.debug(game);
 			return game;
 
@@ -177,7 +281,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
 	}
 
-	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, CompatdataData> | undefined>
+	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title'>> | undefined>
 	{
 		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
 		let consoleNames = await this.getConsoleNames(appId);

@@ -1,4 +1,4 @@
-import {CompatdataData, SteamDeckCompatCategory} from "../../../Interfaces";
+import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
 import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
@@ -77,14 +77,57 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 		if(!titleId || !this.compatData[titleId])
 			return undefined;
 
-		return {
+		let result: CompatdataData = {
 			title: this.compatData[titleId].title,
 			id: titleId,
+
 			deck_compat_category:
 				this.compatData[titleId].status === "Playable" ? SteamDeckCompatCategory.VERIFIED :
 				this.compatData[titleId].status === "Gameplay" ? SteamDeckCompatCategory.PLAYABLE :
-				SteamDeckCompatCategory.UNSUPPORTED
+				SteamDeckCompatCategory.UNSUPPORTED,
+
+			deck_test_results: [
+				
+			],
+			machine_test_results: [],
+			os_test_results: []
 		};
+
+		const deckAndMachine = [
+			[result.deck_test_results!, "SteamDeckVerified" as string],
+			[result.machine_test_results!, "SteamMachine" as string]
+		] as const;
+
+		// The glyphs do match
+		// Controller works by default
+		result.deck_test_results!.push({
+			test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsMatchDeckDevice',
+			test_result: SteamTestResult.Verified
+		});
+		result.machine_test_results!.push({
+			test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsMatchDevice`,
+			test_result: SteamTestResult.Verified
+		});
+		deckAndMachine.forEach(([results, cat]) => {
+			results.push({
+				test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+				test_result: SteamTestResult.Verified
+			});
+		});
+
+		// Default configuration works fine for playable games
+		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
+			deckAndMachine.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
+						test_result: SteamTestResult.Verified
+					}
+				);
+			});
+		}
+
+		return result;
 	}
 
 	settingsComponent: FC = () => undefined;

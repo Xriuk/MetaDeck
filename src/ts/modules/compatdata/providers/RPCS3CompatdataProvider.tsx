@@ -1,4 +1,4 @@
-import {CompatdataData, SteamDeckCompatCategory} from "../../../Interfaces";
+import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
 import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
@@ -12,6 +12,7 @@ import { separator, type MultiIdResolver, type MultiIdResolverCaches, type Multi
 import type { ProviderCache, ProviderConfig } from "../../Provider";
 import type { ResolverCache, ResolverConfig } from "../../Resolver";
 import type { FC } from "react";
+import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBProvider";
 
 type RPCS3CompatData = {
 	title: string;
@@ -41,6 +42,18 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 	title: string = RPCS3CompatdataProvider.title;
 
 	logger = new Logger(RPCS3CompatdataProvider.identifier);
+
+	private _gameTDBProvider?: GameTDBMetadataProvider;
+	get gameTDBProvider(): GameTDBMetadataProvider
+	{
+		if(!this._gameTDBProvider){
+			this._gameTDBProvider = this.state.modules.metadata.providers.find(p => p instanceof GameTDBMetadataProvider);
+			if(!this._gameTDBProvider)
+				this._gameTDBProvider = new GameTDBMetadataProvider(this.state.modules.metadata);
+		}
+
+		return this._gameTDBProvider;
+	}
 
 	async test(appId: number): Promise<boolean>
 	{
@@ -73,14 +86,84 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 
 		this.logger.debug("Compat data", appId, data.results[titleId]);
 
-		return {
+		let result: CompatdataData = {
 			title: data.results[titleId].title,
 			id: titleId,
+
 			deck_compat_category:
 				data.results[titleId].status === "Playable" ? SteamDeckCompatCategory.VERIFIED :
 				data.results[titleId].status === "Ingame" ? SteamDeckCompatCategory.PLAYABLE :
-				SteamDeckCompatCategory.UNSUPPORTED
+				SteamDeckCompatCategory.UNSUPPORTED,
+
+			deck_test_results: [],
+			machine_test_results: [],
+			os_test_results: []
 		};
+
+		const deckAndMachine = [
+			[result.deck_test_results!, "SteamDeckVerified" as string],
+			[result.machine_test_results!, "SteamMachine" as string]
+		] as const;
+
+		// The glyphs obviously do not match
+		// Controller works by default
+		result.deck_test_results!.push({
+			test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsDoNotMatchDeckDevice',
+			test_result: SteamTestResult.Playable
+		});
+		result.machine_test_results!.push({
+			test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsDoNotMatchDevice`,
+			test_result: SteamTestResult.Playable
+		});
+		deckAndMachine.forEach(([results, cat]) => {
+			results.push({
+				test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+				test_result: SteamTestResult.Verified
+			});
+		});
+
+		// Default configuration works fine for playable games
+		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
+			deckAndMachine.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
+						test_result: SteamTestResult.Verified
+					}
+				);
+			});
+		}
+
+		// Enrich test result by retrieving required devices like USB Guitar/Camera
+		let metadata = await this.gameTDBProvider.getDolphinGameEntries(appId);
+		if(metadata.some(m => m.controls?.some(c => c.type === "guitar" && c.required))){
+			([
+				[result.deck_test_results!, "SteamDeckVerified"],
+				[result.os_test_results!, "SteamOS"]
+			] as const).forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
+						test_result: SteamTestResult.Playable
+					}
+				);
+			});
+		}
+		if(metadata.some(m => m.controls?.some(c => c.type === "eye" && c.required))){
+			([
+				[result.deck_test_results!, "SteamDeckVerified"],
+				[result.os_test_results!, "SteamOS"]
+			] as const).forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalWebcam`,
+						test_result: SteamTestResult.Playable
+					}
+				);
+			});
+		}
+
+		return result;
 	}
 
 	settingsComponent: FC = () => undefined;

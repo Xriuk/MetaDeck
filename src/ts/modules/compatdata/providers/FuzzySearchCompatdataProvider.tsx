@@ -106,7 +106,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
 	}
 
-	protected async getAllCompatdataForGame(appId: number): Promise<Record<ID, CompatdataData> | undefined>
+	protected async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title'>> | undefined>
 	{
 		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
 		const results = await this.search(display_name);
