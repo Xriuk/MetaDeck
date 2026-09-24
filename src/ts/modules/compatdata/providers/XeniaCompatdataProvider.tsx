@@ -1,12 +1,17 @@
 import {CompatdataData, SteamDeckCompatCategory} from "../../../Interfaces";
-import {distanceWithLimit, getAppDetails} from "../../../util";
+import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
 	getLaunchCommand, isXeniaGame
 } from "../../../shortcuts";
 import Logger from "../../../logger";
-import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
+import type { ProviderConfig, ProviderCache } from "../../Provider";
+import type { ResolverConfig, ResolverCache } from "../../Resolver";
+import { MultiIdXeniaResolver } from "../../resolvers/MultiId/MultiIdXeniaResolver";
+import { CompatdataProvider } from "../CompatdataProvider";
+import { type MultiIdResolverConfigs, type MultiIdResolverCaches, type MultiIdResolver, separator } from "../../resolvers/MultiId/MultiIdResolver";
+import type { FC } from "react";
 
 type XeniaCompatData = {
 	title: string;
@@ -14,18 +19,22 @@ type XeniaCompatData = {
 	id: string;
 };
 
-export interface XeniaCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig
+export interface XeniaCompatdataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'xenia'>, ResolverConfig>
 {
 	
 }
 
-export interface XeniaCCompatdataProviderCache extends FuzzySearchCompatdataProviderCache
+export interface XeniaCCompatdataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'xenia'>, ResolverCache>
 {
 
 }
 
-export class XeniaCompatdataProvider extends FuzzySearchCompatdataProvider
+export class XeniaCompatdataProvider extends CompatdataProvider<any>
 {
+	resolvers: MultiIdResolver[] = [
+		new MultiIdXeniaResolver(this)
+	];
+
 	static identifier: string = "xenia";
 	static title: string = t("providerCompatdataXenia");
 	identifier: string = XeniaCompatdataProvider.identifier;
@@ -33,7 +42,7 @@ export class XeniaCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	logger = new Logger(XeniaCompatdataProvider.identifier);
 
-	private compatData: Record<string, XeniaCompatData> = {};
+	private compatData: Record<string, XeniaCompatData> = {}; // Formatted id: compat
 
 	async getCompatData(): Promise<void>
 	{
@@ -44,7 +53,7 @@ export class XeniaCompatdataProvider extends FuzzySearchCompatdataProvider
 
 		let data: XeniaCompatData[] = await response.json();
 		for(let entry of data){
-			this.compatData[entry.title] = entry;
+			this.compatData[entry.id.toUpperCase()] = entry;
 		}
 	}
 
@@ -54,32 +63,6 @@ export class XeniaCompatdataProvider extends FuzzySearchCompatdataProvider
 		await this.getCompatData();
 	}
 
-	protected async search(title: string): Promise<CompatdataData[]>{
-		// Search with double the fuzziness to retrieve them all, they will be filtered later
-		const closest_names = distanceWithLimit(this.fuzziness * 2, title, Object.keys(this.compatData));
-		// Take max 10 results (since we might have different regions)
-		let results = closest_names
-			.map(n => this.compatData[n])
-			.slice(0, 10);
-
-		// Group by name
-		let dict: Record<string, XeniaCompatData[]> = {};
-		for(let result of results){
-			if(!dict[result.title])
-				dict[result.title] = [];
-			dict[result.title].push(result);
-		}
-
-		return Object.entries(dict).map(([name, res]) => ({
-			title: name,
-			id: res.map(r => r.id).join(' '),
-			deck_compat_category:
-				res.some(r => r.status === "Playable") ? SteamDeckCompatCategory.VERIFIED :
-				res.some(r => r.status === "Gameplay") ? SteamDeckCompatCategory.PLAYABLE :
-				SteamDeckCompatCategory.UNSUPPORTED
-		}));
-	}
-
 	async test(appId: number): Promise<boolean>
 	{
 		const details = await getAppDetails(appId);
@@ -87,4 +70,22 @@ export class XeniaCompatdataProvider extends FuzzySearchCompatdataProvider
 			return false;
 		return isXeniaGame(getLaunchCommand(details));
 	}
+
+	async provide(appId: number): Promise<CompatdataData | undefined>{
+		// Xbox 360 has a single title id per game
+		const titleId = (await this.resolve(appId))?.toString().split(separator)[0]?.toUpperCase();
+		if(!titleId || !this.compatData[titleId])
+			return undefined;
+
+		return {
+			title: this.compatData[titleId].title,
+			id: titleId,
+			deck_compat_category:
+				this.compatData[titleId].status === "Playable" ? SteamDeckCompatCategory.VERIFIED :
+				this.compatData[titleId].status === "Gameplay" ? SteamDeckCompatCategory.PLAYABLE :
+				SteamDeckCompatCategory.UNSUPPORTED
+		};
+	}
+
+	settingsComponent: FC = () => undefined;
 }

@@ -40,7 +40,23 @@ export class Settings
 				install_size: true,
 				install_date: true,
 				providers: {
-					// Id-based
+					// Id-based (localized)
+					gametdb: {
+						enabled: true,
+						ordinal: 0,
+						resolvers: {
+							dolphin: {
+								enabled: true,
+								ordinal: 0
+							},
+							rpcs3: {
+								enabled: true,
+								ordinal: 1
+							}
+						},
+						language: "EN"
+					},
+					// Id-based (english)
 					gog: {
 						enabled: true,
 						ordinal: 1,
@@ -60,7 +76,7 @@ export class Settings
 						},
 						language: "english"
 					},
-					// Fuzzy search
+					// Fuzzy search (localized)
 					steam: {
 						enabled: true,
 						ordinal: 2,
@@ -69,12 +85,11 @@ export class Settings
 						resolvers: {},
 						language: "english"
 					},
-					igdb: {
+					// Fuzzy search (english)
+					lizardbyte: {
 						enabled: true,
 						ordinal: 3,
 						fuzziness: 5,
-						api_server: undefined,
-						custom_api_servers: [],
 						overrides: {},
 						resolvers: {}
 					},
@@ -93,32 +108,51 @@ export class Settings
 				verified: true,
 				notes: true,
 				providers: {
-					// Fuzzy search (platform-specific)
+					// Id-based
 					pcsx2: {
 						enabled: true,
 						ordinal: 0,
-						fuzziness: 5,
-						overrides: {},
-						resolvers: {}
+						resolvers: {
+							pcsx2: {
+								enabled: true,
+								ordinal: 0
+							}
+						}
 					},
 					rpcs3: {
 						enabled: true,
 						ordinal: 1,
-						fuzziness: 5,
-						overrides: {},
-						resolvers: {}
+						resolvers: {
+							rpcs3: {
+								enabled: true,
+								ordinal: 0
+							}
+						}
 					},
 					xenia: {
 						enabled: true,
 						ordinal: 2,
-						fuzziness: 5,
-						overrides: {},
-						resolvers: {}
+						resolvers: {
+							xenia: {
+								enabled: true,
+								ordinal: 0
+							}
+						}
 					},
-					// Fuzzy search generic
-					emudeck: {
+					dolphin: {
 						enabled: true,
 						ordinal: 3,
+						resolvers: {
+							dolphin: {
+								enabled: true,
+								ordinal: 0
+							}
+						}
+					},
+					// Fuzzy search
+					emudeck: {
+						enabled: true,
+						ordinal: 4,
 						fuzziness: 5,
 						overrides: {},
 						resolvers: {}
@@ -140,13 +174,19 @@ export class Settings
 							heroic: {}
 						}
 					},
-					igdb: {
-						resolvers: {}
-					},
 					steam: {
 						resolvers: {}
 					},
 					rawg: {
+						resolvers: {}
+					},
+					gametdb: {
+						resolvers: {
+							dolphin: {},
+							rpcs3: {}
+						}
+					},
+					lizardbyte: {
 						resolvers: {}
 					}
 				}
@@ -158,13 +198,24 @@ export class Settings
 						resolvers: {}
 					},
 					pcsx2: {
-						resolvers: {}
+						resolvers: {
+							pcsx2: {}
+						}
 					},
 					rpcs3: {
-						resolvers: {}
+						resolvers: {
+							rpcs3: {}
+						}
 					},
 					xenia: {
-						resolvers: {}
+						resolvers: {
+							xenia: {}
+						}
+					},
+					dolphin: {
+						resolvers: {
+							dolphin: {}
+						}
 					}
 				}
 			}

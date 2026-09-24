@@ -83,7 +83,8 @@ export abstract class Module<
 
 	protected handleError(error: Error): never
 	{
-		this.state.loadingData.currentModule.error = error
+		if(this.state.loadingData.currentModule)
+			this.state.loadingData.currentModule.error = error
 		throw error
 	}
 
@@ -286,17 +287,15 @@ export abstract class Module<
 		const overview = appStore.GetAppOverviewByAppID(appId);
 		const data = await this.fetchDataAsync(appId)
 		this.logger.debug(`Refreshed ${this.identifier} for ${appId}: `, data);
+		if(!this.state.loadingData.currentModule)
+			return;
+		
+		this.state.loadingData.currentModule.game = overview.display_name;
 		if (overview && data)
-		{
-			this.state.loadingData.currentModule.game = overview.display_name;
 			this.state.loadingData.currentModule.description = !!data ? this.progressDescription(data) : this.missingDescription;
-			this.state.loadingData.currentModule.processed++;
-		} else
-		{
-			this.state.loadingData.currentModule.game = overview.display_name;
+		else
 			this.state.loadingData.currentModule.description = this.missingDescription;
-			this.state.loadingData.currentModule.processed++;
-		}
+		this.state.loadingData.currentModule.processed++;
 	}
 
 

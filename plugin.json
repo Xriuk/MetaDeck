@@ -1,11 +1,11 @@
 {
   "name": "MetaDeck",
   "author": "Witherking25  'Kernel Panic'",
-  "flags": ["debug"],
   "api_version": 1,
+  "flags": [],
   "publish": {
-    "tags": ["EmuDeck", "IGDB"],
-    "description": "Plugin for viewing metadata for non steam games from IGDB. Part of the EmuDeck Project",
+    "tags": ["EmuDeck", "IGDB", "LizardByte", "GOG", "Steam", "RAWG", "GameTDB", "Dolphin", "PCSX2", "RPCS3", "Xenia"],
+    "description": "Plugin for viewing metadata for Non-Steam games. Part of the EmuDeck Project.",
     "image": "https://opengraph.githubassets.com/1/EmuDeck/MetaDeck"
   }
 }

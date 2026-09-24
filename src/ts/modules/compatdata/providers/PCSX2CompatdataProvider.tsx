@@ -1,5 +1,5 @@
 import {CompatdataData, SteamDeckCompatCategory} from "../../../Interfaces";
-import {distanceWithLimit, getAppDetails} from "../../../util";
+import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
@@ -7,7 +7,12 @@ import {
 } from "../../../shortcuts";
 import { removeAfterAndIncluding, removeBeforeAndIncluding } from "../../metadata/providers/GamesDBResult";
 import Logger from "../../../logger";
-import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
+import type { ProviderCache, ProviderConfig } from "../../Provider";
+import type { ResolverCache, ResolverConfig } from "../../Resolver";
+import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
+import { CompatdataProvider } from "../CompatdataProvider";
+import { MultiIdPCSX2Resolver } from "../../resolvers/MultiId/MultiIdPCSX2Resolver";
+import type { FC } from "react";
 
 type PCSX2CompatData = {
 	title: string;
@@ -16,18 +21,22 @@ type PCSX2CompatData = {
 	status: "Perfect" | "Playable" | "Ingame" | "Menus" | "Intros" | "Nothing";
 };
 
-export interface PCSX2CompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig
+export interface PCSX2CompatdataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'pcsx2'>, ResolverConfig>
 {
 	
 }
 
-export interface PCSX2CompatdataProviderCache extends FuzzySearchCompatdataProviderCache
+export interface PCSX2CompatdataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'pcsx2'>, ResolverCache>
 {
 
 }
 
-export class PCSX2CompatdataProvider extends FuzzySearchCompatdataProvider
+export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 {
+	resolvers: MultiIdResolver[] = [
+		new MultiIdPCSX2Resolver(this)
+	];
+	
 	static identifier: string = "pcsx2";
 	static title: string = t("providerCompatdataPCSX2");
 	identifier: string = PCSX2CompatdataProvider.identifier;
@@ -35,7 +44,7 @@ export class PCSX2CompatdataProvider extends FuzzySearchCompatdataProvider
 
 	logger = new Logger(PCSX2CompatdataProvider.identifier);
 
-	private compatData: Record<string, PCSX2CompatData> = {};
+	private compatData: Record<string, PCSX2CompatData> = {}; // Formatted serial: compat
 
 	async getCompatData(): Promise<void>
 	{
@@ -99,7 +108,7 @@ export class PCSX2CompatdataProvider extends FuzzySearchCompatdataProvider
 
 		let data: PCSX2CompatData[] = JSON.parse(json);
 		for(let entry of data){
-			this.compatData[entry.title] = entry;
+			this.compatData[entry.serial.replace('-', '')] = entry;
 		}
 	}
 
@@ -109,32 +118,6 @@ export class PCSX2CompatdataProvider extends FuzzySearchCompatdataProvider
 		await this.getCompatData();
 	}
 
-	protected async search(title: string): Promise<CompatdataData[]>{
-		// Search with double the fuzziness to retrieve them all, they will be filtered later
-		const closest_names = distanceWithLimit(this.fuzziness * 2, title, Object.keys(this.compatData));
-		// Take max 10 results (since we might have different regions)
-		let results = closest_names
-			.map(n => this.compatData[n])
-			.slice(0, 10);
-
-		// Group by name
-		let dict: Record<string, PCSX2CompatData[]> = {};
-		for(let result of results){
-			if(!dict[result.title])
-				dict[result.title] = [];
-			dict[result.title].push(result);
-		}
-
-		return Object.entries(dict).map(([name, res]) => ({
-			title: name,
-			id: res.map(r => r.serial).join(' '),
-			deck_compat_category:
-				res.some(r => r.status === "Perfect" || r.status === "Playable") ? SteamDeckCompatCategory.VERIFIED :
-				res.some(r => r.status === "Ingame") ? SteamDeckCompatCategory.PLAYABLE :
-				SteamDeckCompatCategory.UNSUPPORTED
-		}));
-	}
-
 	async test(appId: number): Promise<boolean>
 	{
 		const details = await getAppDetails(appId);
@@ -142,4 +125,31 @@ export class PCSX2CompatdataProvider extends FuzzySearchCompatdataProvider
 			return false;
 		return isPCSX2Game(getLaunchCommand(details));
 	}
+
+	async provide(appId: number): Promise<CompatdataData | undefined>{
+		// We retrieve compatibility for any matching id
+		const titleIds = (await this.resolve(appId))?.toString()
+			.split(separator);
+
+		this.logger.debug("Title ids", appId, titleIds);
+
+		const compatData = titleIds
+			?.map(i => this.compatData[i])
+			.filter(c => c);
+		if(!compatData?.length)
+			return undefined;
+
+		this.logger.debug("Compat data", appId, compatData);
+
+		return {
+			title: compatData.find(c => c.title)?.title || '',
+			id: titleIds![0],
+			deck_compat_category:
+				compatData.some(c => c.status === "Perfect" || c.status === "Playable") ? SteamDeckCompatCategory.VERIFIED :
+				compatData.some(c => c.status === "Ingame") ? SteamDeckCompatCategory.PLAYABLE :
+				SteamDeckCompatCategory.UNSUPPORTED
+		};
+	}
+
+	settingsComponent: FC = () => undefined;
 }

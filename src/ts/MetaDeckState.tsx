@@ -13,7 +13,7 @@ import {SteamAppOverview} from "./SteamTypes";
 
 interface GlobalLoadingData
 {
-	get currentModule(): ModuleLoadingData
+	get currentModule(): ModuleLoadingData | undefined
 
 	get module(): keyof Modules | ""
 
@@ -372,13 +372,17 @@ export class MetaDeckState implements AsyncMountable
 		for (let module of Object.values(this.modules).filter((mod) => mod.isValid))
 		{
 			this.loadingData.module = module.identifier;
-			this.loadingData.currentModule.total = this.apps.length;
-			this.loadingData.currentModule.processed = 0;
+			if(this.loadingData.currentModule){
+				this.loadingData.currentModule.total = this.apps.length;
+				this.loadingData.currentModule.processed = 0;
+			}
 			await module.refresh();
-			this.loadingData.currentModule.game = t("initializing");
-			this.loadingData.currentModule.description = "";
-			this.loadingData.currentModule.total = 0;
-			this.loadingData.currentModule.processed = 0;
+			if(this.loadingData.currentModule){
+				this.loadingData.currentModule.game = t("initializing");
+				this.loadingData.currentModule.description = "";
+				this.loadingData.currentModule.total = 0;
+				this.loadingData.currentModule.processed = 0;
+			}
 			this.loadingData.processed++;
 			this.notifyUpdate();
 		}

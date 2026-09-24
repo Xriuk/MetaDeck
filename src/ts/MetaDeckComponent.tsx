@@ -83,7 +83,7 @@ const LoadingProgressBar: FC = () =>
 	return <>
 		<Field
 			label={t("loading")}
-			description={`${loadingData.currentModule?.module.title} - ${loadingData.processed}/${loadingData.total}`}
+			description={`${loadingData.currentModule?.module.title} - ${loadingData.currentModule?.processed}/${loadingData.currentModule?.total}`}
 			bottomSeparator="none"
 		/>
 		<ProgressBar
@@ -114,7 +114,7 @@ export const MetaDeckComponent: FC = () => {
 				<PanelSectionRow>
 					<LoadingProgressBar />
 				</PanelSectionRow>
-			</PanelSection> : (loadingData.currentModule.error ?
+			</PanelSection> : (loadingData.currentModule?.error ?
 				<PanelSection>
 					<PanelSectionRow>
 						<SettingsButton />

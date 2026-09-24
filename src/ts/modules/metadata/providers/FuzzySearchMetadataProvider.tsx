@@ -110,7 +110,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
 	}
 
-	protected async getAllMetadataForGame(appId: number): Promise<Record<ID, MetadataData> | undefined>
+	protected async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title'>> | undefined>
 	{
 		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
 		const results = await this.search(display_name);

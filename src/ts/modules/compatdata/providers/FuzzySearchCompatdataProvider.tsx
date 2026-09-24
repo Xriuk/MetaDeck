@@ -49,11 +49,6 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 		void this.module.saveData();
 	}
 
-	provide(appId: number): Promise<CompatdataData | undefined>
-	{
-		return this.throttle(() => this.getCompatdataForGame(appId));
-	}
-
 	async test(appId: number): Promise<boolean>
 	{
 		if (this.overrides[appId] == 0)
@@ -63,6 +58,11 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 		const names = results.map(value => value.title);
 		const closest_names = distanceWithLimit(this.fuzziness, display_name, names);
 		return closest_names.length > 0;
+	}
+
+	provide(appId: number): Promise<CompatdataData | undefined>
+	{
+		return this.throttle(() => this.getCompatdataForGame(appId));
 	}
 
 	protected abstract search(title: string): Promise<CompatdataData[]>;
@@ -125,7 +125,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [fuzziness, setFuzziness] = useState(this.config.fuzziness);
+		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
 		return (
 			<DialogControlsSection>

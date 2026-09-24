@@ -58,7 +58,6 @@ export abstract class Resolver<
 	}
 
 	abstract identifier: string;
-	abstract title: string;
 
 	constructor(provider: Prov)
 	{

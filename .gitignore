@@ -59,7 +59,8 @@ lib/frontend/*
 deck.json
 /gog.db
 
-py_modules
+# // DEV: remove after moving into main.py, and add it instead
+py_modules/metadeck*
 MetaDeck.egg-info
 
 ci_venv/

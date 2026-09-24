@@ -70,7 +70,8 @@ export abstract class Provider<
 
 	protected handleError(error: Error): never
 	{
-		this.state.loadingData.currentModule.error = error
+		if(this.state.loadingData.currentModule)
+			this.state.loadingData.currentModule.error = error
 		throw error
 	}
 

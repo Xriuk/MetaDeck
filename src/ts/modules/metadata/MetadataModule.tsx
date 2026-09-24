@@ -1,17 +1,12 @@
 import {Module, ModuleCache, ModuleConfig} from "../Module";
 import {MetadataProvider} from "./MetadataProvider";
-import {
-	IGDBMetadataProvider,
-	IGDBMetadataProviderCache,
-	IGDBMetadataProviderConfig
-} from "./providers/IGDB/IGDBMetadataProvider";
 import {CustomStoreCategory, MetadataData, StoreCategory} from "../../Interfaces";
 import {truncate} from "lodash-es";
 import {
 	GOGMetadataProvider,
 	GOGMetadataProviderCache,
 	GOGMetadataProviderConfig, GOGMetadataProviderResolverCaches, GOGMetadataProviderResolverConfigs
-} from "./providers/GOG/GOGMetadataProvider";
+} from "./providers/GOGMetadataProvider";
 import {Mounts} from "../../System";
 import {
 	afterPatch,
@@ -32,17 +27,18 @@ import {ReactElement, ReactNode, useState} from "react";
 import {Markdown} from "../../markdown";
 import {SteamAppDetails, SteamAppOverview} from "../../SteamTypes";
 import {routePatch} from "../../RoutePatches";
-// import {addStyle, removeStyle} from "../../styleInjector";
 import Logger from "../../logger";
 import {
 	getLaunchCommand,
 	getShortcutCategories
 } from "../../shortcuts";
 import {CustomFeature} from "./CustomFeature";
-import { SteamMetadataProvider, type SteamMetadataProviderCache, type SteamMetadataProviderConfig } from "./providers/Steam/SteamMetadataProvider";
-import { RAWGMetadataProvider, type RAWGMetadataProviderCache, type RAWGMetadataProviderConfig } from "./providers/RAWG/RAWGMetadataProvider";
+import { SteamMetadataProvider, type SteamMetadataProviderCache, type SteamMetadataProviderConfig } from "./providers/SteamMetadataProvider";
+import { RAWGMetadataProvider, type RAWGMetadataProviderCache, type RAWGMetadataProviderConfig } from "./providers/RAWGMetadataProvider";
 import { useMetaDeckState } from "../../MetaDeckState";
 import React from "react";
+import { GameTDBMetadataProvider, type GameTDBMetadataProviderCache, type GameTDBMetadataProviderConfig } from "./providers/GameTDBProvider";
+import { LizardByteGameDBMetadataProvider, LizardByteGameDBMetadataProviderCache, LizardByteGameDBMetadataProviderConfig } from "./providers/LizardByteGameDBMetadataProvider";
 
 export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs, MetadataProviderConfigTypes>
 {
@@ -65,34 +61,38 @@ export interface MetadataCache extends ModuleCache<MetadataProviderCaches, Metad
 
 export interface MetadataProviderConfigs
 {
-	igdb: IGDBMetadataProviderConfig,
-	gog: GOGMetadataProviderConfig,
-	steam: SteamMetadataProviderConfig,
-	rawg: RAWGMetadataProviderConfig
+	gog: GOGMetadataProviderConfig;
+	steam: SteamMetadataProviderConfig;
+	rawg: RAWGMetadataProviderConfig;
+	gametdb: GameTDBMetadataProviderConfig;
+	lizardbyte: LizardByteGameDBMetadataProviderConfig;
 }
 
 export interface MetadataProviderCaches
 {
-	igdb: IGDBMetadataProviderCache,
-	gog: GOGMetadataProviderCache,
-	steam: SteamMetadataProviderCache,
-	rawg: RAWGMetadataProviderCache
+	gog: GOGMetadataProviderCache;
+	steam: SteamMetadataProviderCache;
+	rawg: RAWGMetadataProviderCache;
+	gametdb: GameTDBMetadataProviderCache;
+	lizardbyte: LizardByteGameDBMetadataProviderCache;
 }
 
 export interface MetadataProviderResolverConfigs
 {
-	igdb: {},
-	gog: GOGMetadataProviderResolverConfigs,
-	steam: {},
-	rawg: {}
+	gog: GOGMetadataProviderResolverConfigs;
+	steam: {};
+	rawg: {};
+	gametdb: GameTDBMetadataProviderConfig['resolvers'],
+	lizardbyte: {};
 }
 
 export interface MetadataProviderResolverCaches
 {
-	igdb: {},
-	gog: GOGMetadataProviderResolverCaches,
-	steam: {},
-	rawg: {}
+	gog: GOGMetadataProviderResolverCaches;
+	steam: {};
+	rawg: {};
+	gametdb: GameTDBMetadataProviderCache['resolvers'];
+	lizardbyte: {};
 }
 
 export type MetadataProviderConfigTypes = MetadataProviderConfigs[keyof MetadataProviderConfigs]
@@ -121,9 +121,10 @@ export class MetadataModule extends Module<
 	logger: Logger = new Logger(MetadataModule.identifier)
 
 	providers: MetadataProvider<any>[] = [
+		new GameTDBMetadataProvider(this),
 		new GOGMetadataProvider(this),
 		new SteamMetadataProvider(this),
-		new IGDBMetadataProvider(this),
+		new LizardByteGameDBMetadataProvider(this),
 		new RAWGMetadataProvider(this)
 	];
 
@@ -854,8 +855,16 @@ export class MetadataModule extends Module<
 	{
 		if (this.rating)
 			overview.metacritic_score = Math.round(this.data[overview.appid]?.rating ?? 0);
-		if (this.categories)
+		if (this.categories){
 			this.data[overview.appid]?.store_categories?.forEach(category => overview.m_setStoreCategories.add(category));
+
+			// If we have multiplayer we also assume single player
+			if(this.data[overview.appid]?.store_categories.indexOf(StoreCategory.MultiPlayer) &&
+				!this.data[overview.appid].store_categories.indexOf(StoreCategory.SinglePlayer)){
+
+				overview.m_setStoreCategories.add(StoreCategory.SinglePlayer);
+			}
+		}
 		if (this.installSize)
 			overview.size_on_disk = this.data[overview.appid]?.install_size?.toString() ?? "0";
 		if (this.installDate)

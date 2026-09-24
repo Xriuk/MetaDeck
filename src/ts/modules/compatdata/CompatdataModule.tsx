@@ -15,8 +15,9 @@ import {
 import {afterPatch, DialogControlsSection, Field, Patch, Toggle} from "@decky/ui";
 import {SteamAppDetails, SteamAppOverview} from "../../SteamTypes";
 import { PCSX2CompatdataProvider, type PCSX2CompatdataProviderCache, type PCSX2CompatdataProviderConfig } from "./providers/PCSX2CompatdataProvider";
-import { RPCS3CompatdataProvider, type RPCS3CCompatdataProviderCache, type RPCS3CompatdataProviderConfig } from "./providers/RPCS3CompatdataProvider";
+import { RPCS3CompatdataProvider, type RPCS3CompatdataProviderCache, type RPCS3CompatdataProviderConfig } from "./providers/RPCS3CompatdataProvider";
 import { XeniaCompatdataProvider, type XeniaCCompatdataProviderCache, type XeniaCompatdataProviderConfig } from "./providers/XeniaCompatdataProvider";
+import { DolphinCompatdataProvider, type DolphinCompatdataProviderCache, type DolphinCompatdataProviderConfig } from "./providers/DolphinCompatdataProvider";
 
 export interface CompatdataConfig extends ModuleConfig<CompatdataProviderConfigs, CompatdataProviderConfigTypes>
 {
@@ -35,30 +36,34 @@ export interface CompatdataProviderConfigs
 	pcsx2: PCSX2CompatdataProviderConfig;
 	rpcs3: RPCS3CompatdataProviderConfig;
 	xenia: XeniaCompatdataProviderConfig;
+	dolphin: DolphinCompatdataProviderConfig;
 }
 
 export interface CompatdataProviderCaches
 {
 	emudeck: EmuDeckCompatdataProviderCache;
 	pcsx2: PCSX2CompatdataProviderCache;
-	rpcs3: RPCS3CCompatdataProviderCache;
+	rpcs3: RPCS3CompatdataProviderCache;
 	xenia: XeniaCCompatdataProviderCache;
+	dolphin: DolphinCompatdataProviderCache;
 }
 
 export interface CompatdataProviderResolverConfigs
 {
 	emudeck: {};
-	pcsx2: {};
-	rpcs3: {};
-	xenia: {};
+	pcsx2: PCSX2CompatdataProviderConfig['resolvers'];
+	rpcs3: RPCS3CompatdataProviderConfig['resolvers'];
+	xenia: XeniaCompatdataProviderConfig['resolvers'];
+	dolphin: DolphinCompatdataProviderConfig['resolvers'];
 }
 
 export interface CompatdataProviderResolverCaches
 {
 	emudeck: {};
-	pcsx2: {};
-	rpcs3: {};
-	xenia: {};
+	pcsx2: PCSX2CompatdataProviderCache['resolvers'];
+	rpcs3: RPCS3CompatdataProviderCache['resolvers'];
+	xenia: XeniaCCompatdataProviderCache['resolvers'];
+	dolphin: DolphinCompatdataProviderCache['resolvers'];
 }
 
 export type CompatdataProviderConfigTypes = CompatdataProviderConfigs[keyof CompatdataProviderConfigs]
@@ -90,6 +95,7 @@ export class CompatdataModule extends Module<
 		new PCSX2CompatdataProvider(this),
 		new RPCS3CompatdataProvider(this),
 		new XeniaCompatdataProvider(this),
+		new DolphinCompatdataProvider(this),
 		new EmuDeckCompatdataProvider(this)
 	];
 
@@ -236,10 +242,13 @@ export class CompatdataModule extends Module<
 			let deck_category = this.data[overview.appid]?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN;
 			let machine_category = this.data[overview.appid]?.machine_compat_category ?? deck_category;
 
+			// Steam OS gets max of deck/machine, Playable appears to be the max for Steam OS, so we cap it
+			let os_category = Math.min(Math.max(deck_category, machine_category), SteamDeckCompatCategory.PLAYABLE);
+
 			// 32 bit (uint): Deck | Steam OS | Steam Machine
-			// Steam OS gets max of deck/machine
-			overview.steam_hw_compat_category_packed = (deck_category << 0) |
-				((deck_category > machine_category ? deck_category : machine_category) << 4) |
+			overview.steam_hw_compat_category_packed =
+				(deck_category << 0) |
+				(os_category << 4) |
 				(machine_category << 6);
 		}
 	}
