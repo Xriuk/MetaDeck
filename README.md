@@ -1,4 +1,4 @@
-Decky Loader Steam Deck and Steam Machine Plugin for viewing metadata for Non-Steam games inside your game's app page just like with Steam games.
+Decky Loader Steam Deck and Steam Machine Plugin for viewing metadata, achievements and compatibility for Non-Steam games inside your game's app page just like with Steam games.
 
 ## Building
 
