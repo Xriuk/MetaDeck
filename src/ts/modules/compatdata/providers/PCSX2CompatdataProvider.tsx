@@ -5,14 +5,14 @@ import {t} from "../../../useTranslations";
 import {
 	getLaunchCommand, isPCSX2Game
 } from "../../../shortcuts";
-import { removeAfterAndIncluding, removeBeforeAndIncluding } from "../../metadata/providers/GamesDBResult";
+import { removeAfterAndIncluding, removeBeforeAndIncluding } from "../../GamesDBResult";
 import Logger from "../../../logger";
 import type { ProviderCache, ProviderConfig } from "../../Provider";
 import type { ResolverCache, ResolverConfig } from "../../Resolver";
 import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import { CompatdataProvider } from "../CompatdataProvider";
 import { MultiIdPCSX2Resolver } from "../../resolvers/MultiId/MultiIdPCSX2Resolver";
-import type { FC } from "react";
+import { SiPlaystation2 } from "react-icons/si";
 
 type PCSX2CompatData = {
 	title: string;
@@ -158,12 +158,22 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 				}
 			],
 			machine_test_results: [],
-			os_test_results: []
+			os_test_results: [],
+			frame_test_results: []
 		};
 
 		const deckAndMachine = [
 			[result.deck_test_results!, "SteamDeckVerified" as string],
 			[result.machine_test_results!, "SteamMachine" as string]
+		] as const;
+		const deckMachineAndFrame = [
+			[result.deck_test_results!, "SteamDeckVerified" as string],
+			[result.machine_test_results!, "SteamMachine" as string],
+			[result.frame_test_results!, "SteamFrame" as string]
+		] as const;
+		const machineAndFrame = [
+			[result.machine_test_results!, "SteamMachine" as string],
+			[result.frame_test_results!, "SteamFrame" as string]
 		] as const;
 
 		// The glyphs obviously do not match
@@ -172,18 +182,24 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 			test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsDoNotMatchDeckDevice',
 			test_result: SteamTestResult.Playable
 		});
-		result.machine_test_results!.push({
-			test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsDoNotMatchDevice`,
-			test_result: SteamTestResult.Playable
+		machineAndFrame.forEach(([results, cat]) => {
+			results.push(
+				{
+					test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
+					test_result: SteamTestResult.Playable
+				}
+			);
 		});
-		deckAndMachine.forEach(([results, cat]) => {
-			results.push({
-				test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
-				test_result: SteamTestResult.Verified
-			});
+		deckMachineAndFrame.forEach(([results, cat]) => {
+			results.push(
+				{
+					test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+					test_result: SteamTestResult.Verified
+				}
+			);
 		});
 
-		// Default configuration works fine for playable games
+		// Default configuration works fine for playable games (we cannot assume for the Frame here)
 		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
 			deckAndMachine.forEach(([results, cat]) => {
 				results.push(
@@ -219,5 +235,5 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 		return result;
 	}
 
-	settingsComponent: FC = () => undefined;
+	override icon = <SiPlaystation2/>;
 }

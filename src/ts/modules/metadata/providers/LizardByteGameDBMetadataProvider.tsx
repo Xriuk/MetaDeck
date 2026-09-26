@@ -8,6 +8,7 @@ import { distanceWithLimit, getAppDetails } from "../../../util";
 import type { Company, Game, GameMode, InvolvedCompany, ExternalGame, ReleaseDate} from "igdb-api-types";
 import { SteamMetadataProvider } from "./SteamMetadataProvider";
 import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
+import { SiIgdb } from "react-icons/si";
 
 export interface LizardByteGameDBMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -165,4 +166,6 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 
 		return game;
 	}
+
+	override icon = <SiIgdb/>;
 }

@@ -10,12 +10,15 @@ import { MetadataProvider } from "../MetadataProvider";
 import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
 import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
-import { getLaunchCommand, getShortcutCategories, isDolphinGame, isRPCS3Game } from "../../../shortcuts";
+import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game } from "../../../shortcuts";
 import { getAppDetails } from "../../../util";
 import { callable } from "@decky/api";
 import { MetadataData, StoreCategory } from "../../../Interfaces";
+import { FaG } from "react-icons/fa6";
+import { MultiIdCemuResolver } from "../../resolvers/MultiId/MultiIdCemuResolver";
 
 const wiiUrl = "https://www.gametdb.com/wiitdb.zip";
+const cemuUrl = "https://www.gametdb.com/wiiutdb.zip";
 const ps3Url = "https://www.gametdb.com/ps3tdb.zip";
 
 type GameTDBGame = {
@@ -36,12 +39,12 @@ type GameTDBGame = {
 	}[];
 };
 
-export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'rpcs3'>, ResolverConfig>
+export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'cemu' | 'rpcs3'>, ResolverConfig>
 {
 	language: string // ZH -> ZHCN / ZHTW (in order)
 }
 
-export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'rpcs3'>, ResolverCache>
+export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'cemu' | 'rpcs3'>, ResolverCache>
 {
 	
 }
@@ -50,6 +53,7 @@ export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiId
 export class GameTDBMetadataProvider extends MetadataProvider<any>{
 	resolvers: MultiIdResolver[] = [
 		new MultiIdDolphinResolver(this),
+		new MultiIdCemuResolver(this),
 		new MultiIdRPCS3Resolver(this)
 	];
 
@@ -149,7 +153,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 					cats.push(StoreCategory.MultiPlayer);
 				if(entries.some(e => e["wi-fi-players"]))
 					cats.push(StoreCategory.OnlineMultiPlayer);
-				if(entries.some(e => e.controls?.some(c => c.type === 'gamecube' || c.type === 'classiccontroller')))
+				if(ids.some(i => isGameCubeId6(i)) || entries.some(e => e.controls?.some(c => c.type === 'gamecube' || c.type === 'classiccontroller')))
 					cats.push(StoreCategory.FullController);
 				else
 					cats.push(StoreCategory.PartialController);
@@ -198,7 +202,9 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		};
 	}
 
-	settingsComponent = () => {
+	override icon = <FaG/>;
+
+	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [language, setLanguage] = useState(this.language);
 		return (
@@ -222,13 +228,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		)
 	}
 
-	public async getDolphinGameEntries(appId: number): Promise<GameTDBGame[]>{
-		const details = await getAppDetails(appId);
-		if (!details)
-			return [];
-		const launchCommand = getLaunchCommand(details);
-		if(!isDolphinGame(launchCommand))
-			return [];
+	private async getGameEntries(appId: number, url: string): Promise<GameTDBGame[]>{
 		const resolved = await this.resolve(appId);
 		if (!resolved)
 			return [];
@@ -239,11 +239,45 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 
 		let entries: GameTDBGame[] = [];
 		for(let id in ids){
-			let entry = await this.gametdb_get_entry(wiiUrl, id);
+			let entry = await this.gametdb_get_entry(url, id);
 			if(entry)
 				entries.push(entry);
 		}
 
 		return entries;
+	}
+
+	
+	public async getDolphinGameEntries(appId: number): Promise<GameTDBGame[]>{
+		const details = await getAppDetails(appId);
+		if (!details)
+			return [];
+		const launchCommand = getLaunchCommand(details);
+		if(!isDolphinGame(launchCommand))
+			return [];
+		
+		return this.getGameEntries(appId, wiiUrl);
+	}
+
+	public async getCemuGameEntries(appId: number): Promise<GameTDBGame[]>{
+		const details = await getAppDetails(appId);
+		if (!details)
+			return [];
+		const launchCommand = getLaunchCommand(details);
+		if(!isCemuGame(launchCommand))
+			return [];
+		
+		return this.getGameEntries(appId, cemuUrl);
+	}
+
+	public async getRPCS3GameEntries(appId: number): Promise<GameTDBGame[]>{
+		const details = await getAppDetails(appId);
+		if (!details)
+			return [];
+		const launchCommand = getLaunchCommand(details);
+		if(!isRPCS3Game(launchCommand))
+			return [];
+		
+		return this.getGameEntries(appId, ps3Url);
 	}
 }

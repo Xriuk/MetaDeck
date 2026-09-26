@@ -12,6 +12,7 @@ import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import { fetchNoCors } from "@decky/api";
 import type { AppDetailsResponse } from "type-steamapi";
+import { FaSteam } from "react-icons/fa";
 
 export interface SteamMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -120,7 +121,9 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 		else throw Error(`Could not find metadata for "${title}": \n${(typeof response.result === 'string' ? response.result : response.result?.body)}`);
 	}
 
-	settingsComponent = () => {
+	override icon = <FaSteam/>;
+
+	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);

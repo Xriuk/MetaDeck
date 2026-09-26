@@ -9,6 +9,7 @@ import {
 } from "../../../shortcuts";
 import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
 import Logger from "../../../logger";
+import { FaGamepad } from "react-icons/fa";
 
 export interface EmuDeckCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig
 {
@@ -121,24 +122,36 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 
 		return Object.entries(dict).map(([name, res]) => {
+			let compat = Math.max(
+				SteamDeckCompatCategory.UNKNOWN,
+				...res.map(r => {
+					if (r.Boots == YesNo.YES && r.Playable == YesNo.YES)
+						return SteamDeckCompatCategory.VERIFIED;
+					else if (r.Boots == YesNo.YES && (r.Playable == YesNo.NO || r.Playable == YesNo.PARTIAL))
+						return SteamDeckCompatCategory.PLAYABLE;
+					else
+						return SteamDeckCompatCategory.UNSUPPORTED;
+				})
+			);
+
+			let notes: CompatdataData['deck_test_results'] = res.map(r => r.Notes)
+				.filter(n => n)
+				.map(n => ({
+					test_loc_token: n,
+					test_result: SteamTestResult.Notes
+				}));
+
 			let result: CompatdataData = {
 				title: name,
 				id: Math.min(...res.map(r => r.Row)),
 
-				deck_compat_category: Math.max(
-					SteamDeckCompatCategory.UNKNOWN,
-					...res.map(r => {
-						if (r.Boots == YesNo.YES && r.Playable == YesNo.YES)
-							return SteamDeckCompatCategory.VERIFIED;
-						else if (r.Boots == YesNo.YES && (r.Playable == YesNo.NO || r.Playable == YesNo.PARTIAL))
-							return SteamDeckCompatCategory.PLAYABLE;
-						else
-							return SteamDeckCompatCategory.UNSUPPORTED;
-					})
-				),
+				deck_compat_category: compat,
+				frame_compat_category: compat, // We assume the Frame to be as powerful as the Deck
 
-				notes: res.map(r => r.Notes)
-					.filter(n => n)
+				deck_test_results: notes,
+				machine_test_results: notes,
+				os_test_results: notes,
+				frame_test_results: notes
 			};
 
 			return result;
@@ -181,14 +194,26 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 			const game = games.reverse().pop();
 
 			// Retrieve missing info
-			if(game && game.deck_test_results === undefined){
-				game.deck_test_results = [];
-				game.machine_test_results = [];
-				game.os_test_results = [];
-
-				const deckAndMachine = [
+			if(game && game.deck_test_results?.every(r => r.test_result === SteamTestResult.Notes) !== false){
+				game.deck_test_results ??= [];
+				game.machine_test_results ??= [];
+				game.os_test_results ??= [];
+				game.frame_test_results ??= [];
+				
+				const deckMachineAndFrame = [
 					[game.deck_test_results, "SteamDeckVerified" as string],
-					[game.machine_test_results, "SteamMachine" as string]
+					[game.machine_test_results, "SteamMachine" as string],
+					[game.frame_test_results, "SteamFrame" as string]
+				] as const;
+				const deckMachineOSAndFrame = [
+					[game.deck_test_results, "SteamDeckVerified" as string],
+					[game.machine_test_results, "SteamMachine" as string],
+					[game.os_test_results, "SteamOS" as string],
+					[game.frame_test_results, "SteamFrame" as string]
+				] as const;
+				const machineAndFrame = [
+					[game.machine_test_results, "SteamMachine" as string],
+					[game.frame_test_results, "SteamFrame" as string]
 				] as const;
 
 				// Only on Xbox and Xbox 360 the glyphs do match
@@ -197,9 +222,13 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 						test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsMatchDeckDevice',
 						test_result: SteamTestResult.Verified
 					});
-					game.machine_test_results!.push({
-						test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsMatchDevice`,
-						test_result: SteamTestResult.Verified
+					machineAndFrame.forEach(([results, cat]) => {
+						results.push(
+							{
+								test_loc_token: `#${cat}_TestResult_ControllerGlyphsMatchDevice`,
+								test_result: SteamTestResult.Verified
+							}
+						);
 					});
 				}
 				else{
@@ -207,9 +236,13 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 						test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsDoNotMatchDeckDevice',
 						test_result: SteamTestResult.Playable
 					});
-					game.machine_test_results.push({
-						test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsDoNotMatchDevice`,
-						test_result: SteamTestResult.Playable
+					machineAndFrame.forEach(([results, cat]) => {
+						results.push(
+							{
+								test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
+								test_result: SteamTestResult.Playable
+							}
+						);
 					});
 				}
 
@@ -225,7 +258,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 					isRosaliesMupenGUIGame(launchCommand) ||
 					isFlycastGame(launchCommand)){
 
-					deckAndMachine.forEach(([results, cat]) => {
+					deckMachineAndFrame.forEach(([results, cat]) => {
 						results.push(
 							{
 								test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
@@ -235,7 +268,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 					});
 				}
 				else{
-					deckAndMachine.forEach(([results, cat]) => {
+					deckMachineOSAndFrame.forEach(([results, cat]) => {
 						results.push(
 							{
 								test_loc_token: `#${cat}_TestResult_DefaultControllerConfigNotFullyFunctional`,
@@ -247,7 +280,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 				// Default configuration works fine for playable games
 				if(game.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
-					deckAndMachine.forEach(([results, cat]) => {
+					deckMachineAndFrame.forEach(([results, cat]) => {
 						results.push(
 							{
 								test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
@@ -306,4 +339,6 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 			return false;
 		return isEmulatedGame(getLaunchCommand(details));
 	}
+
+	override icon = <FaGamepad/>;
 }

@@ -24,11 +24,11 @@ export interface CustomFeatureProps
 }
 
 type FeatureListClasses = Record<
-	   | "Container"
-	   | "Icon"
-	   | "ExtraMargin"
-	   | "Label",
-	   string
+	"Container"
+	| "Icon"
+	| "ExtraMargin"
+	| "Label",
+	string
 >
 
 export const featureListClasses = findClassModule((m) => m.ExtraMargin) as FeatureListClasses

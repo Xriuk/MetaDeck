@@ -177,6 +177,18 @@ export function isDolphinGame(launchCommand: string)
 	return launchCommand.includes("/dolphin-emu.sh");
 }
 
+// https://wiki.dolphin-emu.org/index.php?title=GameIDs#System_Code
+export function isGameCubeId6(id6: string): boolean{
+	switch(id6[0]){
+	case 'D':
+	case 'G':
+	case 'P':
+		return true;
+	}
+
+	return false;
+}
+
 export function isCemuGame(launchCommand: string)
 {
 	return launchCommand.includes("/cemu.sh");

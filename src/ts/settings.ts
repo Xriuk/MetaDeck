@@ -49,9 +49,13 @@ export class Settings
 								enabled: true,
 								ordinal: 0
 							},
-							rpcs3: {
+							cemu: {
 								enabled: true,
 								ordinal: 1
+							},
+							rpcs3: {
+								enabled: true,
+								ordinal: 2
 							}
 						},
 						language: "EN"
@@ -139,9 +143,12 @@ export class Settings
 							}
 						}
 					},
+					// Id-based, fallback to fuzzy search
 					dolphin: {
 						enabled: true,
 						ordinal: 3,
+						fuzziness: 5,
+						overrides: {},
 						resolvers: {
 							dolphin: {
 								enabled: true,
@@ -149,10 +156,17 @@ export class Settings
 							}
 						}
 					},
+					cemu: {
+						enabled: true,
+						ordinal: 4,
+						fuzziness: 5,
+						overrides: {},
+						resolvers: {}
+					},
 					// Fuzzy search
 					emudeck: {
 						enabled: true,
-						ordinal: 4,
+						ordinal: 5,
 						fuzziness: 5,
 						overrides: {},
 						resolvers: {}
@@ -183,6 +197,7 @@ export class Settings
 					gametdb: {
 						resolvers: {
 							dolphin: {},
+							cemu: {},
 							rpcs3: {}
 						}
 					},
@@ -216,6 +231,9 @@ export class Settings
 						resolvers: {
 							dolphin: {}
 						}
+					},
+					cemu: {
+						resolvers: {}
 					}
 				}
 			}

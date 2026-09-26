@@ -1,7 +1,7 @@
 import {AsyncMountable} from "../System";
 import {MetaDeckState} from "../MetaDeckState";
 import {Module, ModuleCache, ModuleConfig} from "./Module";
-import {FC} from "react";
+import {FC, type ReactNode} from "react";
 import throttledQueue from "throttled-queue";
 import {Resolver, ResolverCache, ResolverConfig} from "./Resolver";
 import {ID} from "../Interfaces";
@@ -153,5 +153,6 @@ export abstract class Provider<
 
 	abstract provide(appId: number): Promise<Data | undefined>;
 
-	abstract settingsComponent: FC
+	icon?: ReactNode;
+	settingsComponent: FC = () => undefined;
 }

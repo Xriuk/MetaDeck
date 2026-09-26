@@ -21,6 +21,7 @@ export const ProviderSettingsComponent: FC = () => {
 		const [enabled, setEnabled] = useState(provider.enabled)
 		pages.push({
 			title: provider.title,
+			icon: provider.icon,
 			content: (
 				<DialogBody>
 					<DialogControlsSection>

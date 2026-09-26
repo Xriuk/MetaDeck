@@ -3,7 +3,7 @@ import {ResolverCache, ResolverConfig} from "../../../Resolver";
 import {t} from "../../../../useTranslations";
 import {GOGMetadataProviderResolver, separator} from "./GOGMetadataProviderResolver";
 import {getLaunchCommand, isEpicGame, isGOGGame, isHeroicGame} from "../../../../shortcuts";
-import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../providers/GamesDBResult";
+import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesDBResult";
 import {getAppDetails} from "../../../../util";
 import {GOGMetadataProviderResolverConfigs} from "../../providers/GOGMetadataProvider";
 import {callable} from "@decky/api";

@@ -2,7 +2,7 @@ import {ProviderCache, ProviderConfig} from "../../Provider";
 import {MetadataProvider} from "../MetadataProvider";
 import {MetadataData, StoreCategory} from "../../../Interfaces";
 import {getAppDetails} from "../../../util";
-import {GamesDBResult} from "./GamesDBResult";
+import {GamesDBResult} from "../../GamesDBResult";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
@@ -31,7 +31,7 @@ import {
 } from "../resolvers/GOG/GOGMetadataProviderHeroicResolver";
 import {MetadataProviderConfigs} from "../MetadataModule";
 import { SteamMetadataProvider } from "./SteamMetadataProvider";
-import type { FC } from "react";
+import { SiGogdotcom } from "react-icons/si";
 
 export interface GOGMetadataProviderConfig extends ProviderConfig<GOGMetadataProviderResolverConfigs, GOGMetadataProviderResolverConfig>
 {
@@ -156,5 +156,5 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 		});
 	}
 
-	settingsComponent: FC = () => undefined;
+	override icon = <SiGogdotcom/>;
 }

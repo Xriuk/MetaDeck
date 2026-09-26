@@ -39,6 +39,7 @@ import { useMetaDeckState } from "../../MetaDeckState";
 import React from "react";
 import { GameTDBMetadataProvider, type GameTDBMetadataProviderCache, type GameTDBMetadataProviderConfig } from "./providers/GameTDBProvider";
 import { LizardByteGameDBMetadataProvider, LizardByteGameDBMetadataProviderCache, LizardByteGameDBMetadataProviderConfig } from "./providers/LizardByteGameDBMetadataProvider";
+import { FaRegFileLines } from "react-icons/fa6";
 
 export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs, MetadataProviderConfigTypes>
 {
@@ -706,7 +707,9 @@ export class MetadataModule extends Module<
 		this.config.title_header = title_header
 	}
 
-	settingsComponent = () => {
+	override icon = <FaRegFileLines/>;
+
+	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [typeOverride, setTypeOverride] = useState(this.typeOverride)
 		const [descriptions, setDescriptions] = useState(this.descriptions)

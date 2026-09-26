@@ -20,7 +20,7 @@ export interface GamesDBResult {
 	logo:                        Icon;
 }
 
-export interface AvailableLanguage {
+interface AvailableLanguage {
 	code: string;
 }
 
@@ -137,3 +137,6 @@ export const removeAfterAndIncluding = (originalString: string, substring: strin
 	// If the substring is not found, return the original string
 	return originalString;
 }
+
+// [Query, Titles, ???, URLs]
+export type WikiSearchResponse = [string, string[], string[], string[]];

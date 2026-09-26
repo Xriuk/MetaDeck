@@ -170,7 +170,7 @@ class Plugin:
 						for lic in ps2_licenses:
 							for reg in ps2_regions:
 								if name.startswith(lic + reg):
-									return name.split(";")[0].replace('_', '').replace('.', '')
+									return name.split(";", 2)[0].replace('_', '').replace('.', '')
 		elif rom_path.endswith(".bin"):
 			with open(rom_path, 'r+') as file:
 				mm = mmap.mmap(file.fileno(), 0, prot=mmap.PROT_READ)
@@ -196,6 +196,34 @@ class Plugin:
 		)
 
 		return result.stdout.strip()
+
+	async def cemu_get_gameserial(self, rom_path: str) -> str | None:
+		if not os.path.isfile(rom_path):
+			return None
+
+		# If the rom is WUD it's already unencrypted,
+		# otherwise we need to use our tool
+		# The game serial is in the first 10 bytes
+		if(rom_path.endswith('.wud')):
+			with open(rom_path, 'rb') as file:
+				return file.read(10).decode('ascii')
+		elif(rom_path.endswith('.wux')):
+			# This is a modified version of WudCompress.exe which only reads and decompresses the first 10 bytes instead of the whole file,
+			# just to read the game serial
+			cmd = [
+				os.path.join(decky.HOME, ".local/share/Steam/steamapps/common/Proton - Experimental/files/bin/wine")
+				os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "WudCompress.exe"),
+				rom_path
+			]
+			result = subprocess.run(
+				cmd,
+				capture_output=True,
+				text=True,
+				check=True
+			)
+
+			return result.stdout.strip()
+
 
 	# https://github.com/Xriuk/Emuchievements/blob/f35826e78c095c843597a228859d2a1e5fa2dbc1/src/py/main.py#L453-L552
 	async def xenia_get_defaultxex(self, iso_path: str) -> bytes:

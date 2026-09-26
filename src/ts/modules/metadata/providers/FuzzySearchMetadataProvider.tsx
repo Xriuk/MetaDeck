@@ -147,7 +147,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		}
 	}
 
-	settingsComponent = () => {
+	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);

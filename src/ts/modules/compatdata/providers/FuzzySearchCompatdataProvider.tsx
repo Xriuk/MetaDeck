@@ -23,7 +23,7 @@ export interface FuzzySearchCompatdataProviderCache extends ProviderCache<{}, Re
 
 export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<any>
 {
-	resolvers = [];
+	resolvers: any[] = [];
 
 	abstract logger: Logger;
 
@@ -123,7 +123,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 		} else return undefined;
 	}
 
-	settingsComponent = () => {
+	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);

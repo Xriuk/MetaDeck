@@ -18,6 +18,7 @@ import React from "react";
 import { IdOverrideComponent, type Entry } from "../../IdOverrideComponent";
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
+import { FaR } from "react-icons/fa6";
 
 export interface RAWGMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -265,6 +266,8 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 			return ret;
 		} else return undefined;
 	}
+
+	override icon = <FaR/>;
 
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();

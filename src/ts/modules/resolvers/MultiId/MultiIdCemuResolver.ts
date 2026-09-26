@@ -1,30 +1,30 @@
 import {ResolverCache, ResolverConfig} from "../../Resolver";
-import {getLaunchCommand, isDolphinGame, romRegex} from "../../../shortcuts";
+import {getLaunchCommand, isCemuGame, romRegex} from "../../../shortcuts";
 import {getAppDetails} from "../../../util";
 import { MultiIdResolver, separator, type MultiIdResolverConfigs } from "./MultiIdResolver";
 import { call, fetchNoCors } from "@decky/api";
 import type { ID } from "../../../Interfaces";
 
-export interface MultiIdDolphinResolverConfig extends ResolverConfig
+export interface MultiIdCemuResolverConfig extends ResolverConfig
 {
 	
 }
 
-export interface MultiIdDolphinResolverCache extends ResolverCache
+export interface MultiIdCemuResolverCache extends ResolverCache
 {
 
 }
 
-export class MultiIdDolphinResolver extends MultiIdResolver
+export class MultiIdCemuResolver extends MultiIdResolver
 {
-	identifier: keyof MultiIdResolverConfigs = "dolphin";
+	identifier: keyof MultiIdResolverConfigs = "cemu";
 
 	private titlesCache: Record<string, string> = {}; // ID6: Title
 
 	override async mount(): Promise<void> {
 		await super.mount();
 
-		const response = await fetchNoCors("https://www.gametdb.com/wiitdb.txt?LANG=ORIG");
+		const response = await fetchNoCors("https://www.gametdb.com/wiiutdb.txt?LANG=ORIG");
 		if(!response.ok)
 			return;
 
@@ -46,7 +46,7 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
-		return isDolphinGame(getLaunchCommand(details));
+		return isCemuGame(getLaunchCommand(details));
 	}
 
 	async resolve(appId: number): Promise<ID | undefined> {
@@ -59,16 +59,19 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 		if(!rom)
 			return undefined;
 
-		const id6 = await call<[string], string | null>("dolphin_get_id6", rom) ?? null;
-		if(!id6 || id6.length !== 6)
+		// Returned serial is like "WUP-P-AMKE", we only need the last segment
+		const gameSerial = (await call<[string], string | null>("cemu_get_gameserial", rom))?.split('-') ?? null;
+		if(!gameSerial?.length || gameSerial[gameSerial.length-1].length !== 4)
 			return undefined;
 
-		let code = id6.substring(0, 3);
-		let publisher = id6.substring(4);
+		// We only have the code and no publisher
+		let code = gameSerial[gameSerial.length-1].substring(0, 3);
 
-		// Retrieve other ids by changing region
+		// Retrieve all the ids by changing region
 		let regionIds = Object.keys(this.titlesCache)
-			.filter(i => i.startsWith(code) && i.endsWith(publisher));
+			.filter(i => i.startsWith(code));
+			
+		let publisher = regionIds[0].substring(4);
 
 		// Retrieve other ids by matching retrieved titles and publisher
 		let titleTitles = Object.entries(this.titlesCache)
@@ -77,7 +80,6 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 
 		return [
 			...new Set<string>([
-				id6,
 				...regionIds,
 				...titleTitles
 			])

@@ -48,7 +48,7 @@ export function t(key: keyof (typeof languages)['en']): string {
 
 export function format(fmt: string, ...args: any[]){
 	return fmt
-			.split("%%")
-			.reduce((aggregate, chunk, i) =>
-					aggregate + chunk + (args[i] || ""), "");
+		.split("%%")
+		.reduce((aggregate, chunk, i) =>
+				aggregate + chunk + (args[i] || ""), "");
 }

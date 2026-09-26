@@ -2,7 +2,7 @@ import {Provider, ProviderCache, ProviderConfig} from "./Provider";
 import {MetadataCache, MetadataConfig} from "./metadata/MetadataModule";
 import {AsyncMountable, Mounts} from "../System";
 import {MetaDeckState, Modules} from "../MetaDeckState";
-import {FC} from "react";
+import {FC, type ReactNode} from "react";
 import Logger from "../logger";
 import {CompatdataCache, CompatdataConfig} from "./compatdata/CompatdataModule";
 import {SteamAppDetails, SteamAppOverview} from "../SteamTypes";
@@ -164,12 +164,14 @@ export abstract class Module<
 
 	}
 
-	async applyOverview(_overview: SteamAppOverview): Promise<void>
+	applyOverview(_overview: SteamAppOverview): Promise<void>
 	{
+		return Promise.resolve();
 	}
 
-	async applyDetails(_details: SteamAppDetails): Promise<void>
+	applyDetails(_details: SteamAppDetails): Promise<void>
 	{
+		return Promise.resolve();
 	}
 
 	async removeCache(appId: number): Promise<void>
@@ -298,8 +300,8 @@ export abstract class Module<
 		this.state.loadingData.currentModule.processed++;
 	}
 
-
-	abstract settingsComponent: FC
+	icon?: ReactNode;
+	settingsComponent: FC = () => undefined;
 
 	async mount(): Promise<void>
 	{

@@ -33,6 +33,7 @@
 	"providerCompatdataRPCS3": "RPCS3",
 	"providerCompatdataXenia": "Xenia",
 	"providerCompatdataDolphin": "Dolphin",
+	"providerCompatdataCemu": "Cemu",
 	"storeCategoriesNonSteam": "Non Steam",
 	"storeCategoriesEmuDeck": "EmuDeck",
 	"storeCategoriesEGS": "Epic Games",

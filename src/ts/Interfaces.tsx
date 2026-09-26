@@ -27,14 +27,14 @@ export interface CompatdataData
 
 	deck_compat_category?: SteamDeckCompatCategory;
 	machine_compat_category?: SteamDeckCompatCategory; // Will default to deck_compat_category if not provided
-	os_compat_category?: SteamDeckCompatCategory; // Will default to max between deck_compat_category and machine_compat_category if not provided
-
-	notes?: string[];
+	frame_compat_category?: SteamDeckCompatCategory;
+	os_compat_category?: SteamDeckCompatCategory; 	// Max SteamDeckCompatCategory.PLAYABLE - Will default to max between deck_compat_category,
+													// machine_compat_category and frame_compat_category if not provided
 	
-	// test_result should not be 1 (notes), use notes
 	deck_test_results?: SteamAppDetails['vecDeckCompatTestResults'];
 	machine_test_results?: SteamAppDetails['vecSteamMachineCompatTestResults'];
 	os_test_results?: SteamAppDetails['vecSteamOSCompatTestResults'];
+	frame_test_results?: SteamAppDetails['vecSteamFrameCompatTestResults'];
 }
 
 export type ID = number | string

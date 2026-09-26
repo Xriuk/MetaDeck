@@ -1,6 +1,6 @@
 import React, {ReactElement, ReactNode} from "react";
 import {AppDetails, AppLanguages, LogoPosition} from "decky-frontend-lib";
-import { type SteamTestResult } from "./Interfaces";
+import { type SteamDeckCompatCategory as SteamCompatCategory, type SteamTestResult } from "./Interfaces";
 
 type Hook = {
 	unregister: () => void
@@ -81,6 +81,11 @@ type SteamAppLanguages = {
 	strShortName: string
 }
 
+type SteamTest = {
+	test_loc_token: string,
+	test_result: SteamTestResult
+};
+
 type SteamAppDetails = {
 	achievements: SteamAppAchievements,
 	bCanMoveInstallFolder: boolean,
@@ -150,18 +155,10 @@ type SteamAppDetails = {
 	unAppID: number,
 	vecBetas: any[],
 	vecDLC: any[],
-	vecDeckCompatTestResults: {
-		test_loc_token: string,
-		test_result: SteamTestResult
-	}[],
-	vecSteamOSCompatTestResults: {
-		test_loc_token: string,
-		test_result: SteamTestResult
-	}[],
-	vecSteamMachineCompatTestResults: {
-		test_loc_token: string,
-		test_result: SteamTestResult
-	}[],
+	vecDeckCompatTestResults?: SteamTest[],
+	vecSteamOSCompatTestResults?: SteamTest[],
+	vecSteamMachineCompatTestResults?: SteamTest[],
+	vecSteamFrameCompatTestResults?: SteamTest[],
 	vecLanguages: AppLanguages[],
 	vecLegacyCDKeys: any[],
 	vecMusicAlbums: any[],
@@ -190,7 +187,10 @@ type SteamAppOverview = {
 	appid: number,
 	display_name: string,
 	steam_hw_compat_category_packed: number,
-	readonly steam_deck_compat_category: number,
+	get steam_deck_compat_category(): SteamCompatCategory,
+	get steam_os_compat_category(): SteamCompatCategory,
+	get steam_machine_compat_category(): SteamCompatCategory,
+	get steam_frame_compat_category(): SteamCompatCategory,
 	size_on_disk: string | undefined, // can use the type of this to determine if an app is installed!
 	association: { type: number, name: string }[],
 	canonicalAppType: number,

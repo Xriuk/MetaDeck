@@ -18,6 +18,8 @@ import { PCSX2CompatdataProvider, type PCSX2CompatdataProviderCache, type PCSX2C
 import { RPCS3CompatdataProvider, type RPCS3CompatdataProviderCache, type RPCS3CompatdataProviderConfig } from "./providers/RPCS3CompatdataProvider";
 import { XeniaCompatdataProvider, type XeniaCCompatdataProviderCache, type XeniaCompatdataProviderConfig } from "./providers/XeniaCompatdataProvider";
 import { DolphinCompatdataProvider, type DolphinCompatdataProviderCache, type DolphinCompatdataProviderConfig } from "./providers/DolphinCompatdataProvider";
+import { FaCheckCircle } from "react-icons/fa";
+import type { CemuCompatdataProviderCache, CemuCompatdataProviderConfig } from "./providers/CemuCompatdataProvider";
 
 export interface CompatdataConfig extends ModuleConfig<CompatdataProviderConfigs, CompatdataProviderConfigTypes>
 {
@@ -38,6 +40,7 @@ export interface CompatdataProviderConfigs
 	rpcs3: RPCS3CompatdataProviderConfig;
 	xenia: XeniaCompatdataProviderConfig;
 	dolphin: DolphinCompatdataProviderConfig;
+	cemu: CemuCompatdataProviderConfig;
 }
 
 export interface CompatdataProviderCaches
@@ -47,6 +50,7 @@ export interface CompatdataProviderCaches
 	rpcs3: RPCS3CompatdataProviderCache;
 	xenia: XeniaCCompatdataProviderCache;
 	dolphin: DolphinCompatdataProviderCache;
+	cemu: CemuCompatdataProviderCache;
 }
 
 export interface CompatdataProviderResolverConfigs
@@ -56,6 +60,7 @@ export interface CompatdataProviderResolverConfigs
 	rpcs3: RPCS3CompatdataProviderConfig['resolvers'];
 	xenia: XeniaCompatdataProviderConfig['resolvers'];
 	dolphin: DolphinCompatdataProviderConfig['resolvers'];
+	cemu: CemuCompatdataProviderConfig['resolvers'];
 }
 
 export interface CompatdataProviderResolverCaches
@@ -65,6 +70,7 @@ export interface CompatdataProviderResolverCaches
 	rpcs3: RPCS3CompatdataProviderCache['resolvers'];
 	xenia: XeniaCCompatdataProviderCache['resolvers'];
 	dolphin: DolphinCompatdataProviderCache['resolvers'];
+	cemu: CemuCompatdataProviderCache['resolvers'];
 }
 
 export type CompatdataProviderConfigTypes = CompatdataProviderConfigs[keyof CompatdataProviderConfigs]
@@ -167,18 +173,39 @@ export class CompatdataModule extends Module<
 		}))
 	}
 
+	private computeCompatCategories(data?: CompatdataData): Required<Pick<CompatdataData, 'deck_compat_category' | 'machine_compat_category' | 'frame_compat_category' | 'os_compat_category'>>{
+		let deck_category = data?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN;
+		let machine_category = data?.machine_compat_category ?? deck_category;
+		let frame_category = data?.frame_compat_category ?? SteamDeckCompatCategory.UNKNOWN;
+
+		// Steam OS gets max of deck/machine/frame, PLAYABLE appears to be the max for Steam OS, so we cap it
+		let os_category: SteamDeckCompatCategory = data?.os_compat_category
+			?? Math.min(Math.max(deck_category, machine_category, frame_category), SteamDeckCompatCategory.PLAYABLE);
+		
+		return {
+			deck_compat_category: deck_category,
+			machine_compat_category: machine_category,
+			frame_compat_category: frame_category,
+			os_compat_category: os_category
+		};
+	}
+
 	progressDescription(data?: CompatdataData): string
 	{
 		const compat = (cat: SteamDeckCompatCategory) => ({
-			0: t("unknown"),
-			1: t("unsupported"),
-			2: t("playable"),
-			3: t("verified")
+			[SteamDeckCompatCategory.UNKNOWN]: t("unknown"),
+			[SteamDeckCompatCategory.UNSUPPORTED]: t("unsupported"),
+			[SteamDeckCompatCategory.PLAYABLE]: t("playable"),
+			[SteamDeckCompatCategory.VERIFIED]: t("verified")
 		}[cat]);
 
+		const categories = this.computeCompatCategories(data);
+
 		return format(t("foundCompatdata"),
-			`Deck: ${compat(data?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN)} - ` +
-			`Machine: ${compat(data?.machine_compat_category ?? data?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN)}`);
+			`Deck: ${compat(categories.deck_compat_category)} - ` +
+			`Machine: ${compat(categories.machine_compat_category)} - ` +
+			`Frame: ${compat(categories.frame_compat_category)} - ` +
+			`OS: ${compat(categories.os_compat_category)}`);
 	}
 
 	get verified(): boolean
@@ -211,7 +238,9 @@ export class CompatdataModule extends Module<
 		this.config.test_results = test_results;
 	}
 
-	settingsComponent = () => {
+	override icon = <FaCheckCircle/>;
+
+	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [verified, setVerified] = useState(this.verified);
 		const [notes, setNotes] = useState(this.notes);
@@ -260,51 +289,71 @@ export class CompatdataModule extends Module<
 		)
 	};
 
-	async applyOverview(overview: SteamAppOverview): Promise<void>
+	applyOverview(overview: SteamAppOverview): Promise<void>
 	{
-		if (this.verified){
-			let deck_category = this.data[overview.appid]?.deck_compat_category ?? SteamDeckCompatCategory.UNKNOWN;
-			let machine_category = this.data[overview.appid]?.machine_compat_category ?? deck_category;
+		if (!this.verified)
+			return Promise.resolve();
 
-			// Steam OS gets max of deck/machine, Playable appears to be the max for Steam OS, so we cap it
-			let os_category = this.data[overview.appid]?.os_compat_category
-				?? Math.min(Math.max(deck_category, machine_category), SteamDeckCompatCategory.PLAYABLE);
+		const categories = this.computeCompatCategories(this.data[overview.appid]);
 
-			// 32 bit (uint): ... | Steam Machine | Steam OS | ??? | Deck
-			overview.steam_hw_compat_category_packed =
-				(machine_category << 6) |
-				(os_category << 4) |
-				(deck_category << 0);
-		}
+		// 32 bit (uint): ... | Steam Frame (2) | Steam Machine (2) | Steam OS (2) | ??? (2) | Deck (2)
+		overview.steam_hw_compat_category_packed =
+			(categories.frame_compat_category << 8) |
+			(categories.machine_compat_category << 6) |
+			(categories.os_compat_category << 4) |
+			(categories.deck_compat_category << 0);
+
+		return Promise.resolve();
 	}
 
-
-	async applyDetails(details: SteamAppDetails): Promise<void>
+	applyDetails(details: SteamAppDetails): Promise<void>
 	{
-		const compatdata = this.data[details.unAppID]
+		if(!this.verified)
+			return Promise.resolve();
 
-		if (this.verified && (this.notes || this.test_results))
-		{
-			// Take max 5 notes
-			let notes = this.notes && compatdata?.notes?.length ?
-				compatdata.notes
-					.slice(0, 5)
-					.map(n => ({
-						test_loc_token: n,
-						test_result: SteamTestResult.Notes
-					})) :
-				[];
+		const compatdata = this.data[details.unAppID];
+		if(!compatdata)
+			return Promise.resolve();
 
+		let results = ([
+			['vecDeckCompatTestResults', 'deck_test_results'],
+			['vecSteamMachineCompatTestResults', 'machine_test_results'],
+			['vecSteamOSCompatTestResults', 'os_test_results'],
+			['vecSteamFrameCompatTestResults', 'frame_test_results']
+		] as const);
+
+		// Take max 5 notes
+		if(this.notes){
 			if(this.test_results){
-				details.vecDeckCompatTestResults = notes.concat(compatdata?.deck_test_results?.filter(r => r.test_result !== SteamTestResult.Notes) ?? []);
-				details.vecSteamMachineCompatTestResults = notes.concat(compatdata?.machine_test_results?.filter(r => r.test_result !== SteamTestResult.Notes) ?? []);
-				details.vecSteamOSCompatTestResults = notes.concat(compatdata?.os_test_results?.filter(r => r.test_result !== SteamTestResult.Notes) ?? []);
+				results.forEach(([detRes, compatRes]) => {
+					if(compatdata?.[compatRes]?.length){
+						details[detRes] = compatdata[compatRes]!
+							.filter(r => r.test_result !== SteamTestResult.Notes)
+							.concat(compatdata[compatRes]!
+								.filter(r => r.test_result === SteamTestResult.Notes)
+								.slice(0, 5));
+					}
+				});
 			}
 			else{
-				details.vecDeckCompatTestResults = notes;
-				details.vecSteamMachineCompatTestResults = notes;
-				details.vecSteamOSCompatTestResults = notes;
+				results.forEach(([detRes, compatRes]) => {
+					if(compatdata?.[compatRes]?.length){
+						details[detRes] = compatdata[compatRes]!
+							.filter(r => r.test_result === SteamTestResult.Notes)
+							.slice(0, 5);
+					}
+				});
 			}
 		}
+		else if(this.test_results){
+			results.forEach(([detRes, compatRes]) => {
+				if(compatdata?.[compatRes]?.length){
+					details[detRes] = compatdata[compatRes]!
+						.filter(r => r.test_result !== SteamTestResult.Notes);
+				}
+			});
+		}
+
+		return Promise.resolve();
 	}
 }

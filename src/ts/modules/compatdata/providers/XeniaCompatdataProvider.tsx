@@ -11,7 +11,7 @@ import type { ResolverConfig, ResolverCache } from "../../Resolver";
 import { MultiIdXeniaResolver } from "../../resolvers/MultiId/MultiIdXeniaResolver";
 import { CompatdataProvider } from "../CompatdataProvider";
 import { type MultiIdResolverConfigs, type MultiIdResolverCaches, type MultiIdResolver, separator } from "../../resolvers/MultiId/MultiIdResolver";
-import type { FC } from "react";
+import { FaXbox } from "react-icons/fa";
 
 type XeniaCompatData = {
 	title: string;
@@ -86,16 +86,24 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 				this.compatData[titleId].status === "Gameplay" ? SteamDeckCompatCategory.PLAYABLE :
 				SteamDeckCompatCategory.UNSUPPORTED,
 
-			deck_test_results: [
-				
-			],
+			deck_test_results: [],
 			machine_test_results: [],
-			os_test_results: []
+			os_test_results: [],
+			frame_test_results: []
 		};
 
+		const machineAndFrame = [
+			[result.machine_test_results!, "SteamMachine" as string],
+			[result.frame_test_results!, "SteamFrame" as string]
+		] as const;
 		const deckAndMachine = [
 			[result.deck_test_results!, "SteamDeckVerified" as string],
 			[result.machine_test_results!, "SteamMachine" as string]
+		] as const;
+		const deckMachineAndFrame = [
+			[result.deck_test_results!, "SteamDeckVerified" as string],
+			[result.machine_test_results!, "SteamMachine" as string],
+			[result.frame_test_results!, "SteamFrame" as string]
 		] as const;
 
 		// The glyphs do match
@@ -104,18 +112,20 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 			test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsMatchDeckDevice',
 			test_result: SteamTestResult.Verified
 		});
-		result.machine_test_results!.push({
-			test_loc_token: `#SteamMachine_TestResult_ControllerGlyphsMatchDevice`,
-			test_result: SteamTestResult.Verified
+		machineAndFrame.forEach(([results, cat]) => {
+			results.push({
+				test_loc_token: `#${cat}_TestResult_ControllerGlyphsMatchDevice`,
+				test_result: SteamTestResult.Verified
+			});
 		});
-		deckAndMachine.forEach(([results, cat]) => {
+		deckMachineAndFrame.forEach(([results, cat]) => {
 			results.push({
 				test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
 				test_result: SteamTestResult.Verified
 			});
 		});
 
-		// Default configuration works fine for playable games
+		// Default configuration works fine for playable games (we cannot assume for the Frame here, especially since Xenia runs under Proton)
 		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
 			deckAndMachine.forEach(([results, cat]) => {
 				results.push(
@@ -130,5 +140,5 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 		return result;
 	}
 
-	settingsComponent: FC = () => undefined;
+	override icon = <FaXbox/>;
 }
