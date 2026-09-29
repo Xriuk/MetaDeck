@@ -7,10 +7,7 @@ import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
 	getLaunchCommand,
-	getShortcutCategories,
-	isEpicGame,
-	isGOGGame,
-	isUbisoftGame
+	getShortcutCategories
 } from "../../../shortcuts";
 import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {
@@ -59,10 +56,12 @@ export interface GOGMetadataProviderResolverCaches
 
 export interface GOGMetadataProviderResolverConfig extends ResolverConfig
 {
+
 }
 
 export interface GOGMetadataProviderResolverCache extends ResolverCache
 {
+	
 }
 
 export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderResolver>
@@ -77,7 +76,7 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 		new GOGMetadataProviderJunkStoreResolver(this),
 		new GOGMetadataProviderNSLResolver(this),
 		new GOGMetadataProviderHeroicResolver(this)
-	]
+	];
 
 	private _steamProvider?: SteamMetadataProvider;
 	get steamProvider(): SteamMetadataProvider
@@ -89,15 +88,6 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 		}
 
 		return this._steamProvider;
-	}
-
-	async test(appId: number): Promise<boolean>
-	{
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-		const launchCommand = getLaunchCommand(details);
-		return isGOGGame(launchCommand) || isEpicGame(launchCommand) || isUbisoftGame(launchCommand);
 	}
 
 	provide(appId: number): Promise<MetadataData | undefined>

@@ -49,12 +49,19 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 		void this.module.saveData();
 	}
 
-	async test(appId: number): Promise<boolean>
+	// DEV: maybe make abstract and avoid double-search?
+	override async test(appId: number): Promise<boolean>
 	{
 		if (this.overrides[appId] == 0)
 			return false;
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
+
+		const details = await getAppDetails(appId);
+		if(!details)
+			return false;
+
+		const display_name = details.strDisplayName;
 		const results = await this.throttle(() => this.search(display_name));
+
 		const names = results.map(value => value.title);
 		const closest_names = distanceWithLimit(this.fuzziness, display_name, names);
 		return closest_names.length > 0;
@@ -67,60 +74,67 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	protected abstract search(title: string): Promise<CompatdataData[]>;
 
-	public async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
+	// Used to retrieve initial data for all the results in search and more specific data here if needed
+	protected enrichCompatdataForGame(_appId: number, _game: CompatdataData): Promise<void>{
+		return Promise.resolve();
+	}
+
+	protected async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
 
-		this.logger.debug(`Fetching compatdata for game ${appId}`)
+		this.logger.debug(`Fetching compatdata for game ${appId}`);
 
 		const display_name = details.strDisplayName;
+		const results = await this.search(display_name);
+		if (!results.length)
+			return undefined;
+
 		const data_id = this.overrides[appId];
 		this.logger.debug("data_id", data_id);
-		const results = await this.search(display_name);
-		if (results.length > 0)
-		{
-			this.logger.debug("results", results);
-			let games: CompatdataData[];
-			if (data_id === undefined)
-			{
-				const names = results.map(value => value.title);
-				const closest_name = closestWithLimit(this.fuzziness, display_name, names)
-				this.logger.debug(closest_name, results.map(value => value.title))
-				const games1 = results.filter(value => value.title === closest_name)
-				this.logger.debug("Games: ", games1)
-				games = games1;
-			} else if (data_id === 0)
-			{
-				return undefined;
-			} else
-			{
-				games = results.filter(value => value.id === data_id)
-			}
-			const game = games.reverse().pop();
-			this.logger.debug(game);
-			return game;
 
-		} else return undefined;
-		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
+		let games: CompatdataData[];
+		if (data_id === undefined)
+		{
+			const names = results.map(value => value.title);
+			const closest_name = closestWithLimit(this.fuzziness, display_name, names);
+			this.logger.debug(closest_name, names);
+
+			games = results.filter(value => value.title === closest_name);
+			this.logger.debug("Games: ", games);
+		}
+		else if (data_id === 0)
+			return undefined;
+		else
+			games = results.filter(value => value.id === data_id);
+
+		const game = games.reverse().pop();
+		if (game)
+			await this.enrichCompatdataForGame(appId, game);
+		this.logger.debug(game);
+		return game;
 	}
 
-	protected async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title'>> | undefined>
+	protected async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title' | 'id'>> | undefined>
 	{
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
+		const details = await getAppDetails(appId);
+		if(!details)
+			return undefined;
+
+		const display_name = details.strDisplayName;
 		const results = await this.search(display_name);
 
 		// We add all results without limiting them for overrides
-		if (results.length > 0)
-		{
-			let ret: Record<ID, CompatdataData> = {};
-			for (let game of results)
-			{
-				ret[game.id] = game;
-			}
-			return ret;
-		} else return undefined;
+		if (!results.length)
+			return undefined;
+
+		let ret: Record<ID, Pick<CompatdataData, 'title' | 'id'>> = {};
+		for (let game of results){
+			ret[game.id] = game;
+		}
+		return ret;
 	}
 
 	override settingsComponent = () => {

@@ -5,12 +5,12 @@ import Logger from "./logger";
 import {MetaDeckComponent} from "./MetaDeckComponent";
 import {AppDetailsStore, AppStore} from "./SteamTypes";
 import {Mounts} from "./System";
-import {ReactNode} from "react";
 import {MetaDeckState, MetaDeckStateContext, MetaDeckStateContextProvider} from "./MetaDeckState";
 import {EventBus} from "./events";
 import {staticClasses} from "@decky/ui";
 import {SettingsComponent} from "./modules/SettingsComponent";
 import {ProviderSettingsComponent} from "./modules/ProviderSettingsComponent";
+import type {  CachedAppDetails } from "@decky/ui/dist/globals/steam-client/App";
 
 declare global
 {
@@ -21,23 +21,7 @@ declare global
 	let appDetailsStore: AppDetailsStore;
 
 	let appDetailsCache: {
-		SetCachedDataForApp(app_id: number, descriptions: string, number: number, descriptionsData: {
-			strFullDescription: ReactNode;
-			strSnippet: ReactNode
-		} | {
-			rgDevelopers: {
-				strName: string,
-				strURL: string
-			}[],
-			rgPublishers: {
-				strName: string,
-				strURL: string
-			}[]
-			rgFranchises: {
-				strName: string,
-				strURL: string
-			}[]
-		}): void;
+		SetCachedDataForApp<TCacheKey extends keyof CachedAppDetails>(app_id: number, field: TCacheKey, version: number, data: CachedAppDetails[TCacheKey]['data']): void;
 	}
 
 	// let collectionStore: CollectionStore;
@@ -102,7 +86,7 @@ export default definePlugin(() => {
 		{
 			state.modules.metadata.bypassBypass = count
 		}
-	}
+	};
 
 
 	// const checkOnlineStatus = async () => {
@@ -128,16 +112,15 @@ export default definePlugin(() => {
 		   <MetaDeckStateContextProvider metaDeckState={state}>
 			   <SettingsComponent/>
 		   </MetaDeckStateContextProvider>
-	)
+	);
 
 	mounts.addPageMount("/metadeck/:module", () =>
 		   <MetaDeckStateContextProvider metaDeckState={state}>
 			   <ProviderSettingsComponent/>
 		   </MetaDeckStateContextProvider>
-	)
+	);
 
-
-	const unregister = mounts.register()
+	const unregister = mounts.register();
 
 	return {
 		name,
@@ -150,6 +133,6 @@ export default definePlugin(() => {
 		onDismount()
 		{
 			unregister();
-		},
+		}
 	};
 });

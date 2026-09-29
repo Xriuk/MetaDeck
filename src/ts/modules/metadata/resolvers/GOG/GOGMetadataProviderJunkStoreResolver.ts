@@ -10,10 +10,12 @@ import {callable} from "@decky/api";
 
 export interface GOGMetadataProviderJunkStoreResolverConfig extends ResolverConfig
 {
+
 }
 
 export interface GOGMetadataProviderJunkStoreResolverCache extends ResolverCache
 {
+
 }
 
 export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderResolver
@@ -53,7 +55,7 @@ export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderRes
 	private directory_size: (path: string) => Promise<number> = callable("directory_size");
 	private file_date: (path: string) => Promise<number> = callable("file_date");
 
-	async apply(appId: number, data: MetadataData): Promise<void>
+	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
 		let details = await getAppDetails(appId);
 		if(!details)

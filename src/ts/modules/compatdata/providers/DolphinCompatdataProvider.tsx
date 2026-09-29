@@ -1,11 +1,7 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {closestWithLimit, getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
-import {
-	getLaunchCommand, isDolphinGame,
-	isGameCubeId6
-} from "../../../shortcuts";
+import { isGameCubeId6 } from "../../../shortcuts";
 import Logger from "../../../logger";
 import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
 import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
@@ -52,14 +48,6 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 		return this._gameTDBProvider;
 	}
 
-	async test(appId: number): Promise<boolean>
-	{
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-		return isDolphinGame(getLaunchCommand(details));
-	}
-
 	protected async search(title: string): Promise<CompatdataData[]>{
 		let response = await fetchNoCors(`https://wiki.dolphin-emu.org/api.php?action=opensearch&limit=10&search=${encodeURIComponent(title)}`);
 		if(!response)
@@ -67,11 +55,22 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 
 		let results: WikiSearchResponse = await response.json();
 		
-		// Will retrieve details in getCompatdataForGame
+		// Will enrich later
 		return results[1].map(t => ({
 			title: t,
 			id: t
 		}));
+	}
+
+	protected override async enrichCompatdataForGame(appId: number, game: CompatdataData): Promise<void> {
+		if(game.deck_compat_category !== undefined)
+			return;
+
+		let response = await this.getTitleData(game.title, undefined, appId, true);
+		if(!response)
+			game.deck_compat_category = SteamDeckCompatCategory.UNKNOWN;
+		else
+			Object.assign(game, response);
 	}
 
 	private async getTitleData(title: string | undefined, id: string | undefined, appId: number, fallbackToSearch = false): Promise<CompatdataData | undefined>{
@@ -244,52 +243,6 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 		this.logger.debug("Title ID6", appId, id6);
 
 		return await this.getTitleData(undefined, id6, appId, true);
-	}
-
-	override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined> {
-		const details = await getAppDetails(appId);
-		if(!details)
-			return undefined;
-
-		this.logger.debug(`Fetching compatdata for game ${appId}`)
-
-		const display_name = details.strDisplayName;
-		const data_id = this.overrides[appId];
-		this.logger.debug("data_id", data_id);
-		const results = await this.search(display_name);
-		if (results.length > 0)
-		{
-			this.logger.debug("results", results);
-			let games: CompatdataData[];
-			if (data_id === undefined)
-			{
-				const names = results.map(value => value.title);
-				const closest_name = closestWithLimit(this.fuzziness, display_name, names)
-				this.logger.debug(closest_name, results.map(value => value.title))
-				const games1 = results.filter(value => value.title === closest_name)
-				this.logger.debug("Games: ", games1)
-				games = games1;
-			} else if (data_id === 0)
-			{
-				return undefined;
-			} else
-			{
-				games = results.filter(value => value.id === data_id)
-			}
-			const game = games.reverse().pop();
-
-			// Retrieve missing details
-			if(game && game.deck_compat_category === undefined){
-				let response = await this.getTitleData(game.title, undefined, appId, true);
-				if(response)
-					Object.assign(game, response);
-			}
-
-			this.logger.debug(game);
-			return game;
-
-		} else return undefined;
-		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
 	}
 
 	override icon = <SiDolphin/>;

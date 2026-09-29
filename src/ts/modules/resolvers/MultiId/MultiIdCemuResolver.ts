@@ -12,7 +12,8 @@ export interface MultiIdCemuResolverConfig extends ResolverConfig
 
 export interface MultiIdCemuResolverCache extends ResolverCache
 {
-
+	// Last 4 chars of serial
+	game_codes: Record<number, string | null>;
 }
 
 export class MultiIdCemuResolver extends MultiIdResolver
@@ -21,9 +22,11 @@ export class MultiIdCemuResolver extends MultiIdResolver
 
 	private titlesCache: Record<string, string> = {}; // ID6: Title
 
-	override async mount(): Promise<void> {
-		await super.mount();
+	get gameCodes(): Record<number, string | null>{
+		return (this.cache as MultiIdCemuResolverCache).game_codes;
+	}
 
+	override async mount(): Promise<void> {
 		const response = await fetchNoCors("https://www.gametdb.com/wiiutdb.txt?LANG=ORIG");
 		if(!response.ok)
 			return;
@@ -37,7 +40,7 @@ export class MultiIdCemuResolver extends MultiIdResolver
 			if(!id6 || id6.length !== 6)
 				continue;
 
-			this.titlesCache[] = entry.substring(split + 1).trim();
+			this.titlesCache[id6] = entry.substring(split + 1).trim();
 		}
 	}
 
@@ -50,22 +53,34 @@ export class MultiIdCemuResolver extends MultiIdResolver
 	}
 
 	async resolve(appId: number): Promise<ID | undefined> {
-		const details = await getAppDetails(appId);
-		if (!details)
-			return undefined;
-		const launchCommand = getLaunchCommand(details);
+		let code: string | null = this.gameCodes[appId];
+		if(code === undefined){
+			const details = await getAppDetails(appId);
+			if (!details){
+				this.gameCodes[appId] = null;
+				return undefined;
+			}
+			
+			const launchCommand = getLaunchCommand(details);
+			const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
+			if(!rom){
+				this.gameCodes[appId] = null;
+				return undefined;
+			}
 
-		const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
-		if(!rom)
-			return undefined;
+			// Returned serial is like "WUP-P-AMKE", we only need the last segment
+			const gameSerial = (await call<[string], string | null>("cemu_get_gameserial", rom))?.split('-') ?? null;
+			if(!gameSerial?.length || gameSerial[gameSerial.length-1].length !== 4){
+				this.gameCodes[appId] = null;
+				return undefined;
+			}
 
-		// Returned serial is like "WUP-P-AMKE", we only need the last segment
-		const gameSerial = (await call<[string], string | null>("cemu_get_gameserial", rom))?.split('-') ?? null;
-		if(!gameSerial?.length || gameSerial[gameSerial.length-1].length !== 4)
+			// We only have the code and no publisher
+			code = gameSerial[gameSerial.length-1].substring(0, 4);
+			this.gameCodes[appId] = code;
+		}
+		if(!code)
 			return undefined;
-
-		// We only have the code and no publisher
-		let code = gameSerial[gameSerial.length-1].substring(0, 3);
 
 		// Retrieve all the ids by changing region
 		let regionIds = Object.keys(this.titlesCache)

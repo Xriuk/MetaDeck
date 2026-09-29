@@ -10,18 +10,21 @@ type AllAchievements =
 	   {
 		   loading?: boolean
 		   data?: {
-			   achieved: {
-				   [key: string]: SteamAppAchievement
-			   },
-			   hidden: {
-				   [key: string]: SteamAppAchievement
-			   },
-			   unachieved: {
-				   [key: string]: SteamAppAchievement
-			   },
+				// Achieved hidden/not hidden
+				achieved: {
+					[key: string]: SteamAppAchievement
+				},
+				// Unachieved hidden
+				hidden: {
+					[key: string]: SteamAppAchievement
+				},
+				unachieved: {
+					[key: string]: SteamAppAchievement
+				}
 		   }
 	   }
 
+// Data is percentage of users who achieved (0-100), same as SteamAppAchievement.flAchieved
 type GlobalAchievements =
 	   {
 		   loading?: boolean
@@ -67,13 +70,13 @@ type SteamAppAchievement =
 	strName: string,
 	strDescription: string,
 	bAchieved: boolean,
-	rtUnlocked: number,
+	rtUnlocked: number, // Unlocked date timestamp
 	strImage: string,
 	bHidden: boolean,
 	flMinProgress: number,
-	flCurrentProgress: number,
+	flCurrentProgress: number, // Progress percentage of the player achievement (flMinProgress-flMaxProgress)
 	flMaxProgress: number,
-	flAchieved: number
+	flAchieved: number // Percentage of players who achieved (0-100)
 }
 
 type SteamAppLanguages = {

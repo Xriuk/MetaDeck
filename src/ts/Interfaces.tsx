@@ -3,7 +3,7 @@ import {SiEpicgames, SiFlatpak, SiLutris, SiPrime} from "react-icons/si";
 
 import languages from "./translations";
 import {FaRocket, FaTrash} from "react-icons/fa";
-import type { SteamAppDetails } from "./SteamTypes";
+import type { AllAchievements, GlobalAchievements, SteamAppAchievement, SteamAppDetails } from "./SteamTypes";
 
 export interface MetadataData
 {
@@ -14,9 +14,11 @@ export interface MetadataData
 	developers?: Developer[];
 	publishers?: Publisher[];
 	release_date?: number;
+
 	rating?: number;
 	install_size?: number;
 	install_date?: number;
+
 	store_categories: (StoreCategory | CustomStoreCategory)[];
 }
 
@@ -37,9 +39,19 @@ export interface CompatdataData
 	frame_test_results?: SteamAppDetails['vecSteamFrameCompatTestResults'];
 }
 
-export type ID = number | string
+export interface AchievementsData
+{
+	title: string;
+	id: ID;
 
-export type IDDictionary = Record<number, ID>
+	achievements: SteamAppAchievement[];
+}
+
+export const SteamAppTypeShortcut = 1073741824;
+
+export type ID = number | string;
+
+export type IDDictionary = Record<number, ID>;
 
 export interface Developer
 {
@@ -87,6 +99,8 @@ export enum StoreCategory
 	CommentaryAvailable = 14,
 	PartialController = 18,
 	MMO = 20,
+	// Do not use in Metadata providers
+	Achievements = 22,
 	SplitScreen = 24,
 	CrossPlatformMultiPlayer = 27,
 	FullController = 28,

@@ -32,8 +32,10 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	private verifiedDB: Record<string, VerifiedDBResults> = {};
 
-	async getVerifiedDB(): Promise<void>
+	override async mount(): Promise<void>
 	{
+		await super.mount();
+
 		const response = (await fetchNoCors("https://opensheet.elk.sh/1fRqvAh_wW8Ho_8i966CCSBgPJ2R_SuDFIvvKsQCv05w/Database"));
 		if (response.ok)
 		{
@@ -49,12 +51,6 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 					}, {});
 			}
 		}
-	}
-
-	override async mount(): Promise<void>
-	{
-		await super.mount();
-		await this.getVerifiedDB();
 	}
 
 	private async getConsoleNames(appId: number): Promise<string[] | undefined>{
@@ -99,6 +95,17 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		
 		else
 			return undefined; // Unknown (match all)
+	}
+
+	override async test(appId: number): Promise<boolean>
+	{
+		const details = await getAppDetails(appId);
+		if(!details)
+			return false;
+		if(!isEmulatedGame(getLaunchCommand(details)))
+			return false;
+
+		return await super.test(appId);
 	}
 
 	protected async search(title: string, consoleNames?: string[]): Promise<CompatdataData[]>{
@@ -158,186 +165,184 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		});
 	}
 
-	public override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
+	protected override async enrichCompatdataForGame(appId: number, game: CompatdataData): Promise<void> {
+		// Retrieve missing info
+		if(game.deck_test_results?.every(r => r.test_result === SteamTestResult.Notes) === false)
+			return;
+
+		const details = (await getAppDetails(appId))!;
+		const launchCommand = getLaunchCommand(details);
+
+		game.deck_test_results ??= [];
+		game.machine_test_results ??= [];
+		game.os_test_results ??= [];
+		game.frame_test_results ??= [];
+		
+		const deckMachineAndFrame = [
+			[game.deck_test_results, "SteamDeckVerified" as string],
+			[game.machine_test_results, "SteamMachine" as string],
+			[game.frame_test_results, "SteamFrame" as string]
+		] as const;
+		const deckMachineOSAndFrame = [
+			[game.deck_test_results, "SteamDeckVerified" as string],
+			[game.machine_test_results, "SteamMachine" as string],
+			[game.os_test_results, "SteamOS" as string],
+			[game.frame_test_results, "SteamFrame" as string]
+		] as const;
+		const machineAndFrame = [
+			[game.machine_test_results, "SteamMachine" as string],
+			[game.frame_test_results, "SteamFrame" as string]
+		] as const;
+
+		// Only on Xbox and Xbox 360 the glyphs do match
+		if(isXemuGame(launchCommand) || isXeniaGame(launchCommand)){
+			game.deck_test_results!.push({
+				test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsMatchDeckDevice',
+				test_result: SteamTestResult.Verified
+			});
+			machineAndFrame.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_ControllerGlyphsMatchDevice`,
+						test_result: SteamTestResult.Verified
+					}
+				);
+			});
+		}
+		else{
+			game.deck_test_results.push({
+				test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsDoNotMatchDeckDevice',
+				test_result: SteamTestResult.Playable
+			});
+			machineAndFrame.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
+						test_result: SteamTestResult.Playable
+					}
+				);
+			});
+		}
+
+		// Controller works on:
+		// PS1, PS2, PS3, PS4, PSP, PS Vita
+		// Xbox, Xbox 360
+		// N64
+		// Dreamcast
+		// Note: GameCube also has controller but we cannot detect it from Dolphin here (or maybe we could retrieve the id6)
+		if(isDuckstationGame(launchCommand) || isPCSX2Game(launchCommand) || isRPCS3Game(launchCommand) || isShadPS4Game(launchCommand) ||
+				isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) ||
+			isXemuGame(launchCommand) || isXeniaGame(launchCommand) ||
+			isRosaliesMupenGUIGame(launchCommand) ||
+			isFlycastGame(launchCommand)){
+
+			deckMachineAndFrame.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+						test_result: SteamTestResult.Verified
+					}
+				);
+			});
+		}
+		else{
+			deckMachineOSAndFrame.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_DefaultControllerConfigNotFullyFunctional`,
+						test_result: SteamTestResult.Playable
+					}
+				);
+			});
+		}
+
+		// Default configuration works fine for playable games
+		if(game.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
+			deckMachineAndFrame.forEach(([results, cat]) => {
+				results.push(
+					{
+						test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
+						test_result: SteamTestResult.Verified
+					}
+				);
+			});
+		}
+
+		// Portable consoles should have correct interface text size on Deck
+		if(isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) || isMelonDSGame(launchCommand) || isMGBAGame(launchCommand) || isRyujinxGame(launchCommand)){
+			game.deck_test_results.push({
+				test_loc_token: '#SteamDeckVerified_TestResult_InterfaceTextIsLegible',
+				test_result: SteamTestResult.Verified
+			});
+		}
+
+		// Only PS3, PS4, Xbox 360 and Switch should have the correct deck resolution
+		if(!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isXeniaGame(launchCommand) && !isRyujinxGame(launchCommand)){
+			game.deck_test_results.push({
+				test_loc_token: '#SteamDeckVerified_TestResult_NativeResolutionNotDefault',
+				test_result: SteamTestResult.Playable
+			});
+		}
+	}
+
+	protected override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
-		const launchCommand = getLaunchCommand(details);
 
-		this.logger.debug(`Fetching compatdata for game ${appId}`)
+		this.logger.debug(`Fetching compatdata for game ${appId}`);
 
 		const display_name = details.strDisplayName;
+		const console_names = await this.getConsoleNames(appId);
+		const results = await this.search(display_name, console_names);
+		if (!results.length)
+			return undefined;
+
 		const data_id = this.overrides[appId];
-		let consoleNames = await this.getConsoleNames(appId);
 		this.logger.debug("data_id", data_id);
-		const results = await this.search(display_name, consoleNames);
-		if (results.length > 0)
+		
+		let games: CompatdataData[];
+		if (data_id === undefined)
 		{
-			this.logger.debug("results", results);
-			let games: CompatdataData[];
-			if (data_id === undefined)
-			{
-				const names = results.map(value => value.title);
-				const closest_name = closestWithLimit(this.fuzziness, display_name, names);
-				this.logger.debug(closest_name, results.map(value => value.title));
-				const games1 = results.filter(value => value.title === closest_name);
-				this.logger.debug("Games: ", games1);
-				games = games1;
-			} else if (data_id === 0)
-			{
-				return undefined;
-			} else
-			{
-				games = results.filter(value => value.id === data_id)
-			}
-			const game = games.reverse().pop();
+			const names = results.map(value => value.title);
+			const closest_name = closestWithLimit(this.fuzziness, display_name, names);
+			this.logger.debug(closest_name, names);
 
-			// Retrieve missing info
-			if(game && game.deck_test_results?.every(r => r.test_result === SteamTestResult.Notes) !== false){
-				game.deck_test_results ??= [];
-				game.machine_test_results ??= [];
-				game.os_test_results ??= [];
-				game.frame_test_results ??= [];
-				
-				const deckMachineAndFrame = [
-					[game.deck_test_results, "SteamDeckVerified" as string],
-					[game.machine_test_results, "SteamMachine" as string],
-					[game.frame_test_results, "SteamFrame" as string]
-				] as const;
-				const deckMachineOSAndFrame = [
-					[game.deck_test_results, "SteamDeckVerified" as string],
-					[game.machine_test_results, "SteamMachine" as string],
-					[game.os_test_results, "SteamOS" as string],
-					[game.frame_test_results, "SteamFrame" as string]
-				] as const;
-				const machineAndFrame = [
-					[game.machine_test_results, "SteamMachine" as string],
-					[game.frame_test_results, "SteamFrame" as string]
-				] as const;
-
-				// Only on Xbox and Xbox 360 the glyphs do match
-				if(isXemuGame(launchCommand) || isXeniaGame(launchCommand)){
-					game.deck_test_results!.push({
-						test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsMatchDeckDevice',
-						test_result: SteamTestResult.Verified
-					});
-					machineAndFrame.forEach(([results, cat]) => {
-						results.push(
-							{
-								test_loc_token: `#${cat}_TestResult_ControllerGlyphsMatchDevice`,
-								test_result: SteamTestResult.Verified
-							}
-						);
-					});
-				}
-				else{
-					game.deck_test_results.push({
-						test_loc_token: '#SteamDeckVerified_TestResult_ControllerGlyphsDoNotMatchDeckDevice',
-						test_result: SteamTestResult.Playable
-					});
-					machineAndFrame.forEach(([results, cat]) => {
-						results.push(
-							{
-								test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
-								test_result: SteamTestResult.Playable
-							}
-						);
-					});
-				}
-
-				// Controller works on:
-				// PS1, PS2, PS3, PS4, PSP, PS Vita
-				// Xbox, Xbox 360
-				// N64
-				// Dreamcast
-				// Note: GameCube also has controller but we cannot detect it from Dolphin here
-				if(isDuckstationGame(launchCommand) || isPCSX2Game(launchCommand) || isRPCS3Game(launchCommand) || isShadPS4Game(launchCommand) ||
-						isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) ||
-					isXemuGame(launchCommand) || isXeniaGame(launchCommand) ||
-					isRosaliesMupenGUIGame(launchCommand) ||
-					isFlycastGame(launchCommand)){
-
-					deckMachineAndFrame.forEach(([results, cat]) => {
-						results.push(
-							{
-								test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
-								test_result: SteamTestResult.Verified
-							}
-						);
-					});
-				}
-				else{
-					deckMachineOSAndFrame.forEach(([results, cat]) => {
-						results.push(
-							{
-								test_loc_token: `#${cat}_TestResult_DefaultControllerConfigNotFullyFunctional`,
-								test_result: SteamTestResult.Playable
-							}
-						);
-					});
-				}
-
-				// Default configuration works fine for playable games
-				if(game.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
-					deckMachineAndFrame.forEach(([results, cat]) => {
-						results.push(
-							{
-								test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
-								test_result: SteamTestResult.Verified
-							}
-						);
-					});
-				}
-
-				// Portable consoles should have correct interface text size on Deck
-				if(isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) || isMelonDSGame(launchCommand) || isMGBAGame(launchCommand) || isRyujinxGame(launchCommand)){
-					game.deck_test_results.push({
-						test_loc_token: '#SteamDeckVerified_TestResult_InterfaceTextIsLegible',
-						test_result: SteamTestResult.Verified
-					});
-				}
-
-				// Only PS3, PS4, Xbox 360 and Switch should have the correct deck resolution
-				if(!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isXeniaGame(launchCommand) && !isRyujinxGame(launchCommand)){
-					game.deck_test_results.push({
-						test_loc_token: '#SteamDeckVerified_TestResult_NativeResolutionNotDefault',
-						test_result: SteamTestResult.Playable
-					});
-				}
-			}
-
-			this.logger.debug(game);
-			return game;
-
-		} else return undefined;
-		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
+			games = results.filter(value => value.title === closest_name);
+			this.logger.debug("Games: ", games);
+		}
+		else if (data_id === 0)
+			return undefined;
+		else
+			games = results.filter(value => value.id === data_id);
+		
+		const game = games.reverse().pop();
+		if (game)
+			await this.enrichCompatdataForGame(appId, game);
+		this.logger.debug(game);
+		return game;
 	}
 
-	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title'>> | undefined>
-	{
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
-		let consoleNames = await this.getConsoleNames(appId);
-		const results = await this.search(display_name, consoleNames);
-
-		// We add all results without limiting them for overrides
-		if (results.length > 0)
-		{
-			let ret: Record<ID, CompatdataData> = {};
-			for (let game of results)
-			{
-				ret[game.id] = game;
-			}
-			return ret;
-		} else return undefined;
-	}
-
-	override async test(appId: number): Promise<boolean>
+	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title' | 'id'>> | undefined>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
-			return false;
-		return isEmulatedGame(getLaunchCommand(details));
+			return undefined;
+
+		const display_name = details.strDisplayName;
+		const console_names = await this.getConsoleNames(appId);
+		const results = await this.search(display_name, console_names);
+
+		// We add all results without limiting them for overrides
+		if (!results.length)
+			return undefined;
+
+		let ret: Record<ID, Pick<CompatdataData, 'title' | 'id'>> = {};
+		for (let game of results){
+			ret[game.id] = game;
+		}
+		return ret;
 	}
 
 	override icon = <FaGamepad/>;

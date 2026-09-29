@@ -1,16 +1,16 @@
-import {ResolverCache, ResolverConfig} from "../../Resolver";
+import {ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isPCSX2Game, romRegex} from "../../../shortcuts";
 import {getAppDetails} from "../../../util";
 import { type MultiIdResolverConfigs } from "./MultiIdResolver";
 import { call } from "@decky/api";
-import { MultiIdSerialStationResolver } from "./MultiIdSerialStation";
+import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache } from "./MultiIdSerialStation";
 
 export interface MultiIdPCSX2ResolverConfig extends ResolverConfig
 {
 	
 }
 
-export interface MultiIdPCSX2ResolverCache extends ResolverCache
+export interface MultiIdPCSX2ResolverCache extends MultiIdSerialStationResolverCache
 {
 
 }

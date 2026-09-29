@@ -1,19 +1,19 @@
-import {ResolverCache, ResolverConfig} from "../../Resolver";
+import {ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isRPCS3Game, romRegex} from "../../../shortcuts";
 import {getAppDetails} from "../../../util";
 import { type MultiIdResolverConfigs } from "./MultiIdResolver";
 import { call } from "@decky/api";
-import { MultiIdSerialStationResolver } from "./MultiIdSerialStation";
+import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache } from "./MultiIdSerialStation";
 
-const rpcs3IdRegex = '\\/dev_hdd0\\/game\\/([A-Z0-9]+)\\/';
-const rpcs3RomPathRegex = '(\\/home\\/deck\\/.+\\/PS3_GAME)\\/USRDIR\\/EBOOT\\.BIN';
+export const rpcs3IdRegex = '\\/dev_hdd0\\/game\\/([A-Z0-9]+)\\/';
+export const rpcs3RomPathRegex = '(\\/home\\/deck\\/.+\\/PS3_GAME)\\/USRDIR\\/EBOOT\\.BIN';
 
 export interface MultiIdRPCS3ResolverConfig extends ResolverConfig
 {
 	
 }
 
-export interface MultiIdRPCS3ResolverCache extends ResolverCache
+export interface MultiIdRPCS3ResolverCache extends MultiIdSerialStationResolverCache
 {
 	
 }
@@ -34,8 +34,8 @@ export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
-		const launchCommand = getLaunchCommand(details);
 
+		const launchCommand = getLaunchCommand(details);
 		const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
 		if(!rom)
 			return undefined;
@@ -48,11 +48,11 @@ export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver
 			if(!romFolder)
 				return undefined;
 
-			titleId = await call<[string], string | null>("rpcs3_get_titleid", romFolder);
-			if(!titleId)
-				return undefined;
+			return await call<[string], string | null>("rpcs3_get_titleid", romFolder) ?? undefined;
 		}
 
 		return titleId;
 	}
+
+	// DEV: maybe retrieve and match title from GameTDB to retrieve other regions?
 }

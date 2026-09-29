@@ -1,10 +1,6 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
-import {
-	getLaunchCommand, isPCSX2Game
-} from "../../../shortcuts";
 import { removeAfterAndIncluding, removeBeforeAndIncluding } from "../../GamesDBResult";
 import Logger from "../../../logger";
 import type { ProviderCache, ProviderConfig } from "../../Provider";
@@ -116,14 +112,6 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 	{
 		await super.mount();
 		await this.getCompatData();
-	}
-
-	async test(appId: number): Promise<boolean>
-	{
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-		return isPCSX2Game(getLaunchCommand(details));
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{

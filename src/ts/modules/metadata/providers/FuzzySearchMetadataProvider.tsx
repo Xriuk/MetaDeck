@@ -20,6 +20,7 @@ export interface FuzzySearchMetadataProviderConfig extends ProviderConfig<{}, Re
 
 export interface FuzzySearchMetadataProviderCache extends ProviderCache<{}, ResolverCache>
 {
+
 }
 
 export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
@@ -49,88 +50,104 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		void this.module.saveData();
 	}
 
-	provide(appId: number): Promise<MetadataData | undefined>
-	{
-		return this.throttle(() => this.getMetadataForGame(appId));
-	}
-
-	async test(appId: number): Promise<boolean>
+	// DEV: maybe make abstract and avoid double-search?
+	override async test(appId: number): Promise<boolean>
 	{
 		if (this.overrides[appId] == 0)
 			return false;
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
+
+		const details = await getAppDetails(appId);
+		if(!details)
+			return false;
+
+		const display_name = details.strDisplayName;
 		const results = await this.throttle(() => this.search(display_name));
+
 		const names = results.map(value => value.title);
 		const closest_names = distanceWithLimit(this.fuzziness, display_name, names);
 		return closest_names.length > 0;
 	}
 
+	provide(appId: number): Promise<MetadataData | undefined>
+	{
+		return this.throttle(() => this.getMetadataForGame(appId));
+	}
+
 	protected abstract search(title: string): Promise<MetadataData[]>;
 
-	public async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
+	// Used to retrieve initial data for all the results in search and more specific data here if needed
+	protected enrichMetadataForGame(_appId: number, _game: MetadataData): Promise<void>{
+		return Promise.resolve();
+	}
+
+	protected async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
 
-		this.logger.debug(`Fetching metadata for game ${appId}`)
+		this.logger.debug(`Fetching metadata for game ${appId}`);
 
 		const display_name = details.strDisplayName;
+		const results = await this.search(display_name);
+		if (!results.length)
+			return undefined;
+
+		this.logger.debug("Results", results);
+
 		const data_id = this.overrides[appId];
 		this.logger.debug("data_id", data_id);
-		const results = await this.search(display_name);
-		if (results.length > 0)
-		{
-			this.logger.debug("results", results);
-			let games: MetadataData[];
-			if (data_id === undefined)
-			{
-				const names = results.map(value => value.title);
-				const closest_name = closestWithLimit(this.fuzziness, display_name, names)
-				this.logger.debug(closest_name, results.map(value => value.title))
-				const games1 = results.filter(value => value.title === closest_name)
-				this.logger.debug("Games: ", games1)
-				games = games1;
-			} else if (data_id === 0)
-			{
-				return undefined;
-			} else
-			{
-				games = results.filter(value => value.id === data_id)
-			}
-			const game = games.reverse().pop();
-			if (game)
-			{
-				game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
-			}
-			this.logger.debug(game);
-			return game;
 
-		} else return undefined;
-		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
+		let games: MetadataData[];
+		if (data_id === undefined)
+		{
+			const names = results.map(value => value.title);
+			const closest_name = closestWithLimit(this.fuzziness, display_name, names);
+			this.logger.debug(closest_name, names);
+
+			games = results.filter(value => value.title === closest_name);
+			this.logger.debug("Games: ", games);
+		}
+		else if (data_id === 0)
+			return undefined;
+		else
+			games = results.filter(value => value.id === data_id);
+
+		const game = games.reverse().pop();
+		if (game)
+		{
+			game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
+
+			await this.enrichMetadataForGame(appId, game);
+		}
+		this.logger.debug(game);
+		return game;
 	}
 
-	protected async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title'>> | undefined>
+	protected async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title' | 'id'>> | undefined>
 	{
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
+		const details = await getAppDetails(appId);
+		if(!details)
+			return undefined;
+
+		const display_name = details.strDisplayName;
 		const results = await this.search(display_name);
 
 		// We add all results without limiting them for overrides
-		if (results.length > 0)
-		{
-			let ret: Record<ID, MetadataData> = {};
-			for (let game of results)
-			{
-				ret[game.id] = game;
-			}
-			return ret;
-		} else return undefined;
+		if (!results.length)
+			return undefined;
+
+		let ret: Record<ID, MetadataData> = {};
+		for (let game of results){
+			ret[game.id] = game;
+		}
+		return ret;
 	}
 
 	private file_size: (path: string) => Promise<number> = callable("file_size");
 	private file_date: (path: string) => Promise<number> = callable("file_date");
 
-	async apply(appId: number, data: MetadataData): Promise<void>
+	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)

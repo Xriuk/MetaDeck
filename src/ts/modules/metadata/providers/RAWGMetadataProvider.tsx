@@ -20,6 +20,11 @@ import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import { FaR } from "react-icons/fa6";
 
+type RAWGAchievement = {
+	name: string;
+	percent: string;
+};
+
 export interface RAWGMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
 	api_key: string
@@ -27,6 +32,7 @@ export interface RAWGMetadataProviderConfig extends FuzzySearchMetadataProviderC
 
 export interface RAWGMetadataProviderCache extends FuzzySearchMetadataProviderCache
 {
+	
 }
 
 export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
@@ -38,12 +44,12 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	logger: Logger = new Logger(RAWGMetadataProvider.identifier)
 
-	get api_key(): string
+	get apiKey(): string
 	{
 		return this.module.config.providers.rawg.api_key;
 	}
 
-	set api_key(api_key: string)
+	set apiKey(api_key: string)
 	{
 		this.module.config.providers.rawg.api_key = api_key;
 		void this.module.saveData();
@@ -98,14 +104,20 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	override async test(appId: number): Promise<boolean>
 	{
-		if(!this.api_key)
+		if(!this.apiKey)
 			return false;
 
 		if (this.overrides[appId] == 0)
 			return false;
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
+
+		const details = await getAppDetails(appId);
+		if(!details)
+			return false;
+
+		const display_name = details.strDisplayName;
 		const platform_ids = await this.getPlatformIds(appId);
 		const results = await this.throttle(() => this.search(display_name, platform_ids));
+
 		const names = results.map(value => value.title);
 		const closest_names = distanceWithLimit(this.fuzziness, display_name, names);
 		return closest_names.length > 0;
@@ -113,13 +125,13 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	protected async search(title: string, platformIds?: string | undefined): Promise<MetadataData[]>
 	{
-		if(!this.api_key)
+		if(!this.apiKey)
 			return [];
 
 		let params: Record<string, string> = {
-			key: this.api_key,
+			key: this.apiKey,
 			search: title,
-			page_size: '5' // Will filter them by distance
+			page_size: '10' // Will filter them by distance
 		};
 		if(platformIds)
 			params.platforms = platformIds;
@@ -170,7 +182,8 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 			return games.results.map(i => ({
 				id: i.id,
 				title: i.name,
-				description: '', // Will retrieve in getMetadataForGame
+
+				description: '', // Will enrich later
 				rating: i.metacritic,
 				release_date: i.released ? Math.floor(new Date(i.released).getTime() / 1000) : undefined,
 				store_categories: i.tags
@@ -178,14 +191,54 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 					.filter(t => t)
 						?? []
 			}));
-		} else if (response.status === 429)
-		{
+		}
+		else if (response.status === 429)
 			return this.throttle(() => this.search(title, platformIds));
-		} else if (response.status >= 500) return[]
-		else throw Error(`Could not find metadata for "${title}": \n${await response.text()}`);
+		else if (response.status >= 500)
+			return[]
+		else{
+			// Clear to avoid errors
+			if(response.status == 403)
+				this.apiKey = '';
+			
+			throw Error(`Could not find metadata for "${title}": \n${await response.text()}`);
+		}
 	}
 
-	public override async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
+	protected override async enrichMetadataForGame(appId: number, game: MetadataData): Promise<void> {
+		if(game.description)
+			return;
+
+		if(!this.apiKey){
+			game.description = t("noDescription"); // To not enrich again
+			return;
+		}
+
+		const details = (await getAppDetails(appId))!;
+		game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
+
+		const response = await fetchNoCors(`https://api.rawg.io/api/games/${game.id}?key=${this.apiKey}`);
+		if(!response.ok){
+			game.description = t("noDescription"); // To not enrich again
+			return;
+		}
+
+		let gameR: {
+			description_raw?: string;
+			developers?: {
+				name: string;
+			}[];
+			publishers?: {
+				name: string;
+			}[];
+		} = await response.json();
+		
+		game.description = gameR.description_raw || t("noDescription");
+		game.developers = gameR.developers?.map(d => ({ name: d.name, url: '' }));
+		game.publishers = gameR.publishers?.map(p => ({ name: p.name, url: '' }));
+	}
+
+	protected override async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
@@ -195,83 +248,67 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 		const display_name = details.strDisplayName;
 		const platform_ids = await this.getPlatformIds(appId);
+		const results = await this.search(display_name, platform_ids);
+		if (!results.length)
+			return undefined;
+
+		this.logger.debug("Results", results);
+
 		const data_id = this.overrides[appId];
 		this.logger.debug("data_id", data_id);
-		const results = await this.search(display_name, platform_ids);
-		if (results.length > 0)
+
+		let games: MetadataData[];
+		if (data_id === undefined)
 		{
-			this.logger.debug("results", results);
-			let games: MetadataData[];
-			if (data_id === undefined)
-			{
-				const names = results.map(value => value.title);
-				const closest_name = closestWithLimit(this.fuzziness, display_name, names)
-				this.logger.debug(closest_name, results.map(value => value.title))
-				const games1 = results.filter(value => value.title === closest_name)
-				this.logger.debug("Games: ", games1)
-				games = games1;
-			} else if (data_id === 0)
-			{
-				return undefined;
-			} else
-			{
-				games = results.filter(value => value.id === data_id)
-			}
-			const game = games.reverse().pop();
-			if (game)
-			{
-				// Retrieve only missing details of a matching game instead of all of them
-				if(!game.description && this.api_key){
-					game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
+			const names = results.map(value => value.title);
+			const closest_name = closestWithLimit(this.fuzziness, display_name, names);
+			this.logger.debug(closest_name, names);
 
-					const response = await fetchNoCors(`https://api.rawg.io/api/games/${game.id}?key=${this.api_key}`);
-					if (response.ok){
-						let gameR: {
-							description_raw?: string;
-							developers?: {
-								name: string;
-							}[];
-							publishers?: {
-								name: string;
-							}[];
-						} = await response.json();
-						
-						game.description = gameR.description_raw || t("noDescription");
-						game.developers = gameR.developers?.map(d => ({ name: d.name, url: '' }));
-						game.publishers = gameR.publishers?.map(p => ({ name: p.name, url: '' }));
-					}
-				}
-			}
-			this.logger.debug(game);
-			return game;
+			games = results.filter(value => value.title === closest_name);
+			this.logger.debug("Games: ", games);
+		}
+		else if (data_id === 0)
+			return undefined;
+		else
+			games = results.filter(value => value.id === data_id);
 
-		} else return undefined;
-		// } else reject(new Error(`HTTP ERROR: ${response.status}`));
+		const game = games.reverse().pop();
+		if (game)
+		{
+			game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
+
+			await this.enrichMetadataForGame(appId, game);
+		}
+		this.logger.debug(game);
+		return game;
 	}
 
-	protected override async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title'>> | undefined>
+	protected override async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title' | 'id'>> | undefined>
 	{
-		const display_name = appStore.GetAppOverviewByAppID(appId)?.display_name;
+		const details = await getAppDetails(appId);
+		if(!details)
+			return undefined;
+
+		const display_name = details.strDisplayName;
 		const platform_ids = await this.getPlatformIds(appId);
 		const results = await this.search(display_name, platform_ids);
-		
+
 		// We add all results without limiting them for overrides
-		if (results.length > 0)
-		{
-			let ret: Record<ID, MetadataData> = {};
-			for (let game of results)
-			{
-				ret[game.id] = game;
-			}
-			return ret;
-		} else return undefined;
+		if (!results.length)
+			return undefined;
+
+		let ret: Record<ID, MetadataData> = {};
+		for (let game of results){
+			ret[game.id] = game;
+		}
+		return ret;
 	}
 
 	override icon = <FaR/>;
 
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [apiKey, setApiKey] = useState(this.api_key);
+		const [apiKey, setApiKey] = useState(this.apiKey);
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
 		return (
@@ -285,7 +322,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 								disabled={loadingData.loading}
 								onChange={(event) => {
 									setApiKey(event.target.value);
-									this.api_key = event.target.value;
+									this.apiKey = event.target.value;
 								}}/>
 						} />
 					<Field description={
@@ -340,5 +377,37 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 				</DialogControlsSection>
 			</>
 		)
+	}
+
+
+	public async getAchievementsForGame(appId: number): Promise<RAWGAchievement[] | undefined>{
+		const metadata = await this.getMetadataForGame(appId);
+		if(!metadata)
+			return undefined;
+
+		let totalAchievements: {
+			name: string;
+			percent: string;
+		}[] = [];
+		let achievements: {
+			next: string | null;
+			results: typeof totalAchievements;
+		} = {
+			next: `https://api.rawg.io/api/games/${metadata.id}/?` + new URLSearchParams({
+				key: this.apiKey
+			}).toString(),
+			results: []
+		};
+		let response: Response;
+		do{
+			response = await fetchNoCors(achievements.next!);
+			if(response.ok){
+				achievements = await response.json();
+				totalAchievements.push(...(achievements.results ?? []));
+			}
+		}
+		while(response.ok && achievements.next);
+
+		return totalAchievements;
 	}
 }

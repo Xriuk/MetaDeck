@@ -79,7 +79,7 @@ export class Settings
 							}
 						}
 					},
-					// Fuzzy search (localized)
+					// Id-based/Fuzzy search (localized)
 					steam: {
 						enabled: true,
 						ordinal: 2,
@@ -103,6 +103,12 @@ export class Settings
 						overrides: {},
 						resolvers: {},
 						api_key: ''
+					},
+					// Id-based (fallback)
+					ra: {
+						enabled: true,
+						ordinal: 5,
+						resolvers: {}
 					}
 				}
 			},
@@ -172,6 +178,56 @@ export class Settings
 						resolvers: {}
 					}
 				}
+			},
+			achievements: {
+				enabled: true,
+				category: true,
+				app_details: true,
+				overlay_menu: true,
+				providers: {
+					ra: {
+						enabled: true,
+						ordinal: 0,
+						username: '',
+						api_key: '',
+						points: true,
+						resolvers: {
+							ra: {
+								enabled: true,
+								ordinal: 0
+							}
+						}
+					},
+					rpcs3: {
+						enabled: true,
+						ordinal: 1,
+						user_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/home/00000001',
+						language: 'EN',
+						trophy_categories: true,
+						psn_npsso: '',
+						resolvers: {
+							rpcs3: {
+								enabled: true,
+								ordinal: 0,
+								hdd_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/'
+							}
+						}
+					},
+					xenia: {
+						enabled: true,
+						ordinal: 2,
+						user_path: '',
+						language: 'EN',
+						gamerscore: true,
+						description_locked: null,
+						resolvers: {
+							xenia: {
+								enabled: true,
+								ordinal: 0
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -196,12 +252,21 @@ export class Settings
 					},
 					gametdb: {
 						resolvers: {
-							dolphin: {},
-							cemu: {},
-							rpcs3: {}
+							dolphin: {
+								game_id6s: {}
+							},
+							cemu: {
+								game_codes: {}
+							},
+							rpcs3: {
+								title_ids: {}
+							}
 						}
 					},
 					lizardbyte: {
+						resolvers: {}
+					},
+					ra: {
 						resolvers: {}
 					}
 				}
@@ -214,26 +279,63 @@ export class Settings
 					},
 					pcsx2: {
 						resolvers: {
-							pcsx2: {}
+							pcsx2: {
+								title_ids: {}
+							}
 						}
 					},
 					rpcs3: {
 						resolvers: {
-							rpcs3: {}
+							rpcs3: {
+								title_ids: {}
+							}
 						}
 					},
 					xenia: {
 						resolvers: {
-							xenia: {}
+							xenia: {
+								title_ids: {}
+							}
 						}
 					},
 					dolphin: {
 						resolvers: {
-							dolphin: {}
+							dolphin: {
+								game_id6s: {}
+							}
 						}
 					},
 					cemu: {
 						resolvers: {}
+					}
+				}
+			},
+			achievements: {
+				data: {},
+				providers: {
+					ra: {
+						game_info: {},
+						resolvers: {
+							ra: {
+								hashes: {}
+							}
+						}
+					},
+					rpcs3: {
+						game_trophies: {},
+						resolvers: {
+							rpcs3: {
+								npwr_ids: {}
+							}
+						}
+					},
+					xenia: {
+						game_achievements: {},
+						resolvers: {
+							xenia: {
+								title_ids: {}
+							}
+						}
 					}
 				}
 			}

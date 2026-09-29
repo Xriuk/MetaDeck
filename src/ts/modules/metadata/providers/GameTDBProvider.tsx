@@ -18,7 +18,7 @@ import { FaG } from "react-icons/fa6";
 import { MultiIdCemuResolver } from "../../resolvers/MultiId/MultiIdCemuResolver";
 
 const wiiUrl = "https://www.gametdb.com/wiitdb.zip";
-const cemuUrl = "https://www.gametdb.com/wiiutdb.zip";
+const wiiUUrl = "https://www.gametdb.com/wiiutdb.zip";
 const ps3Url = "https://www.gametdb.com/ps3tdb.zip";
 
 type GameTDBGame = {
@@ -49,7 +49,7 @@ export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiId
 	
 }
 
-// DEV: add support for DS, WiiU and Switch games
+// DEV: add support for DS and Switch games
 export class GameTDBMetadataProvider extends MetadataProvider<any>{
 	resolvers: MultiIdResolver[] = [
 		new MultiIdDolphinResolver(this),
@@ -84,20 +84,12 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		// Save in backend instead of returning because there's a lot of data
 		try{
 			await this.gametdb_get_db(wiiUrl);
+			await this.gametdb_get_db(wiiUUrl);
 			await this.gametdb_get_db(ps3Url);
 		}
 		catch(e){
 			this.logger.error("Error while retrieving one or more zip file", e);
 		}
-	}
-
-	async test(appId: number): Promise<boolean>
-	{
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-		const launchCommand = getLaunchCommand(details);
-		return isDolphinGame(launchCommand) || isRPCS3Game(launchCommand);
 	}
 
 	private getLocalized(
@@ -159,6 +151,23 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 					cats.push(StoreCategory.PartialController);
 			}
 		}
+		else if(isCemuGame(launchCommand)){
+			for(let id in ids){
+				let entry = await this.gametdb_get_entry(wiiUUrl, id);
+				if(entry)
+					entries.push(entry);
+			}
+
+			if(entries.length){
+				cats.push(StoreCategory.FullController);
+				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
+					cats.push(StoreCategory.MultiPlayer);
+				if(entries.some(e => e["wi-fi-players"]))
+					cats.push(StoreCategory.OnlineMultiPlayer);
+				if(entries.some(e => e.controls?.some(c => c.type === 'wiimote' || c.type === 'nunchuk')))
+					cats.push(StoreCategory.TrackedControllerSupport);
+			}
+		}
 		else if(isRPCS3Game(launchCommand)){
 			for(let id in ids){
 				let entry = await this.gametdb_get_entry(ps3Url, id);
@@ -188,7 +197,6 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			title: this.getLocalized(locales, l => l.title)?.title
 				?? entries[0].name,
 			description: this.getLocalized(locales, l => l.title)?.synopsis || t("noDescription"),
-			rating: undefined, // DEV: maybe retrieve somehow?
 			release_date: release ? Math.floor(Date.parse(release) / 1000) : undefined,
 			developers: entries
 				.find(e => e.developer)?.developer
@@ -221,7 +229,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 									this.language = event.target.value;
 								}}/>
 							<br/>
-							<span>{t("gameTDBLanguageDescription")}</span>
+							<span>{t("languageShortDescription")}</span>
 						</>
 					} />
 			</DialogControlsSection>
@@ -246,8 +254,8 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 
 		return entries;
 	}
-
 	
+
 	public async getDolphinGameEntries(appId: number): Promise<GameTDBGame[]>{
 		const details = await getAppDetails(appId);
 		if (!details)
@@ -267,7 +275,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		if(!isCemuGame(launchCommand))
 			return [];
 		
-		return this.getGameEntries(appId, cemuUrl);
+		return this.getGameEntries(appId, wiiUUrl);
 	}
 
 	public async getRPCS3GameEntries(appId: number): Promise<GameTDBGame[]>{

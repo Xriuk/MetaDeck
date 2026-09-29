@@ -10,6 +10,8 @@ import {getAppDetails, stateTransaction} from "../util";
 import {format, t} from "../useTranslations";
 import PromisePool from "es6-promise-pool";
 import {ResolverCache, ResolverConfig} from "./Resolver";
+import { SteamAppTypeShortcut } from "../Interfaces";
+import type { AchievementsCache, AchievementsConfig } from "./achievements/AchievementsModule";
 
 export interface ModuleConfig<ProvConfigs extends Record<keyof ProvConfigs, ProvConfig>, ProvConfig extends ProviderConfig<any, any>>
 {
@@ -25,14 +27,16 @@ export interface ModuleCache<ProvCaches extends Record<keyof ProvCaches, ProvCac
 
 export interface ModuleConfigs
 {
-	metadata: MetadataConfig,
-	compatdata: CompatdataConfig
+	metadata: MetadataConfig;
+	compatdata: CompatdataConfig;
+	achievements: AchievementsConfig;
 }
 
 export interface ModuleCaches
 {
-	metadata: MetadataCache,
-	compatdata: CompatdataCache
+	metadata: MetadataCache;
+	compatdata: CompatdataCache;
+	achievements: AchievementsCache;
 }
 
 
@@ -127,34 +131,21 @@ export abstract class Module<
 
 	async apply(appId: number): Promise<void>
 	{
-		try
-		{
-			const overview = appStore.GetAppOverviewByAppID(appId)
-			if (overview.app_type == 1073741824)
-			{
-				await this.applyOverview(overview);
-				await stateTransaction(async () => {
-					const details = await getAppDetails(appId);
-					if (details)
-						await this.applyDetails(details);
-				})
-			}
-		} catch (e: any)
-		{
-			this.handleError(e);
-		}
-
+		const overview = appStore.GetAppOverviewByAppID(appId)
+		if (overview.app_type == SteamAppTypeShortcut)
+			await this.applyApp(overview, await getAppDetails(appId));
 	}
 
-	async applyApp(overview: SteamAppOverview, details: SteamAppDetails)
+	async applyApp(overview: SteamAppOverview, details: SteamAppDetails | null)
 	{
 		try
 		{
-			if (overview.app_type == 1073741824)
+			if (overview.app_type == SteamAppTypeShortcut)
 			{
 				await this.applyOverview(overview);
 				await stateTransaction(async () => {
-					await this.applyDetails(details)
+					if(details)
+						await this.applyDetails(details)
 				})
 			}
 		} catch (e: any)
@@ -216,14 +207,13 @@ export abstract class Module<
 
 	public fetchData(appId: number): Data | undefined
 	{
-		try
-		{
+		try{
 			this.logger.debug(`Fetching ${this.identifier} for ${appId}`, this.data[appId], this.data)
 			if (!this.data[appId])
 				void this.fetchDataAsync(appId);
 			return this.data[appId];
-		} catch (e: any)
-		{
+		}
+		catch (e: any){
 			this.handleError(e);
 		}
 	}

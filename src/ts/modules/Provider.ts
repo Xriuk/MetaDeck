@@ -149,7 +149,15 @@ export abstract class Provider<
 		}
 	}
 
-	abstract test(appId: number): Promise<boolean>;
+	async test(appId: number): Promise<boolean>
+	{
+		for(let resolver of this.resolvers){
+			if(await resolver.test(appId))
+				return true;
+		}
+
+		return false;
+	}
 
 	abstract provide(appId: number): Promise<Data | undefined>;
 

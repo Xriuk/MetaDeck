@@ -16,11 +16,13 @@ import { FaSteam } from "react-icons/fa";
 
 export interface SteamMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
-	language: string
+	// english, italian, french, ...
+	language: string;
 }
 
 export interface SteamMetadataProviderCache extends FuzzySearchMetadataProviderCache
 {
+	
 }
 
 export class SteamMetadataProvider extends FuzzySearchMetadataProvider
@@ -104,7 +106,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 				id: i.id,
 				title: i.name,
 				description: i.basic_info?.short_description || t("noDescription"),
-				rating: undefined, // DEV: maybe retrieve from full page in getMetadataForGame?
+				rating: undefined, // DEV: maybe retrieve from full page in enrich?
 				release_date: i.release?.original_release_date || i.release?.steam_release_date || undefined,
 				developers: i.basic_info?.developers?.map(d => ({ name: d.name, url: '' })),
 				publishers: i.basic_info?.publishers?.map(p => ({ name: p.name, url: '' })),
@@ -125,9 +127,9 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
+		const [language, setLanguage] = useState(this.language);
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
-		const [language, setLanguage] = useState(this.language);
 
 		return (
 			<>
@@ -144,7 +146,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 										this.language = event.target.value;
 									}}/>
 								<br/>
-								<span>{t("languageDescription")}</span>
+								<span>{t("languageExtendedDescription")}</span>
 							</>
 						} />
 					<Field

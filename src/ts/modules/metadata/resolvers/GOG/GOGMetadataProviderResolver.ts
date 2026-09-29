@@ -5,4 +5,5 @@ export const separator = "$GOG$";
 
 export abstract class GOGMetadataProviderResolver extends MetadataProviderResolver<GOGMetadataProviderResolver>
 {
+	
 }

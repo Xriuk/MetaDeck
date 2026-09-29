@@ -61,7 +61,7 @@ export class GOGMetadataProviderNSLResolver extends GOGMetadataProviderResolver
 		'install_path': string
 	}> = callable("nsl_egs_data");
 
-	async apply(appId: number, data: MetadataData): Promise<void>
+	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
 		const resolved = await this.resolve(appId);
 		if (!resolved) return;

@@ -1,10 +1,6 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
-import {
-	getLaunchCommand, isXeniaGame
-} from "../../../shortcuts";
 import Logger from "../../../logger";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
 import type { ResolverConfig, ResolverCache } from "../../Resolver";
@@ -26,7 +22,7 @@ export interface XeniaCompatdataProviderConfig extends ProviderConfig<Pick<Multi
 
 export interface XeniaCCompatdataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'xenia'>, ResolverCache>
 {
-
+	
 }
 
 export class XeniaCompatdataProvider extends CompatdataProvider<any>
@@ -61,14 +57,6 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 	{
 		await super.mount();
 		await this.getCompatData();
-	}
-
-	async test(appId: number): Promise<boolean>
-	{
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-		return isXeniaGame(getLaunchCommand(details));
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{

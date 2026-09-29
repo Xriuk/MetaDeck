@@ -12,13 +12,17 @@ export interface MultiIdXeniaResolverConfig extends ResolverConfig
 
 export interface MultiIdXeniaResolverCache extends ResolverCache
 {
-
+	title_ids: Record<number, string | null>;
 }
 
 // Xbox 360 title id is unique across regions, so we don't need to check multiple entries
 export class MultiIdXeniaResolver extends MultiIdResolver
 {
 	identifier: keyof MultiIdResolverConfigs = "xenia";
+
+	get titleIds(): Record<number, string | null>{
+		return (this.cache as MultiIdXeniaResolverCache).title_ids;
+	}
 
 	async test(appId: number): Promise<boolean>
 	{
@@ -29,6 +33,10 @@ export class MultiIdXeniaResolver extends MultiIdResolver
 	}
 
 	async resolve(appId: number): Promise<ID | undefined> {
+		let titleId: string | null | undefined = this.titleIds[appId];
+		if(titleId !== undefined)
+			return titleId ?? undefined;
+
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
@@ -38,6 +46,10 @@ export class MultiIdXeniaResolver extends MultiIdResolver
 		if(!rom)
 			return undefined;
 
-		return await call<[string], string | null>("xenia_get_titleid", rom) ?? undefined;
+		titleId = await call<[string], string | null>("xenia_get_titleid", rom) ?? null;
+
+		this.titleIds[appId] = titleId;
+
+		return titleId ?? undefined;
 	}
 }

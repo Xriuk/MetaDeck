@@ -10,6 +10,7 @@ import {CompatdataModule} from "./modules/compatdata/CompatdataModule";
 import {toaster} from "@decky/api";
 import {EventBus} from "./events";
 import {SteamAppOverview} from "./SteamTypes";
+import { AchievementsModule } from "./modules/achievements/AchievementsModule";
 
 interface GlobalLoadingData
 {
@@ -65,8 +66,9 @@ interface ModuleLoadingData
 
 export interface Modules extends Record<string, Module<any, Provider<any, any, any, any, any, any, any, any, any, any, any, any>, any, any, any, any, any, any, any, any, any>>
 {
-	readonly metadata: MetadataModule,
-	readonly compatdata: CompatdataModule
+	readonly metadata: MetadataModule;
+	readonly compatdata: CompatdataModule;
+	readonly achievements: AchievementsModule;
 }
 
 export interface MetaDeckStateContext
@@ -281,7 +283,8 @@ export class MetaDeckState implements AsyncMountable
 		});
 		this._modules = {
 			metadata: new MetadataModule(this),
-			compatdata: new CompatdataModule(this)
+			compatdata: new CompatdataModule(this),
+			achievements: new AchievementsModule(this)
 		};
 		this.mounts.addMount(this);
 	}

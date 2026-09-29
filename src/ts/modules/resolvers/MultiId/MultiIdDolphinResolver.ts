@@ -12,7 +12,7 @@ export interface MultiIdDolphinResolverConfig extends ResolverConfig
 
 export interface MultiIdDolphinResolverCache extends ResolverCache
 {
-
+	game_id6s: Record<number, string | null>;
 }
 
 export class MultiIdDolphinResolver extends MultiIdResolver
@@ -21,9 +21,11 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 
 	private titlesCache: Record<string, string> = {}; // ID6: Title
 
-	override async mount(): Promise<void> {
-		await super.mount();
+	get gameId6s(): Record<number, string | null>{
+		return (this.cache as MultiIdDolphinResolverCache).game_id6s;
+	}
 
+	override async mount(): Promise<void> {
 		const response = await fetchNoCors("https://www.gametdb.com/wiitdb.txt?LANG=ORIG");
 		if(!response.ok)
 			return;
@@ -37,7 +39,7 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 			if(!id6 || id6.length !== 6)
 				continue;
 
-			this.titlesCache[] = entry.substring(split + 1).trim();
+			this.titlesCache[id6] = entry.substring(split + 1).trim();
 		}
 	}
 
@@ -50,20 +52,32 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 	}
 
 	async resolve(appId: number): Promise<ID | undefined> {
-		const details = await getAppDetails(appId);
-		if (!details)
-			return undefined;
-		const launchCommand = getLaunchCommand(details);
+		let id6: string | null = this.gameId6s[appId];
+		if(id6 === undefined){
+			const details = await getAppDetails(appId);
+			if (!details){
+				this.gameId6s[appId] = null;
+				return undefined;
+			}
 
-		const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
-		if(!rom)
+			const launchCommand = getLaunchCommand(details);
+			const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
+			if(!rom){
+				this.gameId6s[appId] = null;
+				return undefined;
+			}
+
+			id6 = await call<[string], string | null>("dolphin_get_id6", rom) ?? null;
+			if(!id6 || id6.length !== 6){
+				this.gameId6s[appId] = null;
+				return undefined;
+			}
+			this.gameId6s[appId] = id6;
+		}
+		if(!id6)
 			return undefined;
 
-		const id6 = await call<[string], string | null>("dolphin_get_id6", rom) ?? null;
-		if(!id6 || id6.length !== 6)
-			return undefined;
-
-		let code = id6.substring(0, 3);
+		let code = id6.substring(0, 4);
 		let publisher = id6.substring(4);
 
 		// Retrieve other ids by changing region

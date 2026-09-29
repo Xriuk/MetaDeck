@@ -64,7 +64,9 @@
 		"remark-gfm": "^3.0.1",
 		"throttled-queue": "^2.1.4",
 		"tslib": "^2.6.3",
-		"type-steamapi": "^0.9.47"
+		"type-steamapi": "^0.9.47",
+		"@retroachievements/api": "1.4.0",
+		"psn-api": "^2.18.1"
 	},
 	"pnpm": {
 		"peerDependencyRules": {

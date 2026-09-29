@@ -66,12 +66,14 @@ export abstract class Resolver<
 		this._provider = provider;
 	}
 
-	async mount(): Promise<void>
+	mount(): Promise<void>
 	{
+		return Promise.resolve();
 	}
 
-	async dismount(): Promise<void>
+	dismount(): Promise<void>
 	{
+		return Promise.resolve();
 	}
 
 	get enabled(): boolean
@@ -89,5 +91,7 @@ export abstract class Resolver<
 
 	abstract resolve(appId: number): Promise<ID | undefined>
 
-	async apply(_appId: number, _data: Data): Promise<void> {}
+	apply(_appId: number, _data: Data): Promise<void> {
+		return Promise.resolve();
+	}
 }

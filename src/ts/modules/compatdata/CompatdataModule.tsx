@@ -1,5 +1,5 @@
 import {Module, ModuleCache, ModuleConfig} from "../Module";
-import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../Interfaces";
+import {CompatdataData, SteamAppTypeShortcut, SteamDeckCompatCategory, SteamTestResult} from "../../Interfaces";
 import {CompatdataProvider} from "./CompatdataProvider";
 import {ReactNode, useState} from "react";
 import {Mounts} from "../../System";
@@ -73,9 +73,9 @@ export interface CompatdataProviderResolverCaches
 	cemu: CemuCompatdataProviderCache['resolvers'];
 }
 
-export type CompatdataProviderConfigTypes = CompatdataProviderConfigs[keyof CompatdataProviderConfigs]
+export type CompatdataProviderConfigTypes = CompatdataProviderConfigs[keyof CompatdataProviderConfigs];
 
-export type CompatdataProviderCacheTypes = CompatdataProviderCaches[keyof CompatdataProviderCaches]
+export type CompatdataProviderCacheTypes = CompatdataProviderCaches[keyof CompatdataProviderCaches];
 
 
 export class CompatdataModule extends Module<
@@ -106,16 +106,6 @@ export class CompatdataModule extends Module<
 		new EmuDeckCompatdataProvider(this)
 	];
 
-	get config(): CompatdataConfig
-	{
-		return this.state.settings.config.modules.compatdata
-	}
-
-	get cache(): CompatdataCache
-	{
-		return this.state.settings.cache.modules.compatdata
-	}
-
 	dependencies: (keyof Modules)[] = [
 		"metadata"
 	];
@@ -136,7 +126,7 @@ export class CompatdataModule extends Module<
 							   return ret;
 						   // @ts-ignore
 						   const overview: SteamAppOverview = this
-						   if (overview.app_type == 1073741824)
+						   if (overview.app_type == SteamAppTypeShortcut)
 							   void module.applyOverview(overview);
 
 						   return ret
@@ -164,8 +154,9 @@ export class CompatdataModule extends Module<
 				if (!module.isValid)
 					return ret;
 
-				for (const appId of this.state.apps)
-					void this.apply(appId)
+				for (const appId of this.state.apps){
+					void this.apply(appId);
+				}
 
 				return ret;
 			})

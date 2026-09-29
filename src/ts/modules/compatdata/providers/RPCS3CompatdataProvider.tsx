@@ -1,10 +1,6 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {getAppDetails} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
-import {
-	getLaunchCommand, isRPCS3Game
-} from "../../../shortcuts";
 import Logger from "../../../logger";
 import { CompatdataProvider } from "../CompatdataProvider";
 import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
@@ -13,12 +9,6 @@ import type { ProviderCache, ProviderConfig } from "../../Provider";
 import type { ResolverCache, ResolverConfig } from "../../Resolver";
 import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBProvider";
 import { SiPlaystation3 } from "react-icons/si";
-
-type RPCS3CompatData = {
-	title: string;
-	status: "Playable" | "Ingame" | "Intro" | "Loadable" | "Nothing";
-	id?: string;
-};
 
 export interface RPCS3CompatdataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'rpcs3'>, ResolverConfig>
 {
@@ -55,14 +45,6 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 		return this._gameTDBProvider;
 	}
 
-	async test(appId: number): Promise<boolean>
-	{
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-		return isRPCS3Game(getLaunchCommand(details));
-	}
-
 	async provide(appId: number): Promise<CompatdataData | undefined>{
 		// RPCS3 groups the title id for different regions
 		const titleId = (await this.resolve(appId))?.toString().split(separator)[0];
@@ -79,7 +61,11 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 			return undefined;
 
 		let data: {
-			results?: Record<string, RPCS3CompatData>;
+			results?: Record<string, {
+				title: string;
+				status: "Playable" | "Ingame" | "Intro" | "Loadable" | "Nothing";
+				id?: string;
+			}>;
 		} = await response.json();
 		if(!data.results?.[titleId])
 			return undefined;

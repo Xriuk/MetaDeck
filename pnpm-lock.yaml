@@ -14,6 +14,9 @@ importers:
       '@decky/ui':
         specifier: ^4.11.1
         version: 4.12.0
+      '@retroachievements/api':
+        specifier: 1.4.0
+        version: 1.4.0
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -35,6 +38,9 @@ importers:
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21
+      psn-api:
+        specifier: ^2.18.1
+        version: 2.18.1
       react-icons:
         specifier: ^5.7.0
         version: 5.7.0(react@18.3.1)
@@ -809,6 +815,10 @@ packages:
   '@remix-run/router@1.0.2':
     resolution: {integrity: sha512-GRSOFhJzjGN+d4sKHTMSvNeUPoZiDHWmRnXfzaxrqe7dE/Nzlc8BiMSJdLDESZlndM7jIUrZ/F4yWqVYlI0rwQ==}
     engines: {node: '>=14'}
+
+  '@retroachievements/api@1.4.0':
+    resolution: {integrity: sha512-oxIOsOooQjk7tGKCvHrHWISvXKYEKx8bxe9/WkOMTC/7kdpBMhR3oUS+Ve96bn3FpozVIqb/rpzRLuoO/cijPQ==}
+    engines: {node: '>=16', npm: please-use-yarn, yarn: '>= 1.19.1'}
 
   '@rollup/plugin-commonjs@26.0.1':
     resolution: {integrity: sha512-UnsKoZK6/aGIH6AdkptXhNvhaqftcjq3zZdT+LY5Ftms6JR06nADcDsYp5hTU9E2lbJUEOhdlY5J4DNTneM+jQ==}
@@ -2328,6 +2338,10 @@ packages:
   property-information@6.2.0:
     resolution: {integrity: sha512-kma4U7AFCTwpqq5twzC1YVIDXSqg6qQK6JN0smOw8fgRy1OkMi0CYSzFmsy6dnqSenamAtj0CyXMUJ1Mf6oROg==}
 
+  psn-api@2.18.1:
+    resolution: {integrity: sha512-D0oVrJK+hVwJFARp2Io/auqJwjRx2t7x4Cke7mYNFbrOUQxSBONl0fHr4eVK5Bai89RNyaAsLPLFmgIw9pxzmQ==}
+    engines: {node: '>=20', pnpm: '>=10'}
+
   punycode@2.3.0:
     resolution: {integrity: sha512-rRV+zQD8tVFys26lAGR9WUuS4iUAngJScM+ZRSKtvl5tKeZ2t5bvdNFdNHBW9FWR4guGHlgmsZ1G7BSm2wTbuA==}
     engines: {node: '>=6'}
@@ -3668,6 +3682,8 @@ snapshots:
     optional: true
 
   '@remix-run/router@1.0.2': {}
+
+  '@retroachievements/api@1.4.0': {}
 
   '@rollup/plugin-commonjs@26.0.1(rollup@4.22.4)':
     dependencies:
@@ -5302,6 +5318,8 @@ snapshots:
       react-is: 16.13.1
 
   property-information@6.2.0: {}
+
+  psn-api@2.18.1: {}
 
   punycode@2.3.0: {}
 

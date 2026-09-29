@@ -1,6 +1,6 @@
 import {Module, ModuleCache, ModuleConfig} from "../Module";
 import {MetadataProvider} from "./MetadataProvider";
-import {CustomStoreCategory, MetadataData, StoreCategory} from "../../Interfaces";
+import {CustomStoreCategory, MetadataData, SteamAppTypeShortcut, StoreCategory} from "../../Interfaces";
 import {truncate} from "lodash-es";
 import {
 	GOGMetadataProvider,
@@ -40,6 +40,7 @@ import React from "react";
 import { GameTDBMetadataProvider, type GameTDBMetadataProviderCache, type GameTDBMetadataProviderConfig } from "./providers/GameTDBProvider";
 import { LizardByteGameDBMetadataProvider, LizardByteGameDBMetadataProviderCache, LizardByteGameDBMetadataProviderConfig } from "./providers/LizardByteGameDBMetadataProvider";
 import { FaRegFileLines } from "react-icons/fa6";
+import { RetroAchievementsMetadataProvider, type RetroAchievementsMetadataProviderCache, type RetroAchievementsMetadataProviderConfig } from "./providers/RetroAchievementsMetadataProvider";
 
 export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs, MetadataProviderConfigTypes>
 {
@@ -67,6 +68,7 @@ export interface MetadataProviderConfigs
 	rawg: RAWGMetadataProviderConfig;
 	gametdb: GameTDBMetadataProviderConfig;
 	lizardbyte: LizardByteGameDBMetadataProviderConfig;
+	ra: RetroAchievementsMetadataProviderConfig;
 }
 
 export interface MetadataProviderCaches
@@ -76,6 +78,7 @@ export interface MetadataProviderCaches
 	rawg: RAWGMetadataProviderCache;
 	gametdb: GameTDBMetadataProviderCache;
 	lizardbyte: LizardByteGameDBMetadataProviderCache;
+	ra: RetroAchievementsMetadataProviderCache;
 }
 
 export interface MetadataProviderResolverConfigs
@@ -85,6 +88,7 @@ export interface MetadataProviderResolverConfigs
 	rawg: {};
 	gametdb: GameTDBMetadataProviderConfig['resolvers'],
 	lizardbyte: {};
+	ra: {};
 }
 
 export interface MetadataProviderResolverCaches
@@ -94,6 +98,7 @@ export interface MetadataProviderResolverCaches
 	rawg: {};
 	gametdb: GameTDBMetadataProviderCache['resolvers'];
 	lizardbyte: {};
+	ra: {};
 }
 
 export type MetadataProviderConfigTypes = MetadataProviderConfigs[keyof MetadataProviderConfigs]
@@ -126,55 +131,46 @@ export class MetadataModule extends Module<
 		new GOGMetadataProvider(this),
 		new SteamMetadataProvider(this),
 		new LizardByteGameDBMetadataProvider(this),
-		new RAWGMetadataProvider(this)
+		new RAWGMetadataProvider(this),
+		new RetroAchievementsMetadataProvider(this)
 	];
 
-	get config(): MetadataConfig
+	public override async removeCache(appId: number)
 	{
-		return this.state.settings.config.modules.metadata;
-	}
-
-	get cache(): MetadataCache
-	{
-		return this.state.settings.cache.modules.metadata;
-	}
-
-	public async removeCache(appId: number)
-	{
-		delete this.data[appId];
-		await this.saveData();
+		await super.removeCache(appId);
+		
 		let appData = appDetailsStore.GetAppData(appId);
-		if (appData)
-		{
-			const overview = appStore.GetAppOverviewByAppID(appId)
-			const desc = this.descriptions ? t("noDescription") : "";
-			stateTransaction(() => {
-				if (this.config.markdown)
-				{
-					appData.descriptionsData = {
-						strFullDescription: <Markdown>
-							{this.config.title_header ? `# ${overview.display_name}\n` + desc : desc}
-						</Markdown>,
-						strSnippet: <Markdown>
-							{this.config.title_header ? `# ${overview.display_name}\n` + desc : desc}
-						</Markdown>
-					}
-				} else
-				{
-					appData.descriptionsData = {
-						strFullDescription: desc,
-						strSnippet: desc
-					}
+		if (!appData)
+			return;
+		
+		const overview = appStore.GetAppOverviewByAppID(appId)
+		const desc = this.descriptions ? t("noDescription") : "";
+		stateTransaction(() => {
+			if (this.config.markdown)
+			{
+				appData.descriptionsData = {
+					strFullDescription: <Markdown>
+						{this.config.title_header ? `# ${overview.display_name}\n` + desc : desc}
+					</Markdown>,
+					strSnippet: <Markdown>
+						{this.config.title_header ? `# ${overview.display_name}\n` + desc : desc}
+					</Markdown>
 				}
-				appData.associationData = {
-					rgDevelopers: [],
-					rgPublishers: [],
-					rgFranchises: []
+			} else
+			{
+				appData.descriptionsData = {
+					strFullDescription: desc,
+					strSnippet: desc
 				}
-				appDetailsCache.SetCachedDataForApp(appId, "descriptions", 1, appData.descriptionsData)
-				appDetailsCache.SetCachedDataForApp(appId, "associations", 1, appData.associationData)
-			});
-		}
+			}
+			appData.associationData = {
+				rgDevelopers: [],
+				rgPublishers: [],
+				rgFranchises: []
+			}
+			appDetailsCache.SetCachedDataForApp(appId, "descriptions", 1, appData.descriptionsData);
+			appDetailsCache.SetCachedDataForApp(appId, "associations", 1, appData.associationData);
+		});
 	};
 
 	private bypassCounter = 0
@@ -182,7 +178,8 @@ export class MetadataModule extends Module<
 
 	addMounts(mounts: Mounts): void
 	{
-		const module = this
+		const module = this;
+
 		mounts.addPatchMount({
 			patch(): Patch
 			{
@@ -193,23 +190,24 @@ export class MetadataModule extends Module<
 					   (args) => {
 						   if (!module.isValid)
 							   return callOriginal;
+
 						   const overview = appStore.GetAppOverviewByAppID(args[0])
-						   if (overview.app_type == 1073741824)
+						   if (overview.app_type == SteamAppTypeShortcut)
 						   {
 							   let appData = appDetailsStore.GetAppData(args[0])
 							   // if (appData && !appData?.descriptionsData)
 							   if (appData)
 							   {
-								   const data = module.fetchData(args[0])
+								   const data = module.fetchData(args[0]);
 								   const desc = module.descriptions ? data?.description ?? t("noDescription") : "";
 								   module.logger.debug(desc);
 								   stateTransaction(() => {
 									   appData.descriptionsData = {
 										   strFullDescription: desc,
 										   strSnippet: desc
-									   }
-									   appDetailsCache.SetCachedDataForApp(args[0], "descriptions", 1, appData.descriptionsData)
-								   })
+									   };
+									   appDetailsCache.SetCachedDataForApp(args[0], "descriptions", 1, appData.descriptionsData);
+								   });
 
 								   return appData.descriptionsData;
 							   }
@@ -218,7 +216,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -237,7 +235,7 @@ export class MetadataModule extends Module<
 						   if (!module.isValid)
 							   return ret;
 						   const overview = appStore.GetAppOverviewByAppID(args[0])
-						   // if (overview.app_type != 1073741824)
+						   // if (overview.app_type != SteamAppTypeShortcut)
 						   // {
 						   if (module.config.markdown)
 							   return {
@@ -255,7 +253,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -267,23 +265,26 @@ export class MetadataModule extends Module<
 					   function (args) {
 						   if (!module.isValid || !module.categories)
 							   return callOriginal;
-						   // @ts-ignore
-						   if ((this as SteamAppOverview).app_type == 1073741824)
-						   {
-							   // @ts-ignore
-							   const data = module.fetchData((this as SteamAppOverview).appid)
-							   const categories = data?.store_categories ?? [];
-							   if (categories.includes(args[0]))
-							   {
-								   return true
-							   }
-							   module.logger.debug(`categories`, categories)
-						   }
-						   return callOriginal;
+
+							// Achievements are handled by their module
+							// @ts-ignore
+							if ((this as SteamAppOverview).app_type == SteamAppTypeShortcut &&
+								args[0] !== StoreCategory.Achievements){
+
+								// @ts-ignore
+								const data = module.fetchData((this as SteamAppOverview).appid)
+								const categories = data?.store_categories ?? [];
+								if (categories.includes(args[0]))
+								{
+									return true
+								}
+								module.logger.debug(`categories`, categories)
+							}
+							return callOriginal;
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -295,7 +296,7 @@ export class MetadataModule extends Module<
 					   (args) => {
 						   if (!module.isValid || !module.associations)
 							   return callOriginal;
-						   if (appStore.GetAppOverviewByAppID(args[0]).app_type == 1073741824)
+						   if (appStore.GetAppOverviewByAppID(args[0]).app_type == SteamAppTypeShortcut)
 						   {
 							   let appData = appDetailsStore.GetAppData(args[0])
 							   if (appData && !appData?.associationData)
@@ -324,7 +325,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		// const runGameHook = beforePatch(
 		// 		runGame.m[runGame.prop].prototype,
@@ -350,7 +351,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		// mounts.addMount(contextMenuPatch(LibraryContextMenu))
 
@@ -387,7 +388,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -402,7 +403,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -418,7 +419,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -433,7 +434,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -449,7 +450,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -462,7 +463,7 @@ export class MetadataModule extends Module<
 							   return ret;
 						   module.logger.debug(ret);
 						   // @ts-ignore
-						   if (this.app_type == 1073741824)
+						   if (this.app_type == SteamAppTypeShortcut)
 						   {
 							   // @ts-ignore
 							   const data = module.fetchData(this.appid);
@@ -476,7 +477,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -492,7 +493,7 @@ export class MetadataModule extends Module<
 					   }
 				)
 			}
-		})
+		});
 
 
 		// mounts.addPatchMount({
@@ -561,7 +562,7 @@ export class MetadataModule extends Module<
 				const overview: SteamAppOverview = ret.props.children.props.overview;
 				const details: SteamAppDetails = ret.props.children.props.details;
 
-				if (overview.app_type == 1073741824)
+				if (overview.app_type == SteamAppTypeShortcut)
 				{
 					module.bypassBypass = 11;
 					void this.applyApp(overview, details);
@@ -571,7 +572,7 @@ export class MetadataModule extends Module<
 			});
 
 			return tree;
-		}))
+		}));
 
 		mounts.addMount(routePatch("/library", (props: { path?: string, children?: ReactNode }) => {
 
@@ -579,13 +580,14 @@ export class MetadataModule extends Module<
 				if (!module.enabled)
 					return ret;
 
-				for (const appId of this.state.apps)
-					void this.apply(appId)
+				for (const appId of this.state.apps){
+					void this.apply(appId);
+				}
 
 				return ret;
 			})
 			return props;
-		}))
+		}));
 
 		// mounts.addMount({
 		// 	mount()
@@ -711,16 +713,16 @@ export class MetadataModule extends Module<
 
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [typeOverride, setTypeOverride] = useState(this.typeOverride)
-		const [descriptions, setDescriptions] = useState(this.descriptions)
-		const [releaseDate, setReleaseDate] = useState(this.releaseDate)
-		const [associations, setAssociations] = useState(this.associations)
-		const [categories, setCategories] = useState(this.categories)
-		const [rating, setRating] = useState(this.rating)
-		const [installSize, setInstallSize] = useState(this.installSize)
-		const [installDate, setInstallDate] = useState(this.installDate)
-		const [markdown, setMarkdown] = useState(this.markdown)
-		const [titleHeader, setTitleHeader] = useState(this.titleHeader)
+		const [typeOverride, setTypeOverride] = useState(this.typeOverride);
+		const [descriptions, setDescriptions] = useState(this.descriptions);
+		const [releaseDate, setReleaseDate] = useState(this.releaseDate);
+		const [associations, setAssociations] = useState(this.associations);
+		const [categories, setCategories] = useState(this.categories);
+		const [rating, setRating] = useState(this.rating);
+		const [installSize, setInstallSize] = useState(this.installSize);
+		const [installDate, setInstallDate] = useState(this.installDate);
+		const [markdown, setMarkdown] = useState(this.markdown);
+		const [titleHeader, setTitleHeader] = useState(this.titleHeader);
 
 		return (
 			<>
@@ -859,7 +861,11 @@ export class MetadataModule extends Module<
 		if (this.rating)
 			overview.metacritic_score = Math.round(this.data[overview.appid]?.rating ?? 0);
 		if (this.categories){
-			this.data[overview.appid]?.store_categories?.forEach(category => overview.m_setStoreCategories.add(category));
+			this.data[overview.appid]?.store_categories?.forEach(category => {
+				// Achievements are handled by their module
+				if(category !== StoreCategory.Achievements)
+					overview.m_setStoreCategories.add(category);
+			});
 
 			// If we have multiplayer we also assume single player
 			if(this.data[overview.appid]?.store_categories.indexOf(StoreCategory.MultiPlayer) &&
@@ -874,7 +880,7 @@ export class MetadataModule extends Module<
 			overview.rt_purchased_time = this.data[overview.appid]?.install_date;
 	}
 
-	async provideDefault(appId: number): Promise<MetadataData | undefined>
+	override async provideDefault(appId: number): Promise<MetadataData | undefined>
 	{
 		const details = await getAppDetails(appId);
 		if(!details)
@@ -885,8 +891,10 @@ export class MetadataModule extends Module<
 		return {
 			title: details.strDisplayName,
 			id: 0,
+
 			description: t("noDescription"),
-			store_categories: cats
-		}
+			// Achievements are handled by their module
+			store_categories: cats.filter(c => c !== StoreCategory.Achievements)
+		};
 	}
 }

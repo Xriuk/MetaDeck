@@ -61,7 +61,7 @@ export class GOGMetadataProviderHeroicResolver extends GOGMetadataProviderResolv
 		'install_path': string
 	}> = callable("heroic_egs_data");
 
-	async apply(appId: number, data: MetadataData): Promise<void>
+	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
 		const resolved = await this.resolve(appId);
 		if (!resolved) return;
