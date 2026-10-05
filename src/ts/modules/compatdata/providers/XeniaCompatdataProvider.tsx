@@ -4,9 +4,8 @@ import {t} from "../../../useTranslations";
 import Logger from "../../../logger";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
 import type { ResolverConfig, ResolverCache } from "../../Resolver";
-import { MultiIdXeniaResolver } from "../../resolvers/MultiId/MultiIdXeniaResolver";
+import { XeniaResolver, type XeniaResolverCaches, type XeniaResolverConfigs } from "../../resolvers/XeniaResolver";
 import { CompatdataProvider } from "../CompatdataProvider";
-import { type MultiIdResolverConfigs, type MultiIdResolverCaches, type MultiIdResolver, separator } from "../../resolvers/MultiId/MultiIdResolver";
 import { FaXbox } from "react-icons/fa";
 
 type XeniaCompatData = {
@@ -15,20 +14,20 @@ type XeniaCompatData = {
 	id: string;
 };
 
-export interface XeniaCompatdataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'xenia'>, ResolverConfig>
+export interface XeniaCompatdataProviderConfig extends ProviderConfig<XeniaResolverConfigs, ResolverConfig>
 {
 	
 }
 
-export interface XeniaCCompatdataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'xenia'>, ResolverCache>
+export interface XeniaCCompatdataProviderCache extends ProviderCache<XeniaResolverCaches, ResolverCache>
 {
 	
 }
 
 export class XeniaCompatdataProvider extends CompatdataProvider<any>
 {
-	resolvers: MultiIdResolver[] = [
-		new MultiIdXeniaResolver(this)
+	resolvers: XeniaResolver[] = [
+		new XeniaResolver(this)
 	];
 
 	static identifier: string = "xenia";
@@ -40,8 +39,10 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 
 	private compatData: Record<string, XeniaCompatData> = {}; // Formatted id: compat
 
-	async getCompatData(): Promise<void>
+	override async mount(): Promise<void>
 	{
+		await super.mount();
+		
 		// Retrieve compat page source
 		let response = await fetchNoCors("https://github.com/xenia-canary/game-compatibility/releases/download/game-compatibility/compatibility_data.json");
 		if(!response.ok)
@@ -53,15 +54,11 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 		}
 	}
 
-	override async mount(): Promise<void>
-	{
-		await super.mount();
-		await this.getCompatData();
-	}
-
 	async provide(appId: number): Promise<CompatdataData | undefined>{
-		// Xbox 360 has a single title id per game
-		const titleId = (await this.resolve(appId))?.toString().split(separator)[0]?.toUpperCase();
+		if (this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+		
+		const titleId = (await this.resolve(appId))?.toString().toUpperCase();
 		if(!titleId || !this.compatData[titleId])
 			return undefined;
 

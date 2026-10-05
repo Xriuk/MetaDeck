@@ -7,7 +7,7 @@ import type { AchievementsProviderConfigs } from "../AchievementsModule";
 import { AchievementsProvider } from "../AchievementsProvider";
 import type { AchievementsData } from "../../../Interfaces";
 import { getUserTrophiesEarnedForTitle, type AuthTokensResponse, type UserThinTrophy } from "psn-api";
-import { getAppDetails, grayScaleIcon } from "../../../util";
+import { fetchNoCorsLegacyTimeout, getAppDetails, grayScaleIcon } from "../../../util";
 import { getLaunchCommand, romRegex } from "../../../shortcuts";
 import { rpcs3RomPathRegex } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
 import { SiPlaystation3 } from "react-icons/si";
@@ -162,13 +162,15 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 		if(this.PSNNPSSO){
 			try{
 				// DEV: https://github.com/SteamDeckHomebrew/decky-loader/issues/960
-				const accessCodeResponse = await DeckyPluginLoader.legacyFetchNoCors('https://ca.account.sony.com/api/authz/v3/oauth/authorize?' + new URLSearchParams({
+				const accessCodeResponse = await DeckyPluginLoader.legacyFetchNoCors(
+					'https://ca.account.sony.com/api/authz/v3/oauth/authorize?' + new URLSearchParams({
 						access_type: "offline",
 						client_id: "09515159-7237-4370-9b40-3806e67c0891",
 						redirect_uri: "com.scee.psxandroid.scecompcall://redirect",
 						response_type: "code",
 						scope: "psn:mobile.v2.core psn:clientapp"
-					}).toString(), {
+					}).toString(),
+					{
 						method: 'GET',
 						headers: {
 							Cookie: `npsso=${this.PSNNPSSO}`
@@ -232,7 +234,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 	}
 
 	override async provide(appId: number): Promise<AchievementsData | undefined> {
-		if(!this.userPath || !this.resolvers[0].hddPath)
+		if(!this.userPath || !this.resolvers[0].hddPath || this.excludedApps.indexOf(appId) !== -1)
 			return undefined;
 		
 		if(this.gameTrophies[appId] === null)
@@ -293,29 +295,8 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 				}
 			}
 
-			// Retrieve trophies icons and create grayscale versions for locked
-			for(let trophy of trophies.trophies){
-				// Retrieve from user folder first, then default to game
-				if(!fromGameFolder)
-					trophy.icon = await call<[string, string, string], string>("rpcs3_get_trophy_icon_user", this.userPath, trophyId.toString(), trophy.id) ?? '';
-				
-				if(!trophy.icon){
-					if(titleId === undefined)
-						titleId = await call<[string], string | null>("rpcs3_get_titleid", romFolder) ?? null;
-					if(romFolder)
-						trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
-					else if(titleId)
-						trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
-				}
-				
-				// Create a locked grayscale version
-				if(trophy.icon)
-					trophy.locked_icon = await grayScaleIcon(trophy.icon);
-				else
-					trophy.locked_icon = '';
-			}
-
-			// Retrieve trophies rarity, from PSN or RAWG
+			// Retrieve trophies rarity, from PSN or RAWG,
+			// Also if we have RAWG we retrieve trophies icons to save on data size instead of using base 64
 			if(this._psnTokens){
 				// Refresh the token if needed
 				if(this._psnTokensExpiration && new Date() >= this._psnTokensExpiration){
@@ -352,13 +333,15 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 					for(let accountId of psnAccounts){
 						try{
 							// npServiceName=trophy: PS3 trophies
-							let rarity: Awaited<ReturnType<typeof getUserTrophiesEarnedForTitle>> = await (await fetchNoCors(`https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${trophyId}/trophyGroups/all/trophies?npServiceName=trophy`, {
-								headers: {
-									Authorization: `Bearer ${this._psnTokens.accessToken}`,
-									"Content-Type": "application/json",
-								},
-
-							})).json();
+							let rarity: Awaited<ReturnType<typeof getUserTrophiesEarnedForTitle>> = await (await fetchNoCorsLegacyTimeout(
+								`https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${trophyId}/trophyGroups/all/trophies?npServiceName=trophy`,
+								'GET',
+								{
+									headers: {
+										Authorization: `Bearer ${this._psnTokens.accessToken}`,
+										"Content-Type": "application/json",
+									}
+								})).json();
 							if(rarity.trophies.length){
 								trophies.rarity = rarity.trophies;
 								this.logger.debug(`${appId} rarity: `, trophies.rarity);
@@ -369,7 +352,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 					}
 				}
 			}
-			else if(this.rawgProvider.apiKey){
+			if(this.rawgProvider.enabled && this.rawgProvider.apiKey){
 				const rawgAchievements = await this.rawgProvider.getAchievementsForGame(appId);
 
 				// If we have trophies we'll need to match them with local ones, but we need english titles
@@ -401,14 +384,50 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 					}
 
 					if(Object.keys(trophiesNames).length){
-						trophies.rarity = rawgAchievements
-							.filter(a => trophiesNames[a.name])
-							.map(a => ({
-								trophyId: parseInt(trophiesNames[a.name], 10),
-								trophyEarnedRate: a.percent
-							}));
+						let setTrophies = !trophies.rarity;
+						if(setTrophies)
+							trophies.rarity = [];
+						for(let achievement of rawgAchievements){
+							let trophyId = trophiesNames[achievement.name];
+
+							if(!trophyId)
+								continue;
+
+							if(setTrophies){
+								trophies.rarity!.push({
+									trophyId: parseInt(trophyId, 10),
+									trophyEarnedRate: achievement.percent
+								});
+							}
+
+							trophies.trophies.find(t => t.id === trophyId)!.icon = achievement.image;
+						}
 					}
 				}
+			}
+
+			// Retrieve trophies icons if needed and create grayscale versions for locked
+			for(let trophy of trophies.trophies){
+				if(!trophy.icon){
+					// Retrieve from user folder first, then default to game
+					if(!fromGameFolder)
+						trophy.icon = await call<[string, string, string], string>("rpcs3_get_trophy_icon_user", this.userPath, trophyId.toString(), trophy.id) ?? '';
+					
+					if(!trophy.icon){
+						if(titleId === undefined)
+							titleId = await call<[string], string | null>("rpcs3_get_titleid", romFolder) ?? null;
+						if(romFolder)
+							trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
+						else if(titleId)
+							trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
+					}
+				}
+				
+				// Create a locked grayscale version
+				if(trophy.icon)
+					trophy.locked_icon = await grayScaleIcon(trophy.icon);
+				else
+					trophy.locked_icon = '';
 			}
 
 			this.gameTrophies[appId] = trophies.trophies.length ? { ...trophies } : null;

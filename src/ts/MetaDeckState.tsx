@@ -76,13 +76,16 @@ export interface MetaDeckStateContext
 	readonly loadingData: GlobalLoadingData,
 	readonly modules: Modules,
 	readonly overviews: SteamAppOverview[],
-	readonly apps: number[],
+	readonly rootOverviews: SteamAppOverview[],
 	readonly settings: Settings,
 	readonly mounts: Mounts,
 	readonly eventBus: EventBus,
 
-	clear(): Promise<void>,
+	excludedApps: number[],
+	setExcludedApps(apps: number[]): void,
+	onExcludedChange(oldExcluded: number[], newExcluded: number[]): Promise<void>,
 
+	clear(): Promise<void>,
 	refresh(): Promise<void>,
 }
 
@@ -287,6 +290,10 @@ export class MetaDeckState implements AsyncMountable
 			achievements: new AchievementsModule(this)
 		};
 		this.mounts.addMount(this);
+		for (let key of Object.keys(this.modules))
+		{
+			this.loadingData.modules[key] = new ModuleLoadingDataImpl(this, this.modules[key].identifier);
+		}
 	}
 
 
@@ -296,13 +303,17 @@ export class MetaDeckState implements AsyncMountable
 			loadingData: this.loadingData,
 			modules: this.modules,
 			overviews: this.overviews,
-			apps: this.apps,
-			// serverAPI: this.serverAPI,
+			rootOverviews: this.rootOverviews,
 			settings: this.settings,
 			mounts: this.mounts,
 			eventBus: this.eventBus,
+
+			excludedApps: this.excludedApps,
+			setExcludedApps: (apps: number[]) => this.excludedApps = apps,
+			onExcludedChange: (oldExcluded: number[], newExcluded: number[]) => this.onExcludedChange(oldExcluded, newExcluded),
+			
 			clear: () => this.clear(),
-			refresh: () => this.refresh(),
+			refresh: () => this.refresh()
 		};
 	}
 
@@ -316,20 +327,26 @@ export class MetaDeckState implements AsyncMountable
 		return this._loadingData;
 	}
 
+	get excludedApps(): number[]
+	{
+		return this.settings.config.excluded_apps;
+	}
+
+	set excludedApps(apps: number[])
+	{
+		this.settings.config.excluded_apps = apps;
+	}
+
 	get overviews(): SteamAppOverview[]
 	{
-		return getAllNonSteamAppOverviews().sort((a, b) => {
+		return this.rootOverviews
+			.filter(a => this.excludedApps.indexOf(a.appid) === -1);
+	}
 
-			if (a.sort_as < b.sort_as)
-			{
-				return -1;
-			}
-			if (a.sort_as > b.sort_as)
-			{
-				return 1;
-			}
-			return 0;
-		})
+	get rootOverviews(): SteamAppOverview[]
+	{
+		return getAllNonSteamAppOverviews()
+			.sort((a, b) => (a.sort_as.localeCompare(b.sort_as)));
 	}
 
 	get apps(): number[]
@@ -365,18 +382,15 @@ export class MetaDeckState implements AsyncMountable
 	async refresh(): Promise<void>
 	{
 		await this.settings.readSettings();
-		for (let key of Object.keys(this.state.modules))
-		{
-			this.loadingData.modules[key] = new ModuleLoadingDataImpl(this, this.modules[key].identifier);
-		}
 		this.loadingData.loading = true;
 		this.loadingData.total = Object.values(this.modules).filter((mod) => mod.isValid).length;
 		this.loadingData.processed = 0;
+		this.notifyUpdate();
 		for (let module of Object.values(this.modules).filter((mod) => mod.isValid))
 		{
 			this.loadingData.module = module.identifier;
 			if(this.loadingData.currentModule){
-				this.loadingData.currentModule.total = this.apps.length;
+				this.loadingData.currentModule.total = module.apps.length;
 				this.loadingData.currentModule.processed = 0;
 			}
 			await module.refresh();
@@ -398,6 +412,10 @@ export class MetaDeckState implements AsyncMountable
 
 	async clear(): Promise<void>
 	{
+		this.loadingData.loading = true;
+		this.loadingData.total = 0;
+		this.loadingData.processed = 0;
+		this.notifyUpdate();
 		for (let module of Object.values(this.modules))
 		{
 			await module.clearCache();
@@ -406,7 +424,23 @@ export class MetaDeckState implements AsyncMountable
 			title: t("title"),
 			body: t("cacheCleared")
 		});
+		this.loadingData.loading = false;
 		this.notifyUpdate();
+	}
+
+	async onExcludedChange(oldExcluded: number[], newExcluded: number[]){
+		// Retrieve changed app ids: new values and removed values
+		let changedIds = newExcluded
+			.filter(a => oldExcluded.indexOf(a) === -1)
+			.concat(oldExcluded.filter(a => newExcluded.indexOf(a) === -1));
+
+		// Remove cache and re-fetch
+		for(let changedId of changedIds){
+			for(let module in this.state.modules){
+				await this.state.modules[module].removeCache(changedId);
+				await this.state.modules[module].fetchDataAsync(changedId);
+			}
+		}
 	}
 
 	notifyUpdate(): void
@@ -441,7 +475,7 @@ export const MetaDeckStateContextProvider: FC<Props> = ({children, metaDeckState
 
 	return (
 		   <MetaDeckStateContext.Provider
-				 value={{...publicMetaDeckState}}
+				value={{...publicMetaDeckState}}
 		   >
 			   {children}
 		   </MetaDeckStateContext.Provider>

@@ -1,24 +1,28 @@
-import {Fragment, ReactNode, useEffect, useState} from "react";
+import {Fragment, useEffect, useState} from "react";
 import {
 	DialogButton, Dropdown,
 	DropdownOption, Field, Focusable, SteamSpinner
 } from "@decky/ui";
-import {useMetaDeckState} from "../MetaDeckState";
 import {FaPlus, FaTrash} from "react-icons/fa";
 import {IDDictionary} from "../Interfaces";
 import {t} from "../useTranslations";
+import type { Provider } from "./Provider";
+import type { Module } from "./Module";
 
 interface IdOverrideProps<T extends number | string>
 {
+	// Source of parent apps Provider (Module)
+	provider: Provider<any, any, any, any, any, any, any, any, any, any, any, any>,
 	value: IDDictionary,
-	resultsForApp: (appId: number) => Promise<Record<T, Entry<T>>>,
+	disabled?: boolean,
+	resultsForApp: (appId: number) => Promise<Record<T, OverrideEntry<T>>>,
 	onChange: (overrides: IDDictionary) => void
 }
 
-export interface Entry<T extends number | string>
+export interface OverrideEntry<T extends number | string>
 {
-	label: ReactNode,
-	title: ReactNode,
+	label: string,
+	title: string,
 	id: T,
 	appId: number
 }
@@ -31,124 +35,111 @@ function objectMap<K extends string | number | symbol, V, T>(object: Record<K, V
 	}, {} as Record<K, T>);
 }
 
-
 export const IdOverrideComponent = <T extends number | string>({
-													   resultsForApp,
-													   onChange,
-													   value
-												   }: IdOverrideProps<T>) => {
-	const {apps, modules, loadingData } = useMetaDeckState();
+		provider,
+		resultsForApp,
+		onChange,
+		value,
+		disabled
+	}: IdOverrideProps<T>) => {
 	const [app, setApp] = useState<number>();
-	const [id, setId] = useState<Entry<T>>();
+	const [id, setId] = useState<OverrideEntry<T>>();
 	const [appOptions, setAppOptions] = useState<DropdownOption[]>([]);
 	const [idOptions, setIdOptions] = useState<DropdownOption[]>([]);
-	const [entries, setEntries] = useState<Record<number, Entry<T>>>({});
+	const [entries, setEntries] = useState<Record<number, OverrideEntry<T>>>({});
 	const [loaded, setLoaded] = useState(false);
 
 	useEffect(() => {
 		(async () => {
-			setLoaded(false)
-			const ret: Record<T, Entry<T>> = {} as any;
+			setLoaded(false);
+			const ret: Record<T, OverrideEntry<T>> = {} as any;
 			for (const [key, val] of Object.entries(value))
 			{
-				if (val === 0 || val === "")
-					ret[key as T] = {
-						label: appStore.GetAppOverviewByAppID(+key).display_name,
-						title: "None",
-						id: 0 as T,
-						appId: +key
-					};
-				else
+				if (val !== 0)
 					ret[key as T] = (await resultsForApp(+key))[val as T];
 			}
 			setEntries(ret);
+
+			// Remove Nones
+			if(Object.entries(value).some(v => v[1] === 0))
+				onChange(objectMap(entries, (_, value) => value.id));
+
 			setLoaded(true);
-			modules.metadata.logger.debug("Loaded", ret)
+			provider.module.logger.debug("Loaded", ret);
 		})()
 	}, [value]);
 
-	useEffect(() => {
-
-			setAppOptions(apps.filter((id) => !Object.values(entries).some((value) => value.appId == id))
-				   .map((value) => ({
-					   label: appStore.GetAppOverviewByAppID(value).display_name,
-					   data: value
-				   }))
-			)
-	}, [entries])
+	useEffect(() => setAppOptions((provider.module as Module<any, any, any, any, any, any, any, any, any, any, any>)
+		.overviews
+		.filter(app => !Object.values(entries).some((value) => value.appId === app.appid))
+		.map(app => ({
+			label: app.display_name,
+			data: app.appid
+		}))
+	), [entries]);
 
 	useEffect(() => {
 		(async () => {
-			setIdOptions(!!app ? Object.values<Entry<T>>(await resultsForApp(app)).map(value => ({
+			setIdOptions(!!app ? Object.values<OverrideEntry<T>>(await resultsForApp(app)).map(value => ({
 				label: `${value.title} (${value.id})`,
 				data: value
-			})).concat({
-				label: "None (0)",
-				data: {
-					label: appStore.GetAppOverviewByAppID(app).display_name,
-					title: "None",
-					id: 0 as T,
-					appId: app
-				}
-			}) : [])
+			})) : [])
 		})()
 	}, [app]);
 
 	return <Fragment>
 		<Field
-			   label={t("settingsOverrides")}
-			   description={t("settingsOverridesDesc")}
-			   childrenLayout={"below"}
-			   bottomSeparator={"thick"}
+			label={t("settingsOverrides")}
+			description={t("settingsOverridesDesc")}
+			childrenLayout={"below"}
+			bottomSeparator={"thick"}
 		>
 			<Focusable
-				   style={{
-					   display: "flex",
-					   marginLeft: "auto",
-					   height: "40px"
-				   }}
+				style={{
+					display: "flex",
+					marginLeft: "auto",
+					height: "40px"
+				}}
 			>
 				<div style={{height: '40px', minWidth: '60px', marginRight: '10px', flexGrow: "2"}}>
 					<Dropdown
-							disabled={loadingData.loading}
-							rgOptions={appOptions}
-							selectedOption={app}
-							onChange={(value) => {
-								setApp(value.data)
-								setId(undefined)
-							}}
+						disabled={disabled}
+						rgOptions={appOptions}
+						selectedOption={app}
+						onChange={(value) => {
+							setApp(value.data);
+							setId(undefined);
+						}}
 					/>
 				</div>
 				<div style={{height: '40px', minWidth: '60px', marginRight: '10px', flexGrow: "2"}}>
 					<Dropdown
-							disabled={loadingData.loading}
-							rgOptions={idOptions}
-							selectedOption={id}
-							onChange={(value) => {
-								setId(value.data)
-							}}
+						disabled={disabled}
+						rgOptions={idOptions}
+						selectedOption={id}
+						onChange={(value) => {
+							setId(value.data);
+						}}
 					/>
 				</div>
 				<DialogButton
-						disabled={loadingData.loading}
-						style={{
-							height: '40px',
-							width: '40px',
-							padding: '10px 12px',
-							minWidth: '40px',
-							display: 'flex',
-							flexDirection: 'column',
-							justifyContent: 'center',
-						}}
-						onClick={() => {
-							if (!!id)
-							{
-								const obj = (entries)
-								obj[id.appId] = id
-								onChange(objectMap(entries, (_, value) => value.id))
-							}
-						}}
-				>
+					disabled={disabled}
+					style={{
+						height: '40px',
+						width: '40px',
+						padding: '10px 12px',
+						minWidth: '40px',
+						display: 'flex',
+						flexDirection: 'column',
+						justifyContent: 'center',
+					}}
+					onClick={() => {
+						if (id){
+							const obj = (entries);
+							obj[id.appId] = id;
+							onChange(objectMap(obj, (_, value) => value.id));
+						}
+					}}>
 					<FaPlus/>
 				</DialogButton>
 			</Focusable>
@@ -156,53 +147,58 @@ export const IdOverrideComponent = <T extends number | string>({
 
 		{loaded ? <Fragment>
 			{
-				Object.values(entries).map((entry) =>
+				Object.values(entries)
+					.sort((a, b) => a.label.localeCompare(b.label))
+					.map((entry) =>
 
-					   <Field
-							 label={entry.label}
-							 childrenLayout={"inline"}
-							 bottomSeparator={"standard"}
-					   >
-						   <Focusable
-								 style={{
-									 display: "flex",
-									 marginLeft: "auto",
-									 height: "40px",
-									 alignItems: "center"
-								 }}
-						   >
-							   <div style={{
-								   height: '40px',
-								   minWidth: '60px',
-								   marginRight: '10px',
-								   flexGrow: "2"
-							   }}>
+					<Field
+						label={entry.label}
+						childrenLayout={"inline"}
+						bottomSeparator={"standard"}
+					>
+						<Focusable
+							style={{
+								display: "flex",
+								marginLeft: "auto",
+								height: "40px",
+								alignItems: "center"
+							}}
+						>
+							<div style={{
+								height: '40px',
+								minWidth: '60px',
+								marginRight: '10px',
+								flexGrow: "2",
+								alignContent: "center"
+							}}>
 
-								   {`${entry.title} (${entry.id})`}
-							   </div>
-							   <DialogButton
-									 style={{
-										 height: '40px',
-										 width: '40px',
-										 padding: '10px 12px',
-										 minWidth: '40px',
-										 display: 'flex',
-										 flexDirection: 'column',
-										 justifyContent: 'center',
-									 }}
-									 onClick={() => {
-										 const obj = (entries)
-										 delete obj[entry.appId]
-										 onChange(objectMap(obj, (_, value) => value.id))
-									 }}
-							   >
-								   <FaTrash/>
-							   </DialogButton>
-						   </Focusable>
-					   </Field>
+								{`${entry.title} (${entry.id})`}
+							</div>
+							<DialogButton
+								style={{
+									height: '40px',
+									width: '40px',
+									padding: '10px 12px',
+									minWidth: '40px',
+									display: 'flex',
+									flexDirection: 'column',
+									justifyContent: 'center',
+								}}
+								disabled={disabled}
+								onClick={() => {
+									const obj = (entries);
+									delete obj[entry.appId];
+									onChange(objectMap(obj, (_, value) => value.id));
+									setApp(undefined);
+									setId(undefined);
+								}}
+							>
+								<FaTrash/>
+							</DialogButton>
+						</Focusable>
+					</Field>
 				)
 			}
 		</Fragment> : <SteamSpinner/>}
-
 	</Fragment>
 }

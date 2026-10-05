@@ -1,10 +1,14 @@
 import { call, fetchNoCors } from "@decky/api";
 import type { ID } from "../../Interfaces";
-import { getLaunchCommand, isCemuGame, isEmulatedGame, isRPCS3Game, isRyujinxGame, isShadPS4Game, isVita3KGame, isXemuGame, isXeniaGame, romRegex } from "../../shortcuts";
+import {
+	getLaunchCommand, isCemuGame, isEmulatedGame, isRPCS3Game, isShadPS4Game, isSwitchGame,
+	isVita3KGame, isXemuGame, isXeniaGame, romRegex
+} from "../../shortcuts";
 import { t } from "../../useTranslations";
 import { getAppDetails } from "../../util";
 import type { ResolverCache, ResolverConfig } from "../Resolver";
 import { GlobalResolver } from "./GlobalResolver";
+import { version } from "@decky/pkg";
 
 export interface RetroAchievementsResolverConfig extends ResolverConfig
 {
@@ -16,21 +20,21 @@ export interface RetroAchievementsResolverCache extends ResolverCache
 	hashes: Record<number, string>;
 }
 
-export interface RetroAchievementsAchievementsResolverConfigs
+export interface RetroAchievementsResolverConfigs
 {
 	ra: RetroAchievementsResolverConfig;
 }
 
-export interface RetroAchievementsAchievementsResolverCaches
+export interface RetroAchievementsResolverCaches
 {
 	ra: RetroAchievementsResolverCache;
 }
 
 export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsResolver>
 {
-	static identifier: keyof RetroAchievementsAchievementsResolverConfigs = "ra";
+	static identifier: keyof RetroAchievementsResolverConfigs = "ra";
 	static title: string = t("providerAchievementsRA");
-	identifier: keyof RetroAchievementsAchievementsResolverConfigs = RetroAchievementsResolver.identifier;
+	identifier: keyof RetroAchievementsResolverConfigs = RetroAchievementsResolver.identifier;
 	title: string = RetroAchievementsResolver.title;
 
 	private hashRAIds: Record<string, number> = {};
@@ -44,7 +48,7 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 		// DEV: check if works, if not replace with new authenticated API
 		const response = await fetchNoCors("https://retroachievements.org/dorequest.php?r=hashlibrary", {
 			headers: {
-				"User-Agent": `MetaDeck/${process.env.VERSION} (+https://github.com/Xriuk/MetaDeck)`,
+				"User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)`,
 			}
 		});
 		if(!response.ok)
@@ -64,7 +68,7 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 		return isEmulatedGame(launchCommand) &&
 			!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isVita3KGame(launchCommand) &&
 			!isXemuGame(launchCommand) && !isXeniaGame(launchCommand) &&
-			!isCemuGame(launchCommand) && !isRyujinxGame(launchCommand);
+			!isCemuGame(launchCommand) && !isSwitchGame(launchCommand);
 	}
 
 	async resolve(appId: number): Promise<ID | undefined>

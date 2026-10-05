@@ -1,27 +1,36 @@
-import {ResolverCache, ResolverConfig} from "../../Resolver";
-import {getLaunchCommand, isXeniaGame, romRegex} from "../../../shortcuts";
-import {getAppDetails} from "../../../util";
-import { MultiIdResolver, type MultiIdResolverConfigs } from "./MultiIdResolver";
+import {ResolverCache, ResolverConfig} from "../Resolver";
+import {getLaunchCommand, isXeniaGame, romRegex} from "../../shortcuts";
+import {getAppDetails} from "../../util";
 import { call } from "@decky/api";
-import type { ID } from "../../../Interfaces";
+import type { ID } from "../../Interfaces";
+import { GlobalResolver } from "./GlobalResolver";
 
-export interface MultiIdXeniaResolverConfig extends ResolverConfig
+export interface XeniaResolverConfig extends ResolverConfig
 {
 	
 }
 
-export interface MultiIdXeniaResolverCache extends ResolverCache
+export interface XeniaResolverCache extends ResolverCache
 {
 	title_ids: Record<number, string | null>;
 }
 
-// Xbox 360 title id is unique across regions, so we don't need to check multiple entries
-export class MultiIdXeniaResolver extends MultiIdResolver
+export interface XeniaResolverConfigs
 {
-	identifier: keyof MultiIdResolverConfigs = "xenia";
+	xenia: XeniaResolverConfig;
+}
+
+export interface XeniaResolverCaches
+{
+	xenia: XeniaResolverCache;
+}
+
+export class XeniaResolver extends GlobalResolver<XeniaResolver>
+{
+	identifier: keyof XeniaResolverConfigs = "xenia";
 
 	get titleIds(): Record<number, string | null>{
-		return (this.cache as MultiIdXeniaResolverCache).title_ids;
+		return (this.cache as XeniaResolverCache).title_ids;
 	}
 
 	async test(appId: number): Promise<boolean>

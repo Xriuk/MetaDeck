@@ -5,7 +5,7 @@ import {t} from "../../../useTranslations";
 import {
 	getLaunchCommand, isCemuGame, isDolphinGame, isDuckstationGame, isEmulatedGame, isFlycastGame,
 	isMelonDSGame, isMGBAGame, isPCSX2Game, isPPSSPPGame, isRosaliesMupenGUIGame, isRPCS3Game,
-	isRyujinxGame, isShadPS4Game, isVita3KGame, isXemuGame, isXeniaGame
+	isShadPS4Game, isSwitchGame, isVita3KGame, isXemuGame, isXeniaGame
 } from "../../../shortcuts";
 import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
 import Logger from "../../../logger";
@@ -87,7 +87,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 			return ['Gameboy', 'Gameboy Color', 'Gameboy Advance'];
 		else if(isRosaliesMupenGUIGame(launchCommand))
 			return ['N64'];
-		else if(isRyujinxGame(launchCommand))
+		else if(isSwitchGame(launchCommand))
 			return ['Switch'];
 
 		else if(isFlycastGame(launchCommand))
@@ -99,6 +99,9 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	override async test(appId: number): Promise<boolean>
 	{
+		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return false;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return false;
@@ -269,7 +272,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 
 		// Portable consoles should have correct interface text size on Deck
-		if(isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) || isMelonDSGame(launchCommand) || isMGBAGame(launchCommand) || isRyujinxGame(launchCommand)){
+		if(isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) || isMelonDSGame(launchCommand) || isMGBAGame(launchCommand) || isSwitchGame(launchCommand)){
 			game.deck_test_results.push({
 				test_loc_token: '#SteamDeckVerified_TestResult_InterfaceTextIsLegible',
 				test_result: SteamTestResult.Verified
@@ -277,7 +280,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 
 		// Only PS3, PS4, Xbox 360 and Switch should have the correct deck resolution
-		if(!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isXeniaGame(launchCommand) && !isRyujinxGame(launchCommand)){
+		if(!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isXeniaGame(launchCommand) && !isSwitchGame(launchCommand)){
 			game.deck_test_results.push({
 				test_loc_token: '#SteamDeckVerified_TestResult_NativeResolutionNotDefault',
 				test_result: SteamTestResult.Playable
@@ -287,6 +290,9 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	protected override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
 	{
+		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -312,8 +318,6 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 			games = results.filter(value => value.title === closest_name);
 			this.logger.debug("Games: ", games);
 		}
-		else if (data_id === 0)
-			return undefined;
 		else
 			games = results.filter(value => value.id === data_id);
 		
@@ -326,6 +330,9 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title' | 'id'>> | undefined>
 	{
+		if (this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;

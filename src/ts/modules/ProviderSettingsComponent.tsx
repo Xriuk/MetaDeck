@@ -10,6 +10,7 @@ import {
 } from "@decky/ui";
 import {useMetaDeckState} from "../MetaDeckState";
 import {t} from "../useTranslations";
+import { ExcludeAppComponent } from "./ExcludeAppComponent";
 
 export const ProviderSettingsComponent: FC = () => {
 	const state = useMetaDeckState();
@@ -18,10 +19,13 @@ export const ProviderSettingsComponent: FC = () => {
 
 	for (let provider of state.modules[module].providers)
 	{
-		const [enabled, setEnabled] = useState(provider.enabled)
+		const [enabled, setEnabled] = useState(provider.enabled);
+		const [excluded, setExcluded] = useState(provider.excludedAppsSelf);
+
 		pages.push({
 			title: provider.title,
 			icon: provider.icon,
+			identifier: provider.identifier,
 			content: (
 				<DialogBody>
 					<DialogControlsSection>
@@ -45,6 +49,19 @@ export const ProviderSettingsComponent: FC = () => {
 					</DialogControlsSection>
 
 					<provider.settingsComponent/>
+
+					<DialogControlsSection>
+						<ExcludeAppComponent
+							source={provider}
+							value={excluded}
+							disabled={state.loadingData.loading}
+							onChange={async (value) => {
+								let oldValue = provider.excludedAppsSelf;
+								setExcluded(value);
+								provider.excludedAppsSelf = value;
+								await provider.onExcludedChange(oldValue, value);
+							}} />
+					</DialogControlsSection>
 				</DialogBody>
 			)
 		})

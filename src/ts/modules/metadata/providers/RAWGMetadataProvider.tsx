@@ -1,4 +1,3 @@
-import { fetchNoCors } from "@decky/api";
 import { DialogControlsSection, Field, SliderField, TextField } from "@decky/ui";
 import { useState } from "react";
 import { StoreCategory, type ID, type MetadataData } from "../../../Interfaces";
@@ -6,22 +5,24 @@ import Logger from "../../../logger";
 import {
 	getShortcutCategories, isXeniaGame, isRPCS3Game, isXemuGame,
 	isShadPS4Game, isPCSX2Game, isDuckstationGame, isDolphinGame, isCemuGame, isMelonDSGame, isMGBAGame,
-	isPPSSPPGame, isRosaliesMupenGUIGame, isRyujinxGame, isVita3KGame, isNSLGame, isJunkStoreGame,
+	isPPSSPPGame, isRosaliesMupenGUIGame, isVita3KGame, isNSLGame, isJunkStoreGame,
 	isHeroicGame, isFlycastGame,
-	getLaunchCommand
+	getLaunchCommand,
+	isSwitchGame
 } from "../../../shortcuts";
 import { t } from "../../../useTranslations";
-import { distanceWithLimit, closestWithLimit, getAppDetails } from "../../../util";
+import { distanceWithLimit, closestWithLimit, getAppDetails, fetchNoCorsLegacyTimeout } from "../../../util";
 import { Markdown } from "../../../markdown";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import React from "react";
-import { IdOverrideComponent, type Entry } from "../../IdOverrideComponent";
+import { IdOverrideComponent, type OverrideEntry } from "../../IdOverrideComponent";
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import { FaR } from "react-icons/fa6";
 
 type RAWGAchievement = {
 	name: string;
+	image: string;
 	percent: string;
 };
 
@@ -92,7 +93,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 			return '26,43,24'; // Game Boy / Game Boy Color / Game Boy Advance
 		else if(isRosaliesMupenGUIGame(launchCommand))
 			return '83'; // Nintendo 64
-		else if(isRyujinxGame(launchCommand))
+		else if(isSwitchGame(launchCommand))
 			return '7'; // Switch
 
 		else if(isFlycastGame(launchCommand))
@@ -104,10 +105,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	override async test(appId: number): Promise<boolean>
 	{
-		if(!this.apiKey)
-			return false;
-
-		if (this.overrides[appId] == 0)
+		if(!this.apiKey || this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -123,6 +121,15 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		return closest_names.length > 0;
 	}
 
+	// RAWG API sometimes returns 502 randomly, so we retry
+	private async fetchNoCorsWithRetry(url: string, times = 0): Promise<Response>{
+		let response = await fetchNoCorsLegacyTimeout(url);
+		if(!response.ok && (response.status === 429 || response.status === 502) && times < 5)
+			return this.throttle(() => this.fetchNoCorsWithRetry(url, times + 1));
+		else
+			return response;
+	}
+
 	protected async search(title: string, platformIds?: string | undefined): Promise<MetadataData[]>
 	{
 		if(!this.apiKey)
@@ -135,7 +142,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		};
 		if(platformIds)
 			params.platforms = platformIds;
-		const response = await fetchNoCors("https://api.rawg.io/api/games?" + new URLSearchParams(params).toString());
+		const response = await this.fetchNoCorsWithRetry("https://api.rawg.io/api/games?" + new URLSearchParams(params).toString());
 		if (response.ok)
 		{
 			let games: {
@@ -217,7 +224,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		const details = (await getAppDetails(appId))!;
 		game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
 
-		const response = await fetchNoCors(`https://api.rawg.io/api/games/${game.id}?key=${this.apiKey}`);
+		const response = await this.fetchNoCorsWithRetry(`https://api.rawg.io/api/games/${game.id}?key=${this.apiKey}`);
 		if(!response.ok){
 			game.description = t("noDescription"); // To not enrich again
 			return;
@@ -238,8 +245,11 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		game.publishers = gameR.publishers?.map(p => ({ name: p.name, url: '' }));
 	}
 
-	protected override async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
+	protected override async getMetadataForGame(appId: number, external = false): Promise<MetadataData | undefined>
 	{
+		if((!external && this.excludedApps.indexOf(appId) !== -1) || this.overrides[appId] === 0)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -267,8 +277,6 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 			games = results.filter(value => value.title === closest_name);
 			this.logger.debug("Games: ", games);
 		}
-		else if (data_id === 0)
-			return undefined;
 		else
 			games = results.filter(value => value.id === data_id);
 
@@ -285,6 +293,9 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	protected override async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title' | 'id'>> | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -356,13 +367,17 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 					
 				<DialogControlsSection>
 					<IdOverrideComponent
+						provider={this}
 						value={overrides}
-						onChange={(value) => {
-							setOverrides(value)
-							this.overrides = value
+						disabled={loadingData.loading}
+						onChange={async (value) => {
+							let oldValue = this.overrides;
+							setOverrides(value);
+							this.overrides = value;
+							await this.onOverridesChange(oldValue, value);
 						}}
 						resultsForApp={async (appId) => {
-							const ret: Record<ID, Entry<ID>> = {}
+							const ret: Record<ID, OverrideEntry<ID>> = {}
 							for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
 							{
 								ret[id] = {
@@ -381,12 +396,13 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 
 	public async getAchievementsForGame(appId: number): Promise<RAWGAchievement[] | undefined>{
-		const metadata = await this.getMetadataForGame(appId);
+		const metadata = await this.getMetadataForGame(appId, true);
 		if(!metadata)
 			return undefined;
 
 		let totalAchievements: {
 			name: string;
+			image: string;
 			percent: string;
 		}[] = [];
 		let achievements: {
@@ -400,7 +416,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		};
 		let response: Response;
 		do{
-			response = await fetchNoCors(achievements.next!);
+			response = await this.fetchNoCorsWithRetry(achievements.next!);
 			if(response.ok){
 				achievements = await response.json();
 				totalAchievements.push(...(achievements.results ?? []));

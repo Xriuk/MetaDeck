@@ -8,9 +8,10 @@ import type { ResolverConfig, ResolverCache } from "../../Resolver";
 import { MetadataProvider } from "../MetadataProvider";
 import { useState } from "react";
 import { DialogControlsSection, Field, SliderField } from "@decky/ui";
-import { IdOverrideComponent, type Entry } from "../../IdOverrideComponent";
+import { IdOverrideComponent, type OverrideEntry } from "../../IdOverrideComponent";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import { t } from "../../../useTranslations";
+import React from "react";
 
 export interface FuzzySearchMetadataProviderConfig extends ProviderConfig<{}, ResolverConfig>
 {
@@ -53,7 +54,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 	// DEV: maybe make abstract and avoid double-search?
 	override async test(appId: number): Promise<boolean>
 	{
-		if (this.overrides[appId] == 0)
+		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -70,6 +71,9 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	provide(appId: number): Promise<MetadataData | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return Promise.resolve(undefined);
+
 		return this.throttle(() => this.getMetadataForGame(appId));
 	}
 
@@ -82,6 +86,9 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	protected async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -108,8 +115,6 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 			games = results.filter(value => value.title === closest_name);
 			this.logger.debug("Games: ", games);
 		}
-		else if (data_id === 0)
-			return undefined;
 		else
 			games = results.filter(value => value.id === data_id);
 
@@ -126,6 +131,9 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	protected async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title' | 'id'>> | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -149,9 +157,13 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return;
+		
 		const launchCommand = getLaunchCommand(details);
 		if (isEmulatedGame(launchCommand))
 		{
@@ -169,46 +181,55 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
 		return (
-			<DialogControlsSection>
-				<Field
-					label={t("fuzziness")}
-					description={
-						<SliderField
-							value={fuzziness}
-							disabled={loadingData.loading}
-							min={0}
-							max={20}
-							step={1}
-							showValue={true}
-							resetValue={5}
-							editableValue={true}
-							validValues={'steps'}
-							onChange={(value) => {
-								setFuzziness(value);
-								this.fuzziness = value;
-							}}
-						/>
-					} />
-				<IdOverrideComponent
-					value={overrides}
-					onChange={(value) => {
-						setOverrides(value)
-						this.overrides = value
-					}}
-					resultsForApp={async (appId) => {
-						const ret: Record<ID, Entry<ID>> = {}
-						for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
-						{
-							ret[id] = {
-								label: appStore.GetAppOverviewByAppID(appId).display_name,
-								title: value.title,
-								id: id,
-								appId: appId
+			<>
+				<DialogControlsSection>
+					<Field
+						label={t("fuzziness")}
+						description={
+							<SliderField
+								value={fuzziness}
+								disabled={loadingData.loading}
+								min={0}
+								max={20}
+								step={1}
+								showValue={true}
+								resetValue={5}
+								editableValue={true}
+								validValues={'steps'}
+								onChange={(value) => {
+									setFuzziness(value);
+									this.fuzziness = value;
+								}}
+							/>
+						} />
+				</DialogControlsSection>
+
+				<DialogControlsSection>
+					<IdOverrideComponent
+						provider={this}
+						value={overrides}
+						disabled={loadingData.loading}
+						onChange={async (value) => {
+							let oldValue = this.overrides;
+							setOverrides(value);
+							this.overrides = value;
+							await this.onOverridesChange(oldValue, value);
+						}}
+						resultsForApp={async (appId) => {
+							const ret: Record<ID, OverrideEntry<ID>> = {}
+							for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
+							{
+								ret[id] = {
+									label: appStore.GetAppOverviewByAppID(appId).display_name,
+									title: value.title,
+									id: id,
+									appId: appId
+								}
 							}
-						}
-						return ret;
-					}} />
-			</DialogControlsSection>
+							return ret;
+						}} />
+				</DialogControlsSection>
+			</>
 		);
 	};
 }

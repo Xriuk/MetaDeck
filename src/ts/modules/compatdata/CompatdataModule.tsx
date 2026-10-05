@@ -110,9 +110,13 @@ export class CompatdataModule extends Module<
 		"metadata"
 	];
 
+	override get enabled(){
+		return false;
+	}
+
 	addMounts(mounts: Mounts): void
 	{
-		const module = this
+		const module = this;
 
 		mounts.addPatchMount({
 			patch(): Patch
@@ -124,16 +128,17 @@ export class CompatdataModule extends Module<
 					   function (_, ret) {
 						   if (!module.isValid)
 							   return ret;
+
 						   // @ts-ignore
 						   const overview: SteamAppOverview = this
-						   if (overview.app_type == SteamAppTypeShortcut)
+						   if (overview.app_type == SteamAppTypeShortcut && module.excludedApps.indexOf(overview.appid) === -1)
 							   void module.applyOverview(overview);
 
 						   return ret
 					   }
 				)
 			}
-		})
+		});
 
 		mounts.addMount(routePatch("/library/app/:appid", (props: { path?: string, children?: any }) => {
 			afterPatch(props.children.props, "renderFunc", (_, ret) => {
@@ -142,7 +147,8 @@ export class CompatdataModule extends Module<
 				const overview: SteamAppOverview = ret.props.children.props.overview;
 				const details: SteamAppDetails = ret.props.children.props.details;
 
-				void this.applyApp(overview, details)
+				if (overview.app_type == SteamAppTypeShortcut && module.excludedApps.indexOf(overview.appid) === -1)
+					void this.applyApp(overview, details)
 
 				return ret;
 			})
@@ -154,14 +160,14 @@ export class CompatdataModule extends Module<
 				if (!module.isValid)
 					return ret;
 
-				for (const appId of this.state.apps){
+				for (const appId of this.apps){
 					void this.apply(appId);
 				}
 
 				return ret;
 			})
 			return props;
-		}))
+		}));
 	}
 
 	private computeCompatCategories(data?: CompatdataData): Required<Pick<CompatdataData, 'deck_compat_category' | 'machine_compat_category' | 'frame_compat_category' | 'os_compat_category'>>{
@@ -282,7 +288,7 @@ export class CompatdataModule extends Module<
 
 	applyOverview(overview: SteamAppOverview): Promise<void>
 	{
-		if (!this.verified)
+		if (!this.verified || this.excludedApps.indexOf(overview.appid) !== -1)
 			return Promise.resolve();
 
 		const categories = this.computeCompatCategories(this.data[overview.appid]);
@@ -299,7 +305,7 @@ export class CompatdataModule extends Module<
 
 	applyDetails(details: SteamAppDetails): Promise<void>
 	{
-		if(!this.verified)
+		if(!this.verified || this.excludedApps.indexOf(details.unAppID) !== -1)
 			return Promise.resolve();
 
 		const compatdata = this.data[details.unAppID];

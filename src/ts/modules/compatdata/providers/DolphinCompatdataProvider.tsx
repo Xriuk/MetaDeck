@@ -1,16 +1,16 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
-import { isGameCubeId6 } from "../../../shortcuts";
+import { getLaunchCommand, isDolphinGame, isGameCubeId6 } from "../../../shortcuts";
 import Logger from "../../../logger";
 import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
 import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import type { ProviderCache, ProviderConfig } from "../../Provider";
 import type { ResolverCache, ResolverConfig } from "../../Resolver";
 import { removeBeforeAndIncluding, type WikiSearchResponse } from "../../GamesDBResult";
-import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBProvider";
+import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBMetadataProvider";
 import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
 import { SiDolphin } from "react-icons/si";
+import { fetchNoCorsLegacyTimeout, getAppDetails } from "../../../util";
 
 export interface DolphinCompatdataProviderConfig extends Omit<FuzzySearchCompatdataProviderConfig, 'resolvers'>, ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin'>, ResolverConfig>
 {
@@ -48,8 +48,26 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 		return this._gameTDBProvider;
 	}
 
+	async test(appId: number): Promise<boolean>
+	{
+		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return false;
+
+		const details = await getAppDetails(appId);
+		if(!details)
+			return false;
+		if(!isDolphinGame(getLaunchCommand(details)))
+			return false;
+
+		return await super.test(appId);
+	}
+
 	protected async search(title: string): Promise<CompatdataData[]>{
-		let response = await fetchNoCors(`https://wiki.dolphin-emu.org/api.php?action=opensearch&limit=10&search=${encodeURIComponent(title)}`);
+		let response = await fetchNoCorsLegacyTimeout('https://wiki.dolphin-emu.org/api.php?' + new URLSearchParams({
+			action: 'opensearch',
+			limit: '10',
+			search: title
+		}).toString());
 		if(!response)
 			return [];
 
@@ -78,7 +96,10 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 			return undefined;
 
 		// Retrieve the wiki entry
-		let response = await fetchNoCors(`https://wiki.dolphin-emu.org/index.php?title=${(id ?? title)}&action=raw`);
+		let response = await fetchNoCorsLegacyTimeout('https://wiki.dolphin-emu.org/index.php?' + new URLSearchParams({
+			action: 'raw',
+			title: (id ?? title!)
+		}).toString());
 		if(!response.ok){
 			if(fallbackToSearch)
 				return await super.provide(appId);
@@ -96,7 +117,10 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 			return undefined;
 
 		// Retrieve the wiki rating page
-		response = await fetchNoCors(`https://wiki.dolphin-emu.org/index.php?title=Template:Ratings/${encodeURIComponent(title)}&action=raw`);
+		response = await fetchNoCorsLegacyTimeout('https://wiki.dolphin-emu.org/index.php' + new URLSearchParams({
+			action: 'raw',
+			title: `Template:Ratings/${title}`
+		}).toString());
 		if(!response.ok)
 			return undefined;
 
@@ -193,24 +217,27 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 
 		// Enrich test result by retrieving required devices like USB Guitar
-		let metadata = await this.gameTDBProvider.getDolphinGameEntries(appId);
-		if(metadata.some(m => m.controls?.some(c => c.type === "guitar" && c.required))){
-			([
-				[result.deck_test_results!, "SteamDeckVerified"],
-				[result.os_test_results!, "SteamOS"]
-			] as const).forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
-						test_result: SteamTestResult.Playable
-					}
-				);
-			});
+		let metadata: Awaited<ReturnType<GameTDBMetadataProvider['getDolphinGameEntries']>> | undefined;
+		if(this.gameTDBProvider.enabled){
+			metadata = await this.gameTDBProvider.getDolphinGameEntries(appId);
+			if(metadata.some(m => m.controls?.some(c => c.type === "guitar" && c.required))){
+				([
+					[result.deck_test_results!, "SteamDeckVerified"],
+					[result.os_test_results!, "SteamOS"]
+				] as const).forEach(([results, cat]) => {
+					results.push(
+						{
+							test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
+							test_result: SteamTestResult.Playable
+						}
+					);
+				});
+			}
 		}
 
 		// Controller works if it is a GameCube game or if we have support for GameCube or Classic Controller,
 		// otherwise it may require tweaks
-		if((id && isGameCubeId6(id)) || metadata.some(m => m.controls?.some(c => c.type === "gamecube" || c.type === "classiccontroller"))){
+		if((id && isGameCubeId6(id)) || metadata?.some(m => m.controls?.some(c => c.type === "gamecube" || c.type === "classiccontroller"))){
 			deckMachineAndFrame.forEach(([results, cat]) => {
 				results.push(
 					{
@@ -235,6 +262,9 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{
+		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return undefined;
+
 		// Dolphin groups the title id for different regions
 		const id6 = (await this.resolve(appId))?.toString().split(separator, 1)[0];
 		if(!id6)

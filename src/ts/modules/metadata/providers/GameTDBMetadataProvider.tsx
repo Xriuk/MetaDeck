@@ -8,17 +8,20 @@ import type { ResolverConfig, ResolverCache } from "../../Resolver";
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { MetadataProvider } from "../MetadataProvider";
 import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
-import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
+import { separator, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
-import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game } from "../../../shortcuts";
+import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game, isSwitchGame } from "../../../shortcuts";
 import { getAppDetails } from "../../../util";
 import { callable } from "@decky/api";
 import { MetadataData, StoreCategory } from "../../../Interfaces";
 import { FaG } from "react-icons/fa6";
 import { MultiIdCemuResolver } from "../../resolvers/MultiId/MultiIdCemuResolver";
+import type { GlobalResolver } from "../../resolvers/GlobalResolver";
+import { SwitchSerialResolver, type SwitchSerialResolverCaches, type SwitchSerialResolverConfigs } from "../../resolvers/SwitchSerialResolver";
 
 const wiiUrl = "https://www.gametdb.com/wiitdb.zip";
 const wiiUUrl = "https://www.gametdb.com/wiiutdb.zip";
+const switchUrl = "https://www.gametdb.com/switchtdb.zip";
 const ps3Url = "https://www.gametdb.com/ps3tdb.zip";
 
 type GameTDBGame = {
@@ -39,21 +42,22 @@ type GameTDBGame = {
 	}[];
 };
 
-export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'cemu' | 'rpcs3'>, ResolverConfig>
+export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'cemu' | 'rpcs3'> & SwitchSerialResolverConfigs, ResolverConfig>
 {
 	language: string // ZH -> ZHCN / ZHTW (in order)
 }
 
-export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'cemu' | 'rpcs3'>, ResolverCache>
+export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'cemu' | 'rpcs3'> & SwitchSerialResolverCaches, ResolverCache>
 {
 	
 }
 
-// DEV: add support for DS and Switch games
+// DEV: add support for DS games
 export class GameTDBMetadataProvider extends MetadataProvider<any>{
-	resolvers: MultiIdResolver[] = [
+	resolvers: GlobalResolver<any>[] = [
 		new MultiIdDolphinResolver(this),
 		new MultiIdCemuResolver(this),
+		new SwitchSerialResolver(this),
 		new MultiIdRPCS3Resolver(this)
 	];
 
@@ -65,7 +69,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 	logger: Logger = new Logger(GameTDBMetadataProvider.identifier);
 
 	gametdb_get_db = callable<[string]>("gametdb_get_db");
-	gametdb_get_entry = callable<[string, string], GameTDBGame | null>("gametdb_get_entry");
+	gametdb_get_entry = callable<[string, string], string | null>("gametdb_get_entry");
 
 	get language(): string
 	{
@@ -82,14 +86,21 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		await super.mount();
 
 		// Save in backend instead of returning because there's a lot of data
-		try{
-			await this.gametdb_get_db(wiiUrl);
-			await this.gametdb_get_db(wiiUUrl);
-			await this.gametdb_get_db(ps3Url);
+		let errors: any[] = [];
+		const urls = [
+			wiiUrl, wiiUUrl, switchUrl,
+			ps3Url
+		];
+		for(let url of urls){
+			try{
+				await this.gametdb_get_db(url);
+			}
+			catch(e){
+				errors.push(e);
+			}
 		}
-		catch(e){
-			this.logger.error("Error while retrieving one or more zip file", e);
-		}
+		if(errors.length)
+			this.logger.error("Error while retrieving one or more zip file", errors);
 	}
 
 	private getLocalized(
@@ -97,11 +108,13 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		predicate: (locale: NonNullable<GameTDBGame['locales']>[string]) => any):
 			NonNullable<GameTDBGame['locales']>[string] | undefined{
 
+		let language = this.language.toUpperCase();
+
 		// Retrieve localized version
-		let locale = locales.find(l => l[0].toUpperCase() == this.language.toUpperCase() && predicate(l[1]));
+		let locale = locales.find(l => l[0].toUpperCase() == language && predicate(l[1]));
 
 		// If we have chinese language we try China and Taiwan variants in order
-		if(!locale && this.language.toUpperCase() == "ZH"){
+		if(!locale && language == "ZH"){
 			locale = locales.find(l => l[0].toUpperCase() == "ZHCH" && predicate(l[1]))
 				?? locales.find(l => l[0].toUpperCase() == "ZHTW" && predicate(l[1]));
 		}
@@ -114,30 +127,20 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 
 	async provide(appId: number): Promise<MetadataData | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
 		const launchCommand = getLaunchCommand(details);
-		const resolved = await this.resolve(appId);
-		if (!resolved)
-			return undefined;
 
-		const ids = resolved.toString().split(separator);
-		if(!ids?.length)
-			return undefined;
-
-		this.logger.debug("Games ids", appId, ids);
-
-		const cats = await getShortcutCategories(getLaunchCommand(details));
+		const cats = await getShortcutCategories(launchCommand);
 		cats.push(StoreCategory.SinglePlayer);
 		
 		let entries: GameTDBGame[] = [];
 		if(isDolphinGame(launchCommand)){
-			for(let id in ids){
-				let entry = await this.gametdb_get_entry(wiiUrl, id);
-				if(entry)
-					entries.push(entry);
-			}
+			entries = await this.getDolphinGameEntries(appId);
 
 			if(entries.length){
 				cats.push(StoreCategory.TrackedControllerSupport);
@@ -145,18 +148,17 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 					cats.push(StoreCategory.MultiPlayer);
 				if(entries.some(e => e["wi-fi-players"]))
 					cats.push(StoreCategory.OnlineMultiPlayer);
-				if(ids.some(i => isGameCubeId6(i)) || entries.some(e => e.controls?.some(c => c.type === 'gamecube' || c.type === 'classiccontroller')))
+				if (entries.some(e => e.controls?.some(c => c.type === 'gamecube' || c.type === 'classiccontroller')) ||
+					(await this.resolve(appId))!.toString().split(separator).some(i => isGameCubeId6(i))){
+
 					cats.push(StoreCategory.FullController);
+				}
 				else
 					cats.push(StoreCategory.PartialController);
 			}
 		}
 		else if(isCemuGame(launchCommand)){
-			for(let id in ids){
-				let entry = await this.gametdb_get_entry(wiiUUrl, id);
-				if(entry)
-					entries.push(entry);
-			}
+			entries = await this.getCemuGameEntries(appId);
 
 			if(entries.length){
 				cats.push(StoreCategory.FullController);
@@ -168,12 +170,21 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 					cats.push(StoreCategory.TrackedControllerSupport);
 			}
 		}
-		else if(isRPCS3Game(launchCommand)){
-			for(let id in ids){
-				let entry = await this.gametdb_get_entry(ps3Url, id);
-				if(entry)
-					entries.push(entry);
+		else if(isSwitchGame(launchCommand)){
+			entries = await this.getSwitchGameEntries(appId);
+
+			if(entries.length){
+				cats.push(StoreCategory.FullController);
+				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
+					cats.push(StoreCategory.MultiPlayer);
+				if(entries.some(e => e["wi-fi-players"]))
+					cats.push(StoreCategory.OnlineMultiPlayer);
+				if(entries.some(e => e.controls?.some(c => c.type === 'joycon' && c.required === true)))
+					cats.push(StoreCategory.TrackedControllerSupport);
 			}
+		}
+		else if(isRPCS3Game(launchCommand)){
+			entries = await this.getRPCS3GameEntries(appId);
 
 			if(entries.length){
 				cats.push(StoreCategory.FullController);
@@ -196,7 +207,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			id: entries[0].id,
 			title: this.getLocalized(locales, l => l.title)?.title
 				?? entries[0].name,
-			description: this.getLocalized(locales, l => l.title)?.synopsis || t("noDescription"),
+			description: this.getLocalized(locales, l => l.synopsis)?.synopsis || t("noDescription"),
 			release_date: release ? Math.floor(Date.parse(release) / 1000) : undefined,
 			developers: entries
 				.find(e => e.developer)?.developer
@@ -236,8 +247,9 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		)
 	}
 
+	// Here we do not check excludedApps because this might be used externally
 	private async getGameEntries(appId: number, url: string): Promise<GameTDBGame[]>{
-		const resolved = await this.resolve(appId);
+		const resolved = await this.resolve(appId, true);
 		if (!resolved)
 			return [];
 
@@ -245,11 +257,13 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		if(!ids?.length)
 			return [];
 
+		this.logger.debug("Games ids", appId, ids);
+
 		let entries: GameTDBGame[] = [];
-		for(let id in ids){
+		for(let id of ids){
 			let entry = await this.gametdb_get_entry(url, id);
 			if(entry)
-				entries.push(entry);
+				entries.push(JSON.parse(entry));
 		}
 
 		return entries;
@@ -276,6 +290,17 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			return [];
 		
 		return this.getGameEntries(appId, wiiUUrl);
+	}
+
+	public async getSwitchGameEntries(appId: number): Promise<GameTDBGame[]>{
+		const details = await getAppDetails(appId);
+		if (!details)
+			return [];
+		const launchCommand = getLaunchCommand(details);
+		if(!isSwitchGame(launchCommand))
+			return [];
+		
+		return this.getGameEntries(appId, switchUrl);
 	}
 
 	public async getRPCS3GameEntries(appId: number): Promise<GameTDBGame[]>{

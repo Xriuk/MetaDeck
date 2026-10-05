@@ -1,5 +1,5 @@
 import { FaGamepad } from "react-icons/fa";
-import { StoreCategory, type MetadataData } from "../../../Interfaces";
+import { inheritSettings, StoreCategory, type MetadataData } from "../../../Interfaces";
 import Logger from "../../../logger";
 import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
 import { t } from "../../../useTranslations";
@@ -43,7 +43,7 @@ export class RetroAchievementsMetadataProvider extends MetadataProvider<any>{
 	}
 
 	override test(appId: number): Promise<boolean> {
-		return this.raProvider.test(appId);
+		return this.raProvider.test(appId, true);
 	}
 
 	async provide(appId: number): Promise<MetadataData | undefined> {
@@ -70,4 +70,8 @@ export class RetroAchievementsMetadataProvider extends MetadataProvider<any>{
 	}
 
 	override icon = <FaGamepad/>;
+
+	override settingsComponent = () => {
+		return inheritSettings(this.raProvider)();
+	};
 }

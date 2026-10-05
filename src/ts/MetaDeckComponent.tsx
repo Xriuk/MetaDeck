@@ -2,8 +2,9 @@ import {useMetaDeckState} from "./MetaDeckState";
 import {FC, useEffect, useState, type CSSProperties} from "react";
 import {useTranslations} from "./useTranslations";
 import {ButtonItem, PanelSection, PanelSectionRow, Navigation, Field, ProgressBar} from "@decky/ui";
-import {FaCog, FaSync, FaTrash} from "react-icons/fa";
+import {FaArrowLeft, FaCog, FaSync, FaTrash} from "react-icons/fa";
 import React from "react";
+import { truncate } from "lodash-es";
 
 const SettingsButton: FC = () =>
 {
@@ -80,14 +81,16 @@ const LoadingProgressBar: FC = () =>
 			def.color = "red";
 		setCss(def);
 	}, [loadingData]);
+
 	return <>
 		<Field
 			label={t("loading")}
-			description={`${loadingData.currentModule?.module.title} - ${loadingData.currentModule?.processed}/${loadingData.currentModule?.total}`}
+			description={`${(loadingData.currentModule?.module.title ? loadingData.currentModule.module.title + (loadingData.currentModule.total ? ` - ${loadingData.currentModule.processed}/${loadingData.currentModule.total}` : '') : undefined)}`}
 			bottomSeparator="none"
 		/>
 		<ProgressBar
 			focusable={false}
+			indeterminate={!loadingData.currentModule?.total}
 			nProgress={loadingData.percentage}
 		/>
 		<Field
@@ -102,43 +105,111 @@ const LoadingProgressBar: FC = () =>
 	</>;
 };
 
+let activeModule: string | null = null;
+const ModulesList: FC = () => {
+	const t = useTranslations();
+	const { modules } = useMetaDeckState();
+	const [active, setActive] = useState(activeModule);
+	
+	return <>
+		{
+			active &&
+			<PanelSectionRow key='back'>
+				<Field
+					label={t('back')}
+					childrenLayout="below"
+					icon={<FaArrowLeft/>}
+					onActivate={() => {
+						setActive(null);
+						activeModule = null;
+					}}>
+				</Field>
+			</PanelSectionRow>
+		}
+		{
+			!active ?
+				Object.values(modules).filter(m => m.isValid).map(m => {
+					let apps = m.apps;
+					let hasData = apps.filter(a => m.hasData(a));
+
+					return <PanelSectionRow key={m.identifier}>
+						<Field
+							label={m.title}
+							description={`${hasData.length}/${apps.length}`}
+							childrenLayout="below"
+							onActivate={() => {
+								setActive(m.identifier);
+								activeModule = m.identifier;
+							}}>
+							<ProgressBar
+								focusable={false}
+								nProgress={(hasData.length / apps.length * 100)}
+							/>
+						</Field>
+					</PanelSectionRow>;
+				}) :
+				modules[active].apps.filter(a => modules[active].hasData(a)).map(a => {
+					let data = modules[active].fetchData(a);
+					let provider = modules[active].dataProviders[a];
+
+					if(data){
+						return <PanelSectionRow key={a}>
+							<Field
+								label={appStore.GetAppOverviewByAppID(a).display_name}
+								description={(
+									(provider ? provider + " - " : "") +
+									truncate(modules[active].progressDescription(data), {
+										'length': 100,
+										'omission': "..."
+									})
+								)}
+								onActivate={() => {
+									Navigation.CloseSideMenus();
+									Navigation.Navigate(`/metadeck/${modules[active].identifier}`);
+								}}>
+							</Field>
+						</PanelSectionRow>;
+					}
+					else
+						return undefined;
+				})
+		}
+	</>
+};
+
 export const MetaDeckComponent: FC = () => {
 	const { loadingData } = useMetaDeckState();
 
 	return (
-		loadingData.loading ?
-			<PanelSection>
-				<PanelSectionRow>
-					<SettingsButton />
-				</PanelSectionRow>
+		<PanelSection>
+			<PanelSectionRow>
+				<SettingsButton />
+			</PanelSectionRow>
+			{
+				(!loadingData.loading) &&
+				<>
+					<PanelSectionRow>
+						<RefreshButton />
+					</PanelSectionRow>
+					<PanelSectionRow>
+						<CacheButton />
+					</PanelSectionRow>
+				</>
+			}
+			{
+				(loadingData.loading || loadingData.currentModule?.error) &&
 				<PanelSectionRow>
 					<LoadingProgressBar />
 				</PanelSectionRow>
-			</PanelSection> : (loadingData.currentModule?.error ?
-				<PanelSection>
-					<PanelSectionRow>
-						<SettingsButton />
-					</PanelSectionRow>
-					<PanelSectionRow>
-						<RefreshButton />
-					</PanelSectionRow>
-					<PanelSectionRow>
-						<CacheButton />
-					</PanelSectionRow>
-					<PanelSectionRow>
-						<LoadingProgressBar />
-					</PanelSectionRow>
-				</PanelSection> :
-				<PanelSection>
-					<PanelSectionRow>
-						<SettingsButton />
-					</PanelSectionRow>
-					<PanelSectionRow>
-						<RefreshButton />
-					</PanelSectionRow>
-					<PanelSectionRow>
-						<CacheButton />
-					</PanelSectionRow>
-				</PanelSection>)
+			}
+			{
+				(!loadingData.loading) &&
+				<PanelSectionRow>
+
+					<ModulesList />
+					
+				</PanelSectionRow>
+			}
+		</PanelSection>
 	);
 };

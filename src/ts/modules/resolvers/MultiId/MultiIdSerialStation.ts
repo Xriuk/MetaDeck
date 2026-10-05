@@ -1,7 +1,7 @@
 import {ID} from "../../../Interfaces";
+import { fetchNoCorsLegacyTimeout } from "../../../util";
 import type { ResolverCache } from "../../Resolver";
 import { MultiIdResolver, separator } from "./MultiIdResolver";
-import { fetchNoCors } from "@decky/api";
 
 export interface MultiIdSerialStationResolverCache extends ResolverCache
 {
@@ -30,7 +30,7 @@ export abstract class MultiIdSerialStationResolver extends MultiIdResolver
 		}
 
 		// Retrieve the game id on SerialStation, if we fail we return the single id
-		let response = await fetchNoCors("https://api.serialstation.com/v1/title-ids/" + titleId);
+		let response = await fetchNoCorsLegacyTimeout("https://api.serialstation.com/v1/title-ids/" + titleId);
 		if(!response.ok){
 			this.titleIds[appId] = titleId;
 			return titleId;
@@ -46,12 +46,13 @@ export abstract class MultiIdSerialStationResolver extends MultiIdResolver
 		}
 
 		// Retrieve all the title ids for all the games
-		let titleIds = new Set<string>(titleId);
+		let titleIds = new Set<string>();
+		titleIds.add(titleId);
 		for(let game of titleIdInfo.games){
 			if(!game.id)
 				continue;
 
-			response = await fetchNoCors("https://api.serialstation.com/v1/games/" + game.id);
+			response = await fetchNoCorsLegacyTimeout("https://api.serialstation.com/v1/games/" + game.id);
 			if(!response.ok)
 				continue;
 			let gameIdInfo: {

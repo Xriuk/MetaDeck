@@ -1,11 +1,10 @@
-import { fetchNoCors } from "@decky/api"
 import type { AchievementsData, ID } from "../../../Interfaces"
 import { t } from "../../../useTranslations"
-import { getAppDetails } from "../../../util"
+import { fetchNoCorsLegacyTimeout, getAppDetails } from "../../../util"
 import type { ProviderCache, ProviderConfig } from "../../Provider"
 import type { AchievementsProviderConfigs } from "../AchievementsModule"
 import { AchievementsProvider } from "../AchievementsProvider"
-import { RetroAchievementsResolver, type RetroAchievementsAchievementsResolverCaches, type RetroAchievementsAchievementsResolverConfigs, type RetroAchievementsResolverCache, type RetroAchievementsResolverConfig } from "../../resolvers/RetroAchievementsResolver"
+import { RetroAchievementsResolver, type RetroAchievementsResolverCaches, type RetroAchievementsResolverConfigs, type RetroAchievementsResolverCache, type RetroAchievementsResolverConfig } from "../../resolvers/RetroAchievementsResolver"
 import Logger from "../../../logger"
 import { DialogControlsSection, Field, sleep, TextField, Toggle } from "@decky/ui"
 import { GetGameInfoAndUserProgressResponse } from "@retroachievements/api";
@@ -14,15 +13,16 @@ import { useMetaDeckState } from "../../../MetaDeckState"
 import { useState } from "react"
 import { Markdown } from "../../../markdown"
 import React from "react"
+import { version } from "@decky/pkg"
 
-export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<RetroAchievementsAchievementsResolverConfigs, RetroAchievementsResolverConfig>
+export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<RetroAchievementsResolverConfigs, RetroAchievementsResolverConfig>
 {
 	username: string;
 	api_key: string;
 	points: boolean;
 }
 
-export interface RetroAchievementsAchievementsProviderCache extends ProviderCache<RetroAchievementsAchievementsResolverCaches, RetroAchievementsResolverCache>
+export interface RetroAchievementsAchievementsProviderCache extends ProviderCache<RetroAchievementsResolverCaches, RetroAchievementsResolverCache>
 {
 	// Cache lasts max 5 mins, to allow achievements and metadata to retrieve the same result
 	game_info: Record<ID, GetGameInfoAndUserProgressResponse & {
@@ -80,14 +80,17 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		return (this.cache as RetroAchievementsAchievementsProviderCache).game_info;
 	}
 
-	override test(appId: number): Promise<boolean> {
-		if(!this.username || !this.apiKey)
+	override test(appId: number, external = false): Promise<boolean> {
+		if(!this.username || !this.apiKey || this.excludedApps.indexOf(appId) !== -1)
 			return Promise.resolve(false);
 
-		return super.test(appId);
+		return super.test(appId, external);
 	}
 
 	provide(appId: number): Promise<AchievementsData | undefined> {
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return Promise.resolve(undefined);
+
 		return this.throttle(async () => {
 			const game = await this.getGameInfoAndProgress(appId);
 
@@ -195,7 +198,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		if(!this.username || !this.apiKey)
 			return undefined;
 		
-		const resolved = await this.resolve(appId);
+		const resolved = await this.resolve(appId, true);
 		if (!resolved)
 			return undefined;
 
@@ -218,10 +221,15 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 			}
 
 			if(!game){
-				const response = await fetchNoCors(
-					`https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?z=${this.username}&y=${this.apiKey}&u=${this.username}&g=${resolved}`,
+				const response = await fetchNoCorsLegacyTimeout(
+					`https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?` + new URLSearchParams({
+						z: this.username,
+						y: this.apiKey,
+						u: this.username,
+						g: resolved.toString(),
+					}).toString(), 'GET',
 					{
-						headers: { "User-Agent": `MetaDeck/${process.env.VERSION} (+https://github.com/Xriuk/MetaDeck)` }
+						headers: { "User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)` }
 					});
 				if (
 					response.status == 429 ||

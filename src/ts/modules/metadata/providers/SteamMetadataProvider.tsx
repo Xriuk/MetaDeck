@@ -7,12 +7,12 @@ import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
 import React from "react";
 import { useMetaDeckState } from "../../../MetaDeckState";
-import { IdOverrideComponent, type Entry } from "../../IdOverrideComponent";
+import { IdOverrideComponent, type OverrideEntry } from "../../IdOverrideComponent";
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
-import { fetchNoCors } from "@decky/api";
 import type { AppDetailsResponse } from "type-steamapi";
 import { FaSteam } from "react-icons/fa";
+import { fetchNoCorsLegacyTimeout } from "../../../util";
 
 export interface SteamMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -45,14 +45,13 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 		this.module.config.providers.steam.language = language;
 		void this.module.saveData();
 	}
-	
 
 	protected async search(title: string): Promise<MetadataData[]>
 	{
 		// Basic fetchNoCors is buggy AF and the encoded JSON doesn't play well
 		// (it throws when we have titles containing HTTP not encoded chars),
 		// so we use legacy here...
-		const response = (await DeckyPluginLoader.legacyFetchNoCors("https://api.steampowered.com/IStoreQueryService/SearchSuggestions/v1/?input_json=" +
+		const response = (await fetchNoCorsLegacyTimeout("https://api.steampowered.com/IStoreQueryService/SearchSuggestions/v1/?input_json=" +
 			encodeURIComponent(JSON.stringify({
 				search_term: title,
 				max_results: 5, // Will filter them by distance
@@ -68,10 +67,9 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 					include_basic_info: true,
 					include_release: true
 				}
-			})), {
-				method: 'GET'
-			}));
-		if (response.success && typeof response.result !== 'string')
+			}))));
+		this.logger.debug(title, response);
+		if (response.ok)
 		{
 			let games: {
 				response?: {
@@ -98,7 +96,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 						};
 					}[];
 				};
-			} = JSON.parse(response.result?.body ?? "{}");
+			} = await response.json();
 			if(!games.response?.store_items?.length)
 				return [];
 
@@ -116,11 +114,13 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 					.filter(c => StoreCategory[c])
 					.map(c => StoreCategory[StoreCategory[c] as any] as unknown as StoreCategory)
 			}));
-		} else if (typeof response.result !== 'string' && response.result?.status === 429)
-		{
+		}
+		else if (response.status === 429)
 			return this.throttle(() => this.search(title));
-		} else if (typeof response.result !== 'string' && response.result?.status && response.result.status >= 500) return[]
-		else throw Error(`Could not find metadata for "${title}": \n${(typeof response.result === 'string' ? response.result : response.result?.body)}`);
+		else if (response.status >= 500)
+			return[]
+		else
+			throw Error(`Could not find metadata for "${title}": \n${(await response.text())}`);
 	}
 
 	override icon = <FaSteam/>;
@@ -172,13 +172,17 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 
 				<DialogControlsSection>
 					<IdOverrideComponent
+						provider={this}
 						value={overrides}
-						onChange={(value) => {
-							setOverrides(value)
-							this.overrides = value
+						disabled={loadingData.loading}
+						onChange={async (value) => {
+							let oldValue = this.overrides;
+							setOverrides(value);
+							this.overrides = value;
+							await this.onOverridesChange(oldValue, value);
 						}}
 						resultsForApp={async (appId) => {
-							const ret: Record<ID, Entry<ID>> = {}
+							const ret: Record<ID, OverrideEntry<ID>> = {}
 							for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
 							{
 								ret[id] = {
@@ -196,8 +200,11 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 	}
 
 	// Missing release_date
-	public async getAppMetadata(appId: number | string): Promise<MetadataData | undefined>{
-		const response = await fetchNoCors(
+	public async getAppMetadata(appId: number, external = false): Promise<MetadataData | undefined>{
+		if(!external && this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
+		const response = await fetchNoCorsLegacyTimeout(
 			"https://store.steampowered.com/api/appdetails?appids={0}&l={1}"
 				.replace("{0}", appId.toString())
 				.replace("{1}", this.language));

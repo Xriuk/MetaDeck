@@ -5,13 +5,8 @@ import {EventBus} from "./events";
 import {routerHook} from "@decky/api";
 import {Patch} from "@decky/ui";
 import Logger from "./logger";
-import {
-	name
-} from "@decky/manifest"
-
-import {
-	version
-} from "@decky/pkg"
+import { name } from "@decky/manifest";
+import { version } from "@decky/pkg";
 
 export const systemClock: Clock = {
 	getTimeMs() {

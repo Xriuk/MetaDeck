@@ -10,7 +10,7 @@
 	"initializing": "Inizializzazione in corso",
 	"noData": "%% non trovati",
 	"foundMetadata": "Descrizione: %%",
-	"foundCompatdata": "Compatibilità con Steam Deck: %%",
+	"foundCompatdata": "Compatibilità: %%",
 	"currentGame": "%%: %%",
 	"verified": "Verificato",
 	"playable": "Giocabile",
@@ -60,8 +60,8 @@
 	"metadataSettingsMarkdownDesc": "Applica un motore di rendering markdown alla descrizione di ogni gioco",
 	"metadataSettingsTitleHeader": "Mostra titolo",
 	"metadataSettingsTitleHeaderDesc": "Aggiunge un titolo alla descrizione di ogni gioco",
-	"compatdataSettingsVerified": "Applica compatibilità con Steam Deck",
-	"compatdataSettingsVerifiedDesc": "Scarica i dati di compatibilità dai provider e li aggiunge agli indicatori di compatibilità di Steam Deck",
-	"compatdataSettingsNotes": "Applica dettagli di compatibilità con Steam Deck",
-	"compatdataSettingsNotesDesc": "Scarica dati di compatibilità aggiuntivi dai provider e li aggiunge agli indicatori di compatibilità di Steam Deck"
+	"compatdataSettingsVerified": "Applica compatibilità Steam",
+	"compatdataSettingsVerifiedDesc": "Scarica i dati di compatibilità dai provider e li aggiunge agli indicatori di compatibilità di Steam",
+	"compatdataSettingsNotes": "Applica dettagli di compatibilità",
+	"compatdataSettingsNotesDesc": "Scarica dati di compatibilità aggiuntivi dai provider e li aggiunge agli indicatori di compatibilità di Steam"
 }

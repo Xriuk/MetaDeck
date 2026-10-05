@@ -4,8 +4,6 @@ import type { SteamAppDetails } from "./SteamTypes";
 
 export const romRegex = /(\/([^\/"])+)+(?!\.AppImage)(\.zip|\.7z|\.iso|\.bin|\.chd|\.cue|\.img|\.a26|\.lnx|\.ngp|\.ngc|\.3dsx|\.3ds|\.app|\.axf|\.cci|\.cxi|\.elf|\.n64|\.ndd|\.u1|\.v64|\.z64|\.nds|\.dmg|\.gbc|\.gba|\.gb|\.ciso|\.dol|\.gcm|\.gcz|\.nkit\.iso|\.rvz|\.wad|\.wia|\.wbfs|\.nes|\.fds|\.unif|\.unf|\.json|\.kp|\.nca|\.nro|\.nso|\.nsp|\.xci|\.rpx|\.wud|\.wux|\.wua|\.32x|\.cdi|\.gdi|\.m3u|\.gg|\.gen|\.md|\.smd|\.sms|\.ecm|\.mds|\.pbp|\.dump|\.gz|\.mdf|\.mrg|\.prx|\.bs|\.fig|\.sfc|\.smc|\.swx|\.pc2|\.wsc|\.ws)/
 
-export const limitedRomRegex = /(\/([^\/"])+)+(?!\.AppImage)(\.zip|\.7z|\.iso|\.bin|\.chd|\.cue|\.img|\.a26|\.lnx|\.ngp|\.ngc|\.elf|\.n64|\.ndd|\.u1|\.v64|\.z64|\.nds|\.dmg|\.gbc|\.gba|\.gb|\.ciso|\.nes|\.fds|\.unif|\.unf|\.32x|\.cdi|\.gdi|\.m3u|\.gg|\.gen|\.md|\.smd|\.sms|\.ecm|\.mds|\.pbp|\.dump|\.gz|\.mdf|\.mrg|\.prx|\.bs|\.fig|\.sfc|\.smc|\.swx|\.pc2|\.wsc|\.ws)/;
-
 export const scriptRegex = /(\/([^\/"])+)+(\.sh)/
 
 
@@ -45,8 +43,7 @@ export async function getShortcutCategories(launchCommand: string){
 }
 
 export function isEmulatedGame(launchCommand: string){
-	return romRegex.test(launchCommand) ||
-		isRPCS3Game(launchCommand);
+	return romRegex.test(launchCommand);
 }
 
 async function isFlatpakGame(launchCommand: string){
@@ -134,47 +131,47 @@ export function isHeroicGame(launchCommand: string)
 
 export function isXemuGame(launchCommand: string)
 {
-	return launchCommand.includes("/xemu-emu.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/xemu-emu.sh");
 }
 
 export function isXeniaGame(launchCommand: string)
 {
-	return launchCommand.includes("/xenia.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/xenia.sh");
 }
 
 export function isDuckstationGame(launchCommand: string)
 {
-	return launchCommand.includes("/duckstation.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/duckstation.sh");
 }
 
 export function isPCSX2Game(launchCommand: string)
 {
-	return launchCommand.includes("/pcsx2-qt.sh") || launchCommand.includes("/pcsx2.sh");
+	return isEmulatedGame(launchCommand) && (launchCommand.includes("/pcsx2-qt.sh") || launchCommand.includes("/pcsx2.sh"));
 }
 
 export function isRPCS3Game(launchCommand: string)
 {
-	return launchCommand.includes("/rpcs3.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/rpcs3.sh");
 }
 
 export function isShadPS4Game(launchCommand: string)
 {
-	return launchCommand.includes("/shadps4.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/shadps4.sh");
 }
 
 export function isPPSSPPGame(launchCommand: string)
 {
-	return launchCommand.includes("/ppsspp.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/ppsspp.sh");
 }
 
 export function isVita3KGame(launchCommand: string)
 {
-	return launchCommand.includes("/vita3k.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/vita3k.sh");
 }
 
 export function isDolphinGame(launchCommand: string)
 {
-	return launchCommand.includes("/dolphin-emu.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/dolphin-emu.sh");
 }
 
 // https://wiki.dolphin-emu.org/index.php?title=GameIDs#System_Code
@@ -191,30 +188,46 @@ export function isGameCubeId6(id6: string): boolean{
 
 export function isCemuGame(launchCommand: string)
 {
-	return launchCommand.includes("/cemu.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/cemu.sh");
 }
 
 export function isMelonDSGame(launchCommand: string)
 {
-	return launchCommand.includes("/melonds.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/melonds.sh");
 }
 
 export function isMGBAGame(launchCommand: string)
 {
-	return launchCommand.includes("/mgba.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/mgba.sh");
 }
 
 export function isRosaliesMupenGUIGame(launchCommand: string)
 {
-	return launchCommand.includes("/rosaliesmupengui.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/rosaliesmupengui.sh");
 }
 
+
+export function isCitronGame(launchCommand: string)
+{
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/citron.sh");
+}
 export function isRyujinxGame(launchCommand: string)
 {
-	return launchCommand.includes("/ryujinx.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/ryujinx.sh");
+}
+export function isYuzuGame(launchCommand: string)
+{
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/yuzu.sh");
+}
+export function isEdenGame(launchCommand: string)
+{
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/eden.sh");
+}
+export function isSwitchGame(launchCommand: string){
+	return isCitronGame(launchCommand) || isRyujinxGame(launchCommand) || isYuzuGame(launchCommand) || isEdenGame(launchCommand);
 }
 
 export function isFlycastGame(launchCommand: string)
 {
-	return launchCommand.includes("/flycast.sh");
+	return isEmulatedGame(launchCommand) && launchCommand.includes("/flycast.sh");
 }

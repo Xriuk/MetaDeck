@@ -6,7 +6,7 @@ import {closestWithLimit, distanceWithLimit, getAppDetails} from "../../../util"
 import {ResolverCache, ResolverConfig} from "../../Resolver";
 import { DialogControlsSection, Field, SliderField } from "@decky/ui";
 import type Logger from "../../../logger";
-import { IdOverrideComponent, type Entry } from "../../IdOverrideComponent";
+import { IdOverrideComponent, type OverrideEntry } from "../../IdOverrideComponent";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import { t } from "../../../useTranslations";
 
@@ -52,7 +52,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 	// DEV: maybe make abstract and avoid double-search?
 	override async test(appId: number): Promise<boolean>
 	{
-		if (this.overrides[appId] == 0)
+		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -69,6 +69,9 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	provide(appId: number): Promise<CompatdataData | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return Promise.resolve(undefined);
+
 		return this.throttle(() => this.getCompatdataForGame(appId));
 	}
 
@@ -81,6 +84,9 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	protected async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -105,8 +111,6 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 			games = results.filter(value => value.title === closest_name);
 			this.logger.debug("Games: ", games);
 		}
-		else if (data_id === 0)
-			return undefined;
 		else
 			games = results.filter(value => value.id === data_id);
 
@@ -119,6 +123,9 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	protected async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title' | 'id'>> | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -163,13 +170,17 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 						/>
 					} />
 				<IdOverrideComponent
+					provider={this}
 					value={overrides}
-					onChange={(value) => {
-						setOverrides(value)
-						this.overrides = value
+					disabled={loadingData.loading}
+					onChange={async (value) => {
+						let oldValue = this.overrides;
+						setOverrides(value);
+						this.overrides = value;
+						await this.onOverridesChange(oldValue, value);
 					}}
 					resultsForApp={async (appId) => {
-						const ret: Record<ID, Entry<ID>> = {}
+						const ret: Record<ID, OverrideEntry<ID>> = {}
 						for (const [id, value] of Object.entries(await this.throttle(() => this.getAllCompatdataForGame(appId)) ?? []))
 						{
 							ret[id] = {

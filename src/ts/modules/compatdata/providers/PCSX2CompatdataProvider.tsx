@@ -42,8 +42,10 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 
 	private compatData: Record<string, PCSX2CompatData> = {}; // Formatted serial: compat
 
-	async getCompatData(): Promise<void>
+	override async mount(): Promise<void>
 	{
+		await super.mount();
+		
 		// Retrieve compat page source
 		let response = await fetchNoCors("https://pcsx2.net/compat/");
 		if(!response.ok)
@@ -108,13 +110,10 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 		}
 	}
 
-	override async mount(): Promise<void>
-	{
-		await super.mount();
-		await this.getCompatData();
-	}
-
 	async provide(appId: number): Promise<CompatdataData | undefined>{
+		if (this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		// We retrieve compatibility for any matching id
 		const titleIds = (await this.resolve(appId))?.toString()
 			.split(separator);

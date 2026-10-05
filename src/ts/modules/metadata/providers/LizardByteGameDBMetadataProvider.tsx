@@ -3,8 +3,7 @@ import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
-import { fetchNoCors } from "@decky/api";
-import { distanceWithLimit, getAppDetails } from "../../../util";
+import { distanceWithLimit, fetchNoCorsLegacyTimeout, getAppDetails, removeWhitespacesAndPuctuation } from "../../../util";
 import type { Company, Game, GameMode, InvolvedCompany, ExternalGame, ReleaseDate} from "igdb-api-types";
 import { SteamMetadataProvider } from "./SteamMetadataProvider";
 import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
@@ -21,6 +20,8 @@ export interface LizardByteGameDBMetadataProviderCache extends FuzzySearchMetada
 }
 
 // IGDB-like
+// https://github.com/LizardByte/GameDB
+// DO NOT use fetchNoCors because LizardByte's website hangs, so we need a hard timeout
 export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvider
 {
 	static identifier: keyof MetadataProviderConfigs = "lizardbyte";
@@ -28,7 +29,10 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 	identifier: keyof MetadataProviderConfigs = LizardByteGameDBMetadataProvider.identifier;
 	title: string = LizardByteGameDBMetadataProvider.title;
 
-	logger: Logger = new Logger(LizardByteGameDBMetadataProvider.identifier)
+	logger: Logger = new Logger(LizardByteGameDBMetadataProvider.identifier);
+
+	// DEV: maybe cache buckets?
+	private _missingBucketsCache = new Set<string>();
 	
 	private _steamProvider?: SteamMetadataProvider;
 	get steamProvider(): SteamMetadataProvider
@@ -42,10 +46,18 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		return this._steamProvider;
 	}
 
+	override async mount(){
+		await super.mount();
+
+		this._missingBucketsCache.clear();
+	}
+
 	protected async search(title: string): Promise<MetadataData[]>
 	{
 		if(!title?.length)
 			return [];
+
+		let result: [string, { name: string; }][] = [];
 
 		// Retrieve the first two letters to search for the title first, based on these rules:
 		// - 2 alphanumeric ascii chars: regular search <aa>.json
@@ -67,16 +79,43 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		else
 			bucket = "@";
 
-		let response = await fetchNoCors(`https://app.lizardbyte.dev/GameDB/buckets/${bucket}.json`);
-		if(!response.ok)
-			return [];
+		let response: Response;
 
-		let result: Record<string, { name: string; }> = await response.json();
+		if(!this._missingBucketsCache.has(bucket)){
+			let response = await fetchNoCorsLegacyTimeout(`https://app.lizardbyte.dev/GameDB/buckets/${bucket}.json`);
+			if(response.ok)
+				result.push(...Object.entries(await response.json()) as any);
+			else
+				this._missingBucketsCache.add(bucket);
+		}
+
+		// Try searching the localized buckets too
+		let strippedTitle = removeWhitespacesAndPuctuation(title).substring(0, 2).toLowerCase();
+		if(strippedTitle.length === 2){
+			const knownLocalizedBuckets = [ 'eu', 'ja-jp', 'ko-kr' ];
+			for(let locBucket of knownLocalizedBuckets){
+				if(!this._missingBucketsCache.has(`${locBucket}/${strippedTitle}`)){
+					response = await fetchNoCorsLegacyTimeout(`https://app.lizardbyte.dev/GameDB/buckets/localized/${locBucket}/${strippedTitle}.json`);
+					if(response.ok)
+						result.push(...Object.entries(await response.json()) as any);
+					else
+						this._missingBucketsCache.add(`${locBucket}/${strippedTitle}`);
+				}
+			}
+		}
+
+		this.logger.debug(`Results for ${title}:`, result);
+
+		// DEV: implement alternative titles search when ready
+		// https://github.com/orgs/LizardByte/discussions/1103
+
+		if(!result.length)
+			return [];
 		
 		// Search with double the fuzziness to retrieve them all, they will be filtered later
-		const closest_names = distanceWithLimit(this.fuzziness * 2, title, Object.values(result).map(e => e.name));
+		const closest_names = distanceWithLimit(this.fuzziness * 2, title, result.map(e => e[1].name));
 		// Take max 10 results (since we might have different regions)
-		let results = Object.entries(result)
+		let results = result
 			.filter(e => closest_names.includes(e[1].name))
 			.slice(0, 10);
 
@@ -94,14 +133,14 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 	protected override async enrichMetadataForGame(appId: number, game: MetadataData): Promise<void> {
 		if(game.description)
 			return;
-
-		const response = await fetchNoCors(`https://app.lizardbyte.dev/GameDB/games/${game.id}.json`);
+		
+		const response = await fetchNoCorsLegacyTimeout(`https://app.lizardbyte.dev/GameDB/games/${game.id}.json`);
 		if (!response.ok){
 			game.description = t("noDescription"); // To not enrich again
 			return;
 		}
-			
-		let gameR: Game = await response.json();
+
+		let gameR: Game = JSON.parse(await response.text());
 
 		if(gameR.release_dates?.length)
 			game.release_date = Math.floor(new Date(Math.min(...gameR.release_dates.map(d => (d as ReleaseDate).date!)) * 1000).getTime() / 1000);
@@ -110,9 +149,9 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		const cats = await getShortcutCategories(getLaunchCommand(details));
 
 		// If we have a steam id we query that first to get more accurate results
-		if(gameR.external_games?.some(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1)){
+		if(gameR.external_games?.some(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) && this.steamProvider.enabled){
 			let steam = await this.steamProvider.getAppMetadata(
-				(gameR.external_games?.find(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) as ExternalGame)?.uid ?? '');
+				parseInt((gameR.external_games?.find(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) as ExternalGame)?.uid ?? '0', 10), true);
 			if(steam){
 				steam.release_date = game.release_date;
 				steam.store_categories.push(...cats);

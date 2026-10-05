@@ -3,8 +3,7 @@ import type { AchievementsData } from "../../../Interfaces";
 import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
-import type { MultiIdResolver, MultiIdResolverCaches, MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
-import { MultiIdXeniaResolver, type MultiIdXeniaResolverCache, type MultiIdXeniaResolverConfig } from "../../resolvers/MultiId/MultiIdXeniaResolver";
+import { XeniaResolver, type XeniaResolverCache, type XeniaResolverCaches, type XeniaResolverConfig, type XeniaResolverConfigs } from "../../resolvers/XeniaResolver";
 import type { AchievementsProviderConfigs } from "../AchievementsModule";
 import { AchievementsProvider } from "../AchievementsProvider";
 import { FaXbox } from "react-icons/fa";
@@ -46,7 +45,7 @@ type XeniaGameAchievementsStats = XeniaGameAchievements & {
 	progress?: Record<number, XeniaAchievement>;
 };
 
-export interface XeniaAchievementsProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'xenia'>, MultiIdXeniaResolverConfig>
+export interface XeniaAchievementsProviderConfig extends ProviderConfig<XeniaResolverConfigs, XeniaResolverConfig>
 {
 	// Like /home/deck/Emulation/roms/xbox360/content/<A010000011AA1111>/FFFE07D1/00010000/<A010000011AA1111>
 	user_path: string;
@@ -56,7 +55,7 @@ export interface XeniaAchievementsProviderConfig extends ProviderConfig<Pick<Mul
 	description_locked: boolean | null; // null: show locked/unlocked, true: show locked, false: show unlocked
 }
 
-export interface XeniaAchievementsProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'xenia'>, MultiIdXeniaResolverCache>
+export interface XeniaAchievementsProviderCache extends ProviderCache<XeniaResolverCaches, XeniaResolverCache>
 {
 	game_achievements: Record<number, XeniaGameAchievements | null>;
 }
@@ -69,8 +68,8 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 
 	logger: Logger = new Logger(XeniaAchievementsProvider.identifier);
 
-	resolvers: MultiIdResolver[] = [
-		new MultiIdXeniaResolver(this)
+	resolvers: XeniaResolver[] = [
+		new XeniaResolver(this)
 	];
 
 	private _rawgProvider?: RAWGMetadataProvider;
@@ -154,7 +153,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 	}
 
 	override async provide(appId: number): Promise<AchievementsData | undefined> {
-		if(!this.userPath)
+		if(!this.userPath || this.excludedApps.indexOf(appId) !== -1)
 			return undefined;
 
 		if(this.gameAchievements[appId] === undefined)
@@ -208,26 +207,10 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 				}
 			}
 
-			// Retrieve achievements icons and create grayscale versions for locked
-			for(let achievement of achievements.achievements){
-				// Retrieve icon from user profile GPD first
-				if(achievementsFromUser)
-					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath, titleId.toString(), achievement.icon_id) ?? '';
-				
-				// If not found retrieve from game ROM
-				if(!achievement.icon && rom)
-					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_game", rom, titleId.toString(), achievement.icon_id) ?? '';
-				
-				// Create a locked grayscale version
-				if(achievement.icon)
-					achievement.locked_icon = await grayScaleIcon(achievement.icon);
-				else
-					achievement.locked_icon = '';
-			}
-
-			// Retrieve achievements rarity from RAWG,
-			// or compute it from gamescore
-			if(this.rawgProvider.apiKey){
+			// Retrieve achievements rarity and icons from RAWG,
+			// or compute it from Gamescore,
+			// We retrieve achievement icons to save on data size instead of using base 64
+			if(this.rawgProvider.enabled && this.rawgProvider.apiKey){
 				const rawgAchievements = await this.rawgProvider.getAchievementsForGame(appId);
 
 				// If we have achievements we'll need to match them with local ones, but we need english titles
@@ -250,15 +233,19 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 
 					if(Object.keys(achievementsNames).length){
 						achievements.rarity = {};
-						for(let rarity of rawgAchievements
-							.filter(a => achievementsNames[a.name])){
+						for(let achievement of rawgAchievements){
+							let achievementId = achievementsNames[achievement.name];
+							if(!achievementId)
+								continue;
 
-							achievements.rarity[achievementsNames[rarity.name]] = rarity.percent ? parseFloat(rarity.percent) : null;
+							achievements.rarity[achievementId] = achievement.percent ? parseFloat(achievement.percent) : null;
+
+							achievements.achievements.find(a => a.id === achievementId)!.icon = achievement.image;
 						}
 					}
 				}
 			}
-			else{
+			if(!achievements.rarity){
 				achievements.rarity = {};
 
 				for(let achievement of achievements.achievements){
@@ -275,6 +262,25 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 
 					achievements.rarity[achievement.id] = achievedPerc;
 				}
+			}
+
+			// Retrieve achievements icons if needed and create grayscale versions for locked
+			for(let achievement of achievements.achievements){
+				if(!achievement.icon){
+					// Retrieve icon from user profile GPD first
+					if(achievementsFromUser)
+						achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath, titleId.toString(), achievement.icon_id) ?? '';
+					
+					// If not found retrieve from game ROM
+					if(!achievement.icon && rom)
+						achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_game", rom, titleId.toString(), achievement.icon_id) ?? '';
+				}
+				
+				// Create a locked grayscale version
+				if(achievement.icon)
+					achievement.locked_icon = await grayScaleIcon(achievement.icon);
+				else
+					achievement.locked_icon = '';
 			}
 
 			if(achievements.achievements.length){

@@ -19,12 +19,13 @@ import hashlib
 import io
 import shutil
 from pathlib import Path
-from typing import Dict
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Optional, Tuple
 from helpers import get_ssl_context
 
 logging.basicConfig(
-	filename="/tmp/emuchievements.log",
-	format='[Emuchievements] %(asctime)s %(levelname)s %(message)s',
+	filename="/tmp/metadeck.log",
+	format='[MetaDeck] %(asctime)s %(levelname)s %(message)s',
 	filemode='w+',
 	force=True
 )
@@ -562,6 +563,29 @@ class Plugin:
 
 			return result.stdout.strip()
 
+	async def switch_get_serial(self, rom_path: str) -> str | None:
+		if not os.path.isfile(rom_path):
+			return None
+
+		cmd = [
+			os.path.join(decky.HOME, ".local/share/Steam/steamapps/common/Proton - Experimental/files/bin/wine"),
+			os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "nxgameinfo_cli.exe"),
+			rom_path
+		]
+		result = subprocess.run(
+			cmd,
+			capture_output=True,
+			text=True,
+			check=True
+		)
+
+		lines = result.stdout.strip().split('\n')
+		for line in lines:
+			if line.startswith('├ Title ID:'):
+				return line.split('├ Title ID:')[1].strip().upper()
+
+		return None
+
 
 	async def xenia_check_user_path(self, user_path: str) -> bool:
 		return os.path.isfile(user_path + "/Account")
@@ -1017,8 +1041,8 @@ class Plugin:
 					'publisher': game['publisher'] if 'publisher' in game else None,
 					'date': game['date']['@year'].strip() + "-" + game['date']['@month'].strip().rjust(2, '0') + "-" + game['date']['@day'].strip().rjust(2, '0') if 'date' in game and '@year' in game['date'] and not (game['date']['@year'] is None) and game['date']['@year'] != "" and '@month' in game['date'] and not (game['date']['@month'] is None) and game['date']['@month'] != "" and '@day' in game['date'] and not (game['date']['@day'] is None) and game['date']['@day'] != "" else None,
 					'locales': locales if len(locales) > 0 else None,
-					'wi-fi-players': int(game['wi-fi']['@players']) if 'wi-fi' in game and '@players' in game['wi-fi'] else None,
-					'local-players': int(game['input']['@players']) if 'input' in game and '@players' in game['input'] else None,
+					'wi-fi-players': int(game['wi-fi']['@players']) if 'wi-fi' in game and '@players' in game['wi-fi'] and game['wi-fi']['@players'] != '' else None,
+					'local-players': int(game['input']['@players']) if 'input' in game and '@players' in game['input'] and game['input']['@players'] != '' else None,
 					'controls': controls if len(controls) > 0 else None
 				}
 

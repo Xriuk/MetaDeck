@@ -1,13 +1,12 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {getAppDetails} from "../../../util";
-import {fetchNoCors} from "@decky/api";
+import {fetchNoCorsLegacyTimeout, getAppDetails} from "../../../util";
 import {t} from "../../../useTranslations";
 import {
 	getLaunchCommand, isCemuGame
 } from "../../../shortcuts";
 import Logger from "../../../logger";
 import { removeBeforeAndIncluding, type WikiSearchResponse } from "../../GamesDBResult";
-import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBProvider";
+import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBMetadataProvider";
 import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
 import { MdOutlineTablet } from "react-icons/md";
 
@@ -45,6 +44,9 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	async test(appId: number): Promise<boolean>
 	{
+		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+			return false;
+
 		const details = await getAppDetails(appId);
 		if(!details)
 			return false;
@@ -55,7 +57,11 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider
 	}
 
 	protected async search(title: string): Promise<CompatdataData[]>{
-		let response = await fetchNoCors(`https://wiki.cemu-emu.org/api.php?action=opensearch&limit=10&search=${encodeURIComponent(title)}`);
+		let response = await fetchNoCorsLegacyTimeout('https://wiki.cemu-emu.org/api.php?' + new URLSearchParams({
+			action: 'opensearch',
+			limit: '10',
+			search: title
+		}).toString());
 		if(!response)
 			return [];
 
@@ -74,7 +80,10 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider
 
 		// Retrieve the wiki entry
 		let title = game.title.replace(" ", "_");
-		let response = await fetchNoCors(`https://wiki.cemu-emu.org/index.php?title=${encodeURIComponent(title)}&action=raw`);
+		let response = await fetchNoCorsLegacyTimeout('https://wiki.cemu-emu.org/index.php?' + new URLSearchParams({
+			action: 'raw',
+			title: title
+		}).toString());
 		if(!response.ok){
 			game.deck_compat_category = SteamDeckCompatCategory.UNKNOWN; // To not enrich again
 			return;
@@ -86,7 +95,10 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider
 			title = removeBeforeAndIncluding(text, "#REDIRECT [[");
 			title = title.substring(0, title.length-2).replace(" ", "_"); // Remove ending ]]
 
-			response = await fetchNoCors(`https://wiki.cemu-emu.org/index.php?title=${encodeURIComponent(title)}&action=raw`);
+			response = await fetchNoCorsLegacyTimeout('https://wiki.cemu-emu.org/index.php?' + new URLSearchParams({
+				action: 'raw',
+				title: title
+			}).toString());
 			if(!response.ok){
 				game.deck_compat_category = SteamDeckCompatCategory.UNKNOWN; // To not enrich again
 				return;
@@ -184,19 +196,21 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 
 		// Enrich test result by retrieving required devices like USB Guitar
-		let metadata = await this.gameTDBProvider.getCemuGameEntries(appId);
-		if(metadata.some(m => m.controls?.some(c => c.type === "guitar" && c.required))){
-			([
-				[game.deck_test_results, "SteamDeckVerified"],
-				[game.os_test_results, "SteamOS"]
-			] as const).forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
-						test_result: SteamTestResult.Playable
-					}
-				);
-			});
+		if(this.gameTDBProvider.enabled){
+			let metadata = await this.gameTDBProvider.getCemuGameEntries(appId);
+			if(metadata.some(m => m.controls?.some(c => c.type === "guitar" && c.required))){
+				([
+					[game.deck_test_results, "SteamDeckVerified"],
+					[game.os_test_results, "SteamOS"]
+				] as const).forEach(([results, cat]) => {
+					results.push(
+						{
+							test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
+							test_result: SteamTestResult.Playable
+						}
+					);
+				});
+			}
 		}
 	}
 

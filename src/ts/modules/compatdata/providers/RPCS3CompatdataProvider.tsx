@@ -1,5 +1,4 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import Logger from "../../../logger";
 import { CompatdataProvider } from "../CompatdataProvider";
@@ -7,8 +6,9 @@ import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolv
 import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import type { ProviderCache, ProviderConfig } from "../../Provider";
 import type { ResolverCache, ResolverConfig } from "../../Resolver";
-import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBProvider";
+import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBMetadataProvider";
 import { SiPlaystation3 } from "react-icons/si";
+import { fetchNoCorsLegacyTimeout } from "../../../util";
 
 export interface RPCS3CompatdataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'rpcs3'>, ResolverConfig>
 {
@@ -46,6 +46,9 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{
+		if (this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		// RPCS3 groups the title id for different regions
 		const titleId = (await this.resolve(appId))?.toString().split(separator)[0];
 		if(!titleId)
@@ -53,7 +56,7 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 
 		this.logger.debug("Title id", appId, titleId);
 
-		const response = await fetchNoCors("https://rpcs3.net/compatibility?" + new URLSearchParams({
+		const response = await fetchNoCorsLegacyTimeout("https://rpcs3.net/compatibility?" + new URLSearchParams({
 			api: 'v1',
 			g: titleId
 		}).toString());
@@ -137,32 +140,34 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 		}
 
 		// Enrich test result by retrieving required devices like USB Guitar/Camera
-		let metadata = await this.gameTDBProvider.getDolphinGameEntries(appId);
-		if(metadata.some(m => m.controls?.some(c => c.type === "guitar" && c.required))){
-			([
-				[result.deck_test_results!, "SteamDeckVerified"],
-				[result.os_test_results!, "SteamOS"]
-			] as const).forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
-						test_result: SteamTestResult.Playable
-					}
-				);
-			});
-		}
-		if(metadata.some(m => m.controls?.some(c => c.type === "eye" && c.required))){
-			([
-				[result.deck_test_results!, "SteamDeckVerified"],
-				[result.os_test_results!, "SteamOS"]
-			] as const).forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalWebcam`,
-						test_result: SteamTestResult.Playable
-					}
-				);
-			});
+		if(this.gameTDBProvider.enabled){
+			let metadata = await this.gameTDBProvider.getRPCS3GameEntries(appId);
+			if(metadata.some(m => m.controls?.some(c => c.type === "guitar" && c.required))){
+				([
+					[result.deck_test_results!, "SteamDeckVerified"],
+					[result.os_test_results!, "SteamOS"]
+				] as const).forEach(([results, cat]) => {
+					results.push(
+						{
+							test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
+							test_result: SteamTestResult.Playable
+						}
+					);
+				});
+			}
+			if(metadata.some(m => m.controls?.some(c => c.type === "eye" && c.required))){
+				([
+					[result.deck_test_results!, "SteamDeckVerified"],
+					[result.os_test_results!, "SteamOS"]
+				] as const).forEach(([results, cat]) => {
+					results.push(
+						{
+							test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalWebcam`,
+							test_result: SteamTestResult.Playable
+						}
+					);
+				});
+			}
 		}
 
 		return result;

@@ -4,12 +4,14 @@ import {Module, ModuleCache, ModuleConfig} from "./Module";
 import {FC, type ReactNode} from "react";
 import throttledQueue from "throttled-queue";
 import {Resolver, ResolverCache, ResolverConfig} from "./Resolver";
-import {ID} from "../Interfaces";
+import {ID, type IDDictionary} from "../Interfaces";
+import type { SteamAppOverview } from "../SteamTypes";
 
 export interface ProviderConfig<ResConfigs extends Record<keyof ResConfigs, ResConfig>, ResConfig extends ResolverConfig>
 {
 	enabled: boolean,
 	ordinal: number,
+	excluded_apps: number[],
 	resolvers: ResConfigs
 }
 
@@ -122,15 +124,44 @@ export abstract class Provider<
 		void this.module.saveData();
 	}
 
-	async resolve(appId: number): Promise<ID | undefined>
+	get excludedApps(): number[]
 	{
+		return this.module.excludedApps.concat(this.excludedAppsSelf);
+	}
+
+	get excludedAppsSelf(): number[]
+	{
+		return this.config.excluded_apps;
+	}
+
+	set excludedAppsSelf(apps: number[])
+	{
+		this.config.excluded_apps = apps;
+	}
+
+	get overviews(): SteamAppOverview[]
+	{
+		return this.module.overviews
+			.filter(a => this.excludedAppsSelf.indexOf(a.appid) === -1);
+	}
+
+	get apps(): number[]
+	{
+		return this.overviews.map(overview => overview.appid);
+	}
+	
+	async resolve(appId: number, external = false): Promise<ID | undefined>
+	{
+		if(!external && this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		for (const resolver of this.resolvers)
 		{
 			if (resolver.enabled && await resolver.test(appId))
 			{
-				let data = await resolver.resolve(appId);
-				if(data !== undefined)
-					return data;
+				let id = await resolver.resolve(appId);
+				if(id !== undefined)
+					return id;
 			}
 		}
 
@@ -139,6 +170,9 @@ export abstract class Provider<
 
 	async apply(appId: number, data: Data): Promise<void>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return;
+
 		for (const resolver of this.resolvers)
 		{
 			if (resolver.enabled && await resolver.test(appId))
@@ -149,14 +183,45 @@ export abstract class Provider<
 		}
 	}
 
-	async test(appId: number): Promise<boolean>
+	async test(appId: number, external = false): Promise<boolean>
 	{
+		if(!external && this.excludedApps.indexOf(appId) !== -1)
+			return false;
+
 		for(let resolver of this.resolvers){
 			if(await resolver.test(appId))
 				return true;
 		}
 
 		return false;
+	}
+
+	protected async onOverridesChange(oldOverrides: IDDictionary, newOverrides: IDDictionary){
+		// Retrieve changed app ids: new values, values with changed ids and removed values
+		let changedIds = Object.entries(newOverrides)
+			.filter(([a, i]) => oldOverrides[a as any] !== i)
+			.map(([a, _]) => a as unknown as number)
+			.concat(Object.keys(oldOverrides).filter(a => !newOverrides[a as any]) as unknown as number[])
+			.map(a => +a);
+
+		// Remove cache and re-fetch
+		for(let changedId of changedIds){
+			await this.module.removeCache(changedId);
+			await this.module.fetchDataAsync(changedId);
+		}
+	}
+
+	async onExcludedChange(oldExcluded: number[], newExcluded: number[]){
+		// Retrieve changed app ids: new values and removed values
+		let changedIds = newExcluded
+			.filter(a => oldExcluded.indexOf(a) === -1)
+			.concat(oldExcluded.filter(a => newExcluded.indexOf(a) === -1));
+
+		// Remove cache and re-fetch
+		for(let changedId of changedIds){
+			await this.module.removeCache(changedId);
+			await this.module.fetchDataAsync(changedId);
+		}
 	}
 
 	abstract provide(appId: number): Promise<Data | undefined>;

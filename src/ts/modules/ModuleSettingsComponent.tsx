@@ -11,6 +11,7 @@ import {Module} from "./Module";
 import {Provider} from "./Provider";
 import {Modules, useMetaDeckState} from "../MetaDeckState";
 import {format, t} from "../useTranslations";
+import { ExcludeAppComponent } from "./ExcludeAppComponent";
 
 export interface ModuleSettingsProps
 {
@@ -21,13 +22,17 @@ export interface ModuleSettingsProps
 export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 	const {modules, loadingData} = useMetaDeckState();
 
-	const [enabled, setEnabled] = useState(module.enabled)
+	const [enabled, setEnabled] = useState(module.enabled);
+	const [excluded, setExcluded] = useState(module.excludedAppsSelf);
 
-	const disabled = module.dependencies.map((key) => modules[key]).some(mod => !mod.isValid)
+	const disabled = module.dependencies
+		.map((key) => modules[key])
+		.some(mod => !mod.isValid);
 
-	const missing = module.dependencies.map((key) => modules[key])
-		.filter((mod) => !mod.isValid )
-		.map((mod) => mod.title)
+	const missing = module.dependencies
+		.map((key) => modules[key])
+		.filter((mod) => !mod.isValid)
+		.map((mod) => mod.title);
 
 	return (
 		<DialogBody>
@@ -45,7 +50,9 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 							module.enabled = checked;
 							for (let mod of Object.values(modules))
 							{
-								mod.unmetDependency = mod.dependencies.map((key: keyof Modules) => modules[key]).some((mod2: Modules[keyof Modules]) => !mod2.isValid)
+								mod.unmetDependency = mod.dependencies
+									.map((key: keyof Modules) => modules[key])
+									.some((mod2: Modules[keyof Modules]) => !mod2.isValid);
 							}
 						}}/>
 				</Field>
@@ -54,7 +61,6 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 			<DialogControlsSection>
 				<Field label={format(t("settingsModuleProvider"), module.title)}>
 					<DialogButton
-						disabled={loadingData.loading}
 						onClick={() => {
 							Navigation.CloseSideMenus();
 							Navigation.Navigate(`/metadeck/${module.identifier}`);
@@ -65,6 +71,19 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 			</DialogControlsSection>
 
 			<module.settingsComponent/>
+
+			<DialogControlsSection>
+				<ExcludeAppComponent
+					source={module}
+					value={excluded}
+					disabled={disabled || loadingData.loading}
+					onChange={async (value) => {
+						let oldValue = module.excludedAppsSelf;
+						setExcluded(value);
+						module.excludedAppsSelf = value;
+						await module.onExcludedChange(oldValue, value);
+					}} />
+			</DialogControlsSection>
 		</DialogBody>
 	)
 }

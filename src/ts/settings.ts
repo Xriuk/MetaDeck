@@ -4,21 +4,21 @@ import {systemClock} from "./System";
 import {callable} from "@decky/api";
 import {ModuleCaches, ModuleConfigs} from "./modules/Module";
 import {merge} from "lodash-es";
+import { Mutex } from "async-mutex";
 
 export type ConfigData = {
-	modules: ModuleConfigs
+	excluded_apps: number[];
+	modules: ModuleConfigs;
 }
 
 export type CacheData = {
-	modules: ModuleCaches
+	modules: ModuleCaches;
 }
 
 export class Settings
 {
 	private readonly state: MetaDeckState;
 	private readonly logger: Logger;
-	// private readonly mutex: Mutex = new Mutex();
-	// private readonly packet_size: number = 50;
 
 	private read_config = callable<[], ConfigData>("read_config")
 	private write_config = callable<[ConfigData], void>("write_config")
@@ -26,6 +26,7 @@ export class Settings
 	private write_cache = callable<[CacheData], void>("write_cache")
 
 	static readonly defaultConfig: ConfigData = {
+		excluded_apps: [],
 		modules: {
 			metadata: {
 				enabled: true,
@@ -39,11 +40,13 @@ export class Settings
 				rating: true,
 				install_size: true,
 				install_date: true,
+				excluded_apps: [],
 				providers: {
 					// Id-based (localized)
 					gametdb: {
 						enabled: true,
 						ordinal: 0,
+						excluded_apps: [],
 						resolvers: {
 							dolphin: {
 								enabled: true,
@@ -53,9 +56,13 @@ export class Settings
 								enabled: true,
 								ordinal: 1
 							},
-							rpcs3: {
+							switch: {
 								enabled: true,
 								ordinal: 2
+							},
+							rpcs3: {
+								enabled: true,
+								ordinal: 3
 							}
 						},
 						language: "EN"
@@ -64,6 +71,7 @@ export class Settings
 					gog: { // Can resolve to Steam if finds id
 						enabled: true,
 						ordinal: 1,
+						excluded_apps: [],
 						resolvers: {
 							junk: {
 								enabled: true,
@@ -85,14 +93,16 @@ export class Settings
 						ordinal: 2,
 						fuzziness: 5,
 						overrides: {},
-						resolvers: {},
-						language: "english"
+						language: "english",
+						excluded_apps: [],
+						resolvers: {}
 					},
 					// Fuzzy search (english)
 					lizardbyte: { // Can resolve to Steam if finds id
 						enabled: true,
 						ordinal: 3,
 						fuzziness: 5,
+						excluded_apps: [],
 						overrides: {},
 						resolvers: {}
 					},
@@ -100,14 +110,16 @@ export class Settings
 						enabled: true,
 						ordinal: 4,
 						fuzziness: 5,
+						api_key: '',
+						excluded_apps: [],
 						overrides: {},
-						resolvers: {},
-						api_key: ''
+						resolvers: {}
 					},
 					// Id-based (fallback)
 					ra: {
 						enabled: true,
 						ordinal: 5,
+						excluded_apps: [],
 						resolvers: {}
 					}
 				}
@@ -117,11 +129,13 @@ export class Settings
 				verified: true,
 				notes: true,
 				test_results: true,
+				excluded_apps: [],
 				providers: {
 					// Id-based
 					pcsx2: {
 						enabled: true,
 						ordinal: 0,
+						excluded_apps: [],
 						resolvers: {
 							pcsx2: {
 								enabled: true,
@@ -132,6 +146,7 @@ export class Settings
 					rpcs3: {
 						enabled: true,
 						ordinal: 1,
+						excluded_apps: [],
 						resolvers: {
 							rpcs3: {
 								enabled: true,
@@ -142,6 +157,7 @@ export class Settings
 					xenia: {
 						enabled: true,
 						ordinal: 2,
+						excluded_apps: [],
 						resolvers: {
 							xenia: {
 								enabled: true,
@@ -154,6 +170,7 @@ export class Settings
 						enabled: true,
 						ordinal: 3,
 						fuzziness: 5,
+						excluded_apps: [],
 						overrides: {},
 						resolvers: {
 							dolphin: {
@@ -166,6 +183,7 @@ export class Settings
 						enabled: true,
 						ordinal: 4,
 						fuzziness: 5,
+						excluded_apps: [],
 						overrides: {},
 						resolvers: {}
 					},
@@ -174,6 +192,7 @@ export class Settings
 						enabled: true,
 						ordinal: 5,
 						fuzziness: 5,
+						excluded_apps: [],
 						overrides: {},
 						resolvers: {}
 					}
@@ -184,6 +203,7 @@ export class Settings
 				category: true,
 				app_details: true,
 				overlay_menu: true,
+				excluded_apps: [],
 				providers: {
 					ra: {
 						enabled: true,
@@ -191,6 +211,7 @@ export class Settings
 						username: '',
 						api_key: '',
 						points: true,
+						excluded_apps: [],
 						resolvers: {
 							ra: {
 								enabled: true,
@@ -205,6 +226,7 @@ export class Settings
 						language: 'EN',
 						trophy_categories: true,
 						psn_npsso: '',
+						excluded_apps: [],
 						resolvers: {
 							rpcs3: {
 								enabled: true,
@@ -220,6 +242,7 @@ export class Settings
 						language: 'EN',
 						gamerscore: true,
 						description_locked: null,
+						excluded_apps: [],
 						resolvers: {
 							xenia: {
 								enabled: true,
@@ -236,6 +259,7 @@ export class Settings
 		modules: {
 			metadata: {
 				data: {},
+				data_providers: {},
 				providers: {
 					gog: {
 						resolvers: {
@@ -258,6 +282,9 @@ export class Settings
 							cemu: {
 								game_codes: {}
 							},
+							switch: {
+								title_ids: {}
+							},
 							rpcs3: {
 								title_ids: {}
 							}
@@ -273,6 +300,7 @@ export class Settings
 			},
 			compatdata: {
 				data: {},
+				data_providers: {},
 				providers: {
 					emudeck: {
 						resolvers: {}
@@ -312,6 +340,7 @@ export class Settings
 			},
 			achievements: {
 				data: {},
+				data_providers: {},
 				providers: {
 					ra: {
 						game_info: {},
@@ -342,9 +371,13 @@ export class Settings
 		}
 	}
 
-	configData: ConfigData = merge({}, Settings.defaultConfig)
+	configData: ConfigData = merge({}, Settings.defaultConfig);
+	private readonly configMutex = new Mutex();
+	private configRead = false; // To avoid writing before reading
 
-	cacheData: CacheData = merge({}, Settings.defaultCache)
+	cacheData: CacheData = merge({}, Settings.defaultCache);
+	private readonly cacheMutex = new Mutex();
+	private cacheRead = false; // To avoid writing before reading
 
 	constructor(state: MetaDeckState)
 	{
@@ -424,39 +457,73 @@ export class Settings
 		this.logger.debug("Wrote settings in " + (end - start) + "ms");
 	}
 
-	async readConfig(): Promise<void>
+	private async readConfig(): Promise<void>
 	{
-		this.logger.debug("Reading config...");
-		const start = systemClock.getTimeMs();
-		this.configData = merge({}, Settings.defaultConfig, await this.read_config() ?? {});
-		const end = systemClock.getTimeMs();
-		this.logger.debug("Read config in " + (end - start) + "ms", this.configData);
+		const release = await this.configMutex.acquire();
+		try{
+			this.logger.debug("Reading config...");
+			const start = systemClock.getTimeMs();
+			this.configData = merge({}, Settings.defaultConfig, await this.read_config() ?? {});
+			const end = systemClock.getTimeMs();
+			this.logger.debug("Read config in " + (end - start) + "ms", this.configData);
+
+			this.configRead = true;
+		}
+		finally{
+			release();
+		}
 	}
 
-	async writeConfig(): Promise<void>
+	private async writeConfig(): Promise<void>
 	{
-		this.logger.debug("Writing config...");
-		const start = systemClock.getTimeMs();
-		await this.write_config(this.configData);
-		const end = systemClock.getTimeMs();
-		this.logger.debug("Wrote config in " + (end - start) + "ms", this.configData);
+		const release = await this.configMutex.acquire();
+		try{
+			if(!this.configRead)
+				return;
+
+			this.logger.debug("Writing config...");
+			const start = systemClock.getTimeMs();
+			await this.write_config(this.configData);
+			const end = systemClock.getTimeMs();
+			this.logger.debug("Wrote config in " + (end - start) + "ms", this.configData);
+		}
+		finally{
+			release();
+		}
 	}
 
-	async readCache(): Promise<void>
+	private async readCache(): Promise<void>
 	{
-		this.logger.debug("Reading cache...");
-		const start = systemClock.getTimeMs();
-		this.cacheData = merge({}, Settings.defaultCache, await this.read_cache() ?? {});
-		const end = systemClock.getTimeMs();
-		this.logger.debug("Read cache in " + (end - start) + "ms", this.cacheData);
+		const release = await this.cacheMutex.acquire();
+		try{
+			this.logger.debug("Reading cache...");
+			const start = systemClock.getTimeMs();
+			this.cacheData = merge({}, Settings.defaultCache, await this.read_cache() ?? {});
+			const end = systemClock.getTimeMs();
+			this.logger.debug("Read cache in " + (end - start) + "ms", this.cacheData);
+
+			this.cacheRead = true;
+		}
+		finally{
+			release();
+		}
 	}
 
-	async writeCache(): Promise<void>
+	private async writeCache(): Promise<void>
 	{
-		this.logger.debug("Writing cache...");
-		const start = systemClock.getTimeMs();
-		await this.write_cache(this.cacheData);
-		const end = systemClock.getTimeMs();
-		this.logger.debug("Wrote cache in " + (end - start) + "ms", this.cacheData);
+		const release = await this.cacheMutex.acquire();
+		try{
+			if(!this.cacheRead)
+				return;
+
+			this.logger.debug("Writing cache...");
+			const start = systemClock.getTimeMs();
+			await this.write_cache(this.cacheData);
+			const end = systemClock.getTimeMs();
+			this.logger.debug("Wrote cache in " + (end - start) + "ms", this.cacheData);
+		}
+		finally{
+			release();
+		}
 	}
 }

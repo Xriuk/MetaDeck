@@ -56,6 +56,10 @@
 	"settingsEnabledDesc": "Whether this module or provider should be used",
 	"settingsOverrides": "Overrides",
 	"settingsOverridesDesc": "Overrides what game the provider detects a given app as",
+	"settingsExclusions": "Exclusions",
+	"settingsExclusionsDesc": "Excludes a given game from this module or provider",
+	"settingsInherited": "The settings below come from the provider %% of the module %%",
+	"globalSettings": "Global Settings",
 	"metadataSettingsTypeOverride": "Override App Type",
 	"metadataSettingsTypeOverrideDesc": "Overrides the app type in Steam's info page to always show the metadata",
 	"metadataSettingsDescriptions": "Apply Descriptions",
@@ -89,8 +93,8 @@
 	"achievementsSettingsOverlay": "Show in Overlay",
 	"achievementsSettingsOverlayDesc": "Shows achievements in the Steam overlay in-game",
 	"apiKey": "API Key",
-	"rawgApiKeyInstructionsMD": "To get your API key, go to [rawg.io](https://rawg.io/login/?forward=developer) and log in to your account. Register for an API key, fill in the email and the use with something like \"Extract games metadata for emulation purposes\". After submitting you should see your api key in that page, you can copy the token and paste it below.",
-	"raApiKeyInstructionsMD": "To get your API key, go to [https://retroachievements.org/controlpanel.php](https://retroachievements.org/controlpanel.php) and log in to your account. You should see your api key in one of the entries in that page, you can copy the token and paste it below.",
+	"rawgApiKeyInstructionsMD": "To get your API key, go to [rawg.io](https://rawg.io/login/?forward=developer) and log in to your account. Register for an API key, fill in the email and the use with something like \"Extract games metadata for emulation purposes\". After submitting you should see your API key in that page, you can copy the token and paste it below.",
+	"raApiKeyInstructionsMD": "To get your API key, go to [https://retroachievements.org/controlpanel.php](https://retroachievements.org/controlpanel.php) and log in to your account. You should see your API key in one of the entries in that page, you can copy the token and paste it below.",
 	"username": "Username",
 	"raPoints": "Show Casual Points",
 	"raPointsDesc": "Add Casual Points (CP) values to achievement descriptions",
@@ -110,5 +114,6 @@
 	"xeniaDescriptionBoth": "Show locked/unlocked",
 	"xeniaDescriptionDesc": "Some games have different achievement descriptions based on lock/unlock status. Choose which to display.",
 	"xeniaDescriptionLocked": "Always show locked",
-	"xeniaDescriptionUnlocked": "Always show unlocked"
+	"xeniaDescriptionUnlocked": "Always show unlocked",
+	"back": "Back"
 }

@@ -14,14 +14,14 @@ import {AsyncMountable} from "./System";
 
 const MetaDeckChangeMetadata: FC<{ appId: number }> = ({appId}) =>
 {
-	const t = useTranslations()
+	const t = useTranslations();
+
 	return <MenuItem
-		   onSelected={async () =>
-		   {
-				
-				Navigation.CloseSideMenus();
-				Navigation.Navigate(`/metadeck/metadata/${appId}`);
-		   }}
+		onSelected={async () =>
+		{
+			Navigation.CloseSideMenus();
+			Navigation.Navigate(`/metadeck/metadata/${appId}`);
+		}}
 	>
 		{t("changeMetadata")}...
 	</MenuItem>
@@ -31,17 +31,17 @@ const MetaDeckChangeMetadata: FC<{ appId: number }> = ({appId}) =>
 const spliceChangeMetadata = (children: any[], appid: number) => {
 	children.find((x: any) => x?.key === 'properties')
 	const propertiesMenuItemIdx = children.findIndex((item) =>
-		   findInReactTree(
-				 item,
-				 (x) => x?.onSelected && x.onSelected.toString().includes('AppProperties')
-		   )
+		findInReactTree(
+			item,
+			(x) => x?.onSelected && x.onSelected.toString().includes('AppProperties')
+		)
 	)
 	children.splice(
-		   propertiesMenuItemIdx,
-		   0,
-		   <MetaDeckChangeMetadata key="metadeck-change-metadata"
-							  appId={appid}
-		   />
+		propertiesMenuItemIdx,
+		0,
+		<MetaDeckChangeMetadata key="metadeck-change-metadata"
+			appId={appid}
+		/>
 	)
 }
 
@@ -118,22 +118,22 @@ const contextMenuPatch = (LibraryContextMenu: any): AsyncMountable => {
  * Game context menu component.
  */
 export const LibraryContextMenu = fakeRenderComponent(
-	   findModuleChild((m) => {
-		   if (typeof m !== 'object') return
-		   for (const prop in m) {
-			   if (
-					 m[prop]?.toString() &&
-					 m[prop].toString().includes('().LibraryContextMenu')
-			   ) {
-				   return Object.values(m).find(
-						 (sibling) =>
-							    sibling?.toString().includes('createElement') &&
-							    sibling?.toString().includes('navigator:')
-				   )
-			   }
-		   }
-		   return
-	   })
+	findModuleChild((m) => {
+		if (typeof m !== 'object') return
+		for (const prop in m) {
+			if (
+				m[prop]?.toString() &&
+				m[prop].toString().includes('().LibraryContextMenu')
+			) {
+				return Object.values(m).find(
+					(sibling) =>
+						sibling?.toString().includes('createElement') &&
+						sibling?.toString().includes('navigator:')
+				)
+			}
+		}
+		return
+	})
 ).type
 
 export default contextMenuPatch

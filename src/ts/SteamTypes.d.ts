@@ -7,31 +7,31 @@ type Hook = {
 }
 
 type AllAchievements =
-	   {
-		   loading?: boolean
-		   data?: {
-				// Achieved hidden/not hidden
-				achieved: {
-					[key: string]: SteamAppAchievement
-				},
-				// Unachieved hidden
-				hidden: {
-					[key: string]: SteamAppAchievement
-				},
-				unachieved: {
-					[key: string]: SteamAppAchievement
-				}
-		   }
-	   }
+{
+	loading?: boolean
+	data?: {
+		// Achieved hidden/not hidden
+		achieved: {
+			[key: string]: SteamAppAchievement
+		},
+		// Unachieved hidden
+		hidden: {
+			[key: string]: SteamAppAchievement
+		},
+		unachieved: {
+			[key: string]: SteamAppAchievement
+		}
+	}
+};
 
 // Data is percentage of users who achieved (0-100), same as SteamAppAchievement.flAchieved
 type GlobalAchievements =
-	   {
-		   loading?: boolean
-		   data?: {
-			   [key: string]: number
-		   }
-	   }
+{
+	loading?: boolean
+	data?: {
+		[key: string]: number
+	}
+};
 
 type SteamAppLanguages = {
 	strDisplayName: string,
@@ -293,7 +293,7 @@ type CollectionStore = {
 }
 
 type AppData = {
-	"details": SteamAppDetails,
+	"details": SteamAppDetails | null,
 	"socialMediaData": any,
 	"associationData": {
 		rgDevelopers: {

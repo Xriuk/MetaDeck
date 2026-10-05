@@ -37,15 +37,18 @@ declare global
 		MetaDeck__SECRET: {
 			set bypassCounter(count: number)
 		};
-		MetaDeck: MetaDeckStateContext | undefined
+		MetaDeck: MetaDeckStateContext | undefined;
 	}
 
 	let DeckyPluginLoader: {
 		legacyFetchNoCors(url: string, request?: DeckyRequestInit | any): Promise<{
 			success: boolean;
 			result: { status: number; headers: { [key: string]: string }; body: string } | string | undefined
-		}>
-	}
+		}>;
+	};
+	let DeckyBackend: {
+		call<Args extends any[] = [], Return = void>(route: string, ...args: Args): Promise<Return>;
+	};
 }
 
 // const AppDetailsSections = findModuleChild((m) =>
@@ -109,17 +112,18 @@ export default definePlugin(() => {
 	// }
 
 	mounts.addPageMount("/metadeck/settings", () =>
-		   <MetaDeckStateContextProvider metaDeckState={state}>
-			   <SettingsComponent/>
-		   </MetaDeckStateContextProvider>
+		<MetaDeckStateContextProvider metaDeckState={state}>
+			<SettingsComponent/>
+		</MetaDeckStateContextProvider>
 	);
 
 	mounts.addPageMount("/metadeck/:module", () =>
-		   <MetaDeckStateContextProvider metaDeckState={state}>
-			   <ProviderSettingsComponent/>
-		   </MetaDeckStateContextProvider>
+		<MetaDeckStateContextProvider metaDeckState={state}>
+			<ProviderSettingsComponent/>
+		</MetaDeckStateContextProvider>
 	);
-
+	
+	state.loadingData.total = 0;
 	const unregister = mounts.register();
 
 	return {

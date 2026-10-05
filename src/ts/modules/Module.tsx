@@ -16,12 +16,14 @@ import type { AchievementsCache, AchievementsConfig } from "./achievements/Achie
 export interface ModuleConfig<ProvConfigs extends Record<keyof ProvConfigs, ProvConfig>, ProvConfig extends ProviderConfig<any, any>>
 {
 	enabled: boolean,
+	excluded_apps: number[],
 	providers: ProvConfigs
 }
 
 export interface ModuleCache<ProvCaches extends Record<keyof ProvCaches, ProvCache>, ProvCache extends ProviderCache<any, any>, Data>
 {
 	data: Record<number, Data>,
+	data_providers: Record<number, string>,
 	providers: ProvCaches
 }
 
@@ -103,6 +105,17 @@ export abstract class Module<
 		void this.saveData();
 	}
 
+	get dataProviders(): Record<number, string>
+	{
+		return this.cache.data_providers;
+	}
+
+	set dataProviders(data: Record<number, string>)
+	{
+		this.cache.data_providers = data;
+		void this.saveData();
+	}
+
 	get enabled(): boolean
 	{
 		return this.config.enabled;
@@ -112,6 +125,21 @@ export abstract class Module<
 	{
 		this.config.enabled = enabled;
 		void this.saveData();
+	}
+
+	get excludedApps(): number[]
+	{
+		return this.state.excludedApps.concat(this.excludedAppsSelf);
+	}
+
+	get excludedAppsSelf(): number[]
+	{
+		return this.config.excluded_apps;
+	}
+
+	set excludedAppsSelf(apps: number[])
+	{
+		this.config.excluded_apps = apps;
 	}
 
 	get unmetDependency(): boolean
@@ -129,8 +157,22 @@ export abstract class Module<
 		return !this.unmetDependency && this.enabled;
 	}
 
+	get overviews(): SteamAppOverview[]
+	{
+		return this.state.overviews
+			.filter(a => this.excludedAppsSelf.indexOf(a.appid) === -1);
+	}
+
+	get apps(): number[]
+	{
+		return this.overviews.map(overview => overview.appid);
+	}
+
 	async apply(appId: number): Promise<void>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return;
+
 		const overview = appStore.GetAppOverviewByAppID(appId)
 		if (overview.app_type == SteamAppTypeShortcut)
 			await this.applyApp(overview, await getAppDetails(appId));
@@ -138,6 +180,9 @@ export abstract class Module<
 
 	async applyApp(overview: SteamAppOverview, details: SteamAppDetails | null)
 	{
+		if(this.excludedApps.indexOf(overview.appid))
+			return;
+
 		try
 		{
 			if (overview.app_type == SteamAppTypeShortcut)
@@ -168,6 +213,7 @@ export abstract class Module<
 	async removeCache(appId: number): Promise<void>
 	{
 		delete this.data[appId];
+		delete this.dataProviders[appId];
 		await this.saveData();
 	}
 
@@ -178,17 +224,18 @@ export abstract class Module<
 			await this.removeCache(+appId);
 		}
 		this.data = {};
+		this.dataProviders = {};
 		await this.saveData();
 	}
 
-	async loadData(): Promise<void>
+	loadData(): Promise<void>
 	{
-		await this.state.settings.readSettings();
+		return this.state.settings.readSettings();
 	}
 
-	async saveData(): Promise<void>
+	saveData(): Promise<void>
 	{
-		await this.state.settings.writeSettings();
+		return this.state.settings.writeSettings();
 	}
 
 	abstract addMounts(mounts: Mounts): void;
@@ -207,8 +254,11 @@ export abstract class Module<
 
 	public fetchData(appId: number): Data | undefined
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		try{
-			this.logger.debug(`Fetching ${this.identifier} for ${appId}`, this.data[appId], this.data)
+			this.logger.debug(`Fetching ${this.identifier} for ${appId}`, this.data[appId], this.dataProviders[appId]);
 			if (!this.data[appId])
 				void this.fetchDataAsync(appId);
 			return this.data[appId];
@@ -220,19 +270,42 @@ export abstract class Module<
 
 	public async fetchDataAsync(appId: number): Promise<Data | undefined>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		try
 		{
 			if (!this.hasData(appId))
 			{
-				let data = await this.provide(appId);
-				if (!!data)
+				for (const provider of this.providers)
 				{
-					this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data);
-					this.data[appId] = data;
+					if (provider.enabled && await provider.test(appId))
+					{
+						const data = await provider.provide(appId);
+						if (data){
+							await this.provideAdditional(appId, data);
+							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
+
+							this.data[appId] = data;
+							this.dataProviders[appId] = provider.identifier;
+							break;
+						}
+					}
+				}
+				
+				if(!this.data[appId]){
+					let defaultData = await this.provideDefault(appId);
+					if(defaultData){
+						this.logger.debug(`Caching ${this.identifier} for ${appId}: `, defaultData, 'default');
+
+						this.data[appId] = defaultData;
+					}
+					else
+						this.logger.debug(appId, "no provider");
 				}
 			} else
 			{
-				this.logger.debug(`Loading cached ${this.identifier} for ${appId}: `, this.data[appId]);
+				this.logger.debug(`Loading cached ${this.identifier} for ${appId}: `, this.data[appId], this.dataProviders[appId]);
 			}
 
 			void this.apply(appId);
@@ -248,7 +321,7 @@ export abstract class Module<
 	{
 		try
 		{
-			await this.refreshDataForApps(this.state.apps)
+			await this.refreshDataForApps(this.apps)
 			this.logger.debug(`Refreshed ${this.identifier}`, this.data);
 		} catch (e: any)
 		{
@@ -276,6 +349,9 @@ export abstract class Module<
 
 	private async refreshDataForApp(appId: number): Promise<void>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		const overview = appStore.GetAppOverviewByAppID(appId);
 		const data = await this.fetchDataAsync(appId)
 		this.logger.debug(`Refreshed ${this.identifier} for ${appId}: `, data);
@@ -295,9 +371,20 @@ export abstract class Module<
 
 	async mount(): Promise<void>
 	{
+		let backupLoading = this.state.loadingData.loading;
+		let backupModule = this.state.loadingData.module;
+		let backupGame = this.state.loadingData.currentModule?.game!;
+
+		this.state.loadingData.loading = true;
+		this.state.loadingData.module = this.identifier;
+		if(this.state.loadingData.currentModule)
+			this.state.loadingData.currentModule.game = t("initializing");
+		this.state.notifyUpdate();
+
 		try
 		{
-			this.providers.sort((a, b) => a.config.ordinal - b.config.ordinal)
+			// DEV: set loadingData percentage for providers
+			this.providers.sort((a, b) => a.config.ordinal - b.config.ordinal);
 			if (this.enabled)
 			{
 				for (const provider of this.providers)
@@ -309,6 +396,13 @@ export abstract class Module<
 		} catch (e: any)
 		{
 			this.handleError(e);
+		}
+		finally{
+			if(this.state.loadingData.currentModule)
+				this.state.loadingData.currentModule.game = backupGame;
+			this.state.loadingData.module = backupModule;
+			this.state.loadingData.loading = backupLoading;
+			this.state.notifyUpdate();
 		}
 	}
 
@@ -327,31 +421,16 @@ export abstract class Module<
 
 	}
 
-	async provide(appId: number): Promise<Data | undefined>
-	{
-		for (const provider of this.providers)
-		{
-			if (provider.enabled && await provider.test(appId))
-			{
-				const data = await provider.provide(appId);
-				if (data){
-					this.logger.debug(appId, provider.identifier, data);
-					await this.provideAdditional(appId, data);
-					return data;
-				}
-			}
-		}
-		this.logger.debug(appId, "no provider");
-		return this.provideDefault(appId);
-	}
-
-	async provideDefault(_appId: number): Promise<Data | undefined>
+	protected async provideDefault(_appId: number): Promise<Data | undefined>
 	{
 		return undefined
 	}
 
 	async provideAdditional(appId: number, data: Data): Promise<void>
 	{
+		if(this.excludedApps.indexOf(appId) !== -1)
+			return undefined;
+
 		for (const provider of this.providers)
 		{
 			if (provider.enabled && await provider.test(appId))
@@ -359,6 +438,19 @@ export abstract class Module<
 				await provider.apply(appId, data);
 				return;
 			}
+		}
+	}
+
+	async onExcludedChange(oldExcluded: number[], newExcluded: number[]){
+		// Retrieve changed app ids: new values and removed values
+		let changedIds = newExcluded
+			.filter(a => oldExcluded.indexOf(a) === -1)
+			.concat(oldExcluded.filter(a => newExcluded.indexOf(a) === -1));
+
+		// Remove cache and re-fetch
+		for(let changedId of changedIds){
+			await this.removeCache(changedId);
+			await this.fetchDataAsync(changedId);
 		}
 	}
 }

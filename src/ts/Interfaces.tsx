@@ -1,9 +1,13 @@
 import {IconType} from "react-icons";
-import {SiEpicgames, SiFlatpak, SiLutris, SiPrime} from "react-icons/si";
-
+import {SiEpicgames, SiFlatpak, SiLutris} from "react-icons/si";
 import languages from "./translations";
-import {FaRocket, FaTrash} from "react-icons/fa";
-import type { AllAchievements, GlobalAchievements, SteamAppAchievement, SteamAppDetails } from "./SteamTypes";
+import {FaAmazon, FaRocket, FaTrash} from "react-icons/fa";
+import type { SteamAppAchievement, SteamAppDetails } from "./SteamTypes";
+import type { Provider } from "./modules/Provider";
+import { DialogControlsSection, Field } from "@decky/ui";
+import { Markdown } from "./markdown";
+import { format, t } from "./useTranslations";
+import React from "react";
 
 export interface MetadataData
 {
@@ -276,7 +280,7 @@ export const customStoreIcons: Record<CustomStoreCategory, IconType> = {
 	[CustomStoreCategory.JunkStore]: FaTrash,
 	[CustomStoreCategory.Heroic]: Heroic,
 	[CustomStoreCategory.Lutris]: SiLutris,
-	[CustomStoreCategory.Prime]: SiPrime,
+	[CustomStoreCategory.Prime]: FaAmazon,
 	[CustomStoreCategory.Flatpak]: SiFlatpak
 }
 
@@ -293,5 +297,22 @@ export const customStoreTitles: Record<CustomStoreCategory, keyof (typeof langua
 	[CustomStoreCategory.Flatpak]: "storeCategoriesFlatpak"
 }
 
-
-
+export function inheritSettings(provider: Provider<any, any, any, any, any, any, any, any, any, any, any, any>){
+	return () => {
+		const settings = provider.settingsComponent({});
+		if(!settings)
+			return undefined;
+		else{
+			return (<>
+				<DialogControlsSection>
+					<Field description={
+							<Markdown>
+								{format(t("settingsInherited"), provider.title, provider.module.title)}
+							</Markdown>
+						} />
+				</DialogControlsSection>
+				{settings}
+			</>);
+		}
+	}
+}
