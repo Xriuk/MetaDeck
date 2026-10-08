@@ -7,6 +7,7 @@ import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesD
 import {getAppDetails} from "../../../../util";
 import {GOGMetadataProviderResolverConfigs} from "../../providers/GOGMetadataProvider";
 import {callable} from "@decky/api";
+import { SiHeroicgameslauncher } from "react-icons/si";
 
 export interface GOGMetadataProviderHeroicResolverConfig extends ResolverConfig
 {
@@ -63,6 +64,9 @@ export class GOGMetadataProviderHeroicResolver extends GOGMetadataProviderResolv
 
 	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
+		if(data.install_size && data.install_date)
+			return;
+
 		const resolved = await this.resolve(appId);
 		if (!resolved) return;
 
@@ -78,4 +82,6 @@ export class GOGMetadataProviderHeroicResolver extends GOGMetadataProviderResolv
 		data.install_size = plaform_data.install_size;
 		data.install_date = plaform_data.install_date;
 	}
+
+	override icon = <SiHeroicgameslauncher/>;
 }

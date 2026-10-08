@@ -4,6 +4,7 @@ import {getAppDetails} from "../../../util";
 import { type MultiIdResolverConfigs } from "./MultiIdResolver";
 import { call } from "@decky/api";
 import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache } from "./MultiIdSerialStation";
+import { SiPlaystation2 } from "react-icons/si";
 
 export interface MultiIdPCSX2ResolverConfig extends ResolverConfig
 {
@@ -39,4 +40,6 @@ export class MultiIdPCSX2Resolver extends MultiIdSerialStationResolver
 
 		return await call<[string], string | null>("pcsx2_get_titleid", rom) ?? undefined;
 	}
+
+	override icon = <SiPlaystation2/>;
 }

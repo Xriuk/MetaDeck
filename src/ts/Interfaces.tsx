@@ -15,6 +15,8 @@ export interface MetadataData
 	id: ID;
 
 	description: string;
+	snippet?: string; // Will default to description if not provided
+
 	developers?: Developer[];
 	publishers?: Publisher[];
 	release_date?: number;

@@ -72,9 +72,7 @@ const contextMenuPatch = (LibraryContextMenu: any): AsyncMountable => {
 									 console.log(nextProps)
 									 if (Array.isArray(nextProps.children))
 									 {
-										 const gtmIdx = nextProps.children.findIndex(
-											    (x: any) => x?.key === 'metadeck-change-metadata'
-										 )
+										 const gtmIdx = nextProps.children.findIndex((x: any) => x?.key === 'metadeck-change-metadata');
 										 if (gtmIdx != -1) nextProps.children.splice(gtmIdx, 1)
 
 										 if (shouldUpdate === true)
@@ -98,7 +96,8 @@ const contextMenuPatch = (LibraryContextMenu: any): AsyncMountable => {
 									 return shouldUpdate
 								 }
 						   )
-					   } else {
+					   }
+					   else {
 						   spliceChangeMetadata(component.props.children, appid)
 					   }
 

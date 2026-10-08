@@ -11,6 +11,7 @@ import {
 import {useMetaDeckState} from "../MetaDeckState";
 import {t} from "../useTranslations";
 import { ExcludeAppComponent } from "./ExcludeAppComponent";
+import type { Resolver } from "./Resolver";
 
 export const ProviderSettingsComponent: FC = () => {
 	const state = useMetaDeckState();
@@ -21,6 +22,11 @@ export const ProviderSettingsComponent: FC = () => {
 	{
 		const [enabled, setEnabled] = useState(provider.enabled);
 		const [excluded, setExcluded] = useState(provider.excludedAppsSelf);
+		let resolvers: Record<string, boolean> = {};
+		for(let resolver in provider.config.resolvers){
+			resolvers[resolver] = provider.config.resolvers[resolver].enabled;
+		}
+		const [enabledResolvers, setEnabledResolvers] = useState(resolvers);
 
 		pages.push({
 			title: provider.title,
@@ -59,9 +65,44 @@ export const ProviderSettingsComponent: FC = () => {
 								let oldValue = provider.excludedAppsSelf;
 								setExcluded(value);
 								provider.excludedAppsSelf = value;
-								await provider.onExcludedChange(oldValue, value);
+								await provider.module.onExcludedChange(oldValue, value);
 							}} />
 					</DialogControlsSection>
+
+					{ 
+						Object.keys(provider.resolvers).length > 1 &&
+						<DialogControlsSection>
+							<Field
+								label={t("settingsProviderResolvers")}
+								description={t("settingsProviderResolversDesc")}>
+							</Field>
+							{
+								provider.resolvers.map((r: Resolver<any, any, any, any, any, any, any, any, any, any, any, any>) =>
+							
+								<Field
+									label={r.identifier}
+									icon={r.icon}>
+									<Toggle
+										value={enabledResolvers[r.identifier]}
+										disabled={state.loadingData.loading}
+										onChange={async (checked) => {
+											setEnabledResolvers({
+												...enabledResolvers,
+												[r.identifier]: checked
+											});
+											if(checked != r.config.enabled){
+												if(checked)
+													await r.mount();
+												else
+													await r.dismount();
+											}
+											r.enabled = checked;
+										}}/>
+								</Field>
+								)
+							}
+						</DialogControlsSection>
+					}
 				</DialogBody>
 			)
 		})

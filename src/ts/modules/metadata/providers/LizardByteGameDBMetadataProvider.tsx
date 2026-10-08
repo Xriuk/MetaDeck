@@ -8,6 +8,7 @@ import type { Company, Game, GameMode, InvolvedCompany, ExternalGame, ReleaseDat
 import { SteamMetadataProvider } from "./SteamMetadataProvider";
 import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
 import { SiIgdb } from "react-icons/si";
+import { distance } from "fastest-levenshtein";
 
 export interface LizardByteGameDBMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
 {
@@ -114,9 +115,10 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		
 		// Search with double the fuzziness to retrieve them all, they will be filtered later
 		const closest_names = distanceWithLimit(this.fuzziness * 2, title, result.map(e => e[1].name));
-		// Take max 10 results (since we might have different regions)
+		// Take max 10 results sorted by distance (since we might have different regions)
 		let results = result
 			.filter(e => closest_names.includes(e[1].name))
+			.sort((a, b) => distance(title, a[1].name) - distance(title, b[1].name))
 			.slice(0, 10);
 
 		// Retrieve just titles, then we'll query everything

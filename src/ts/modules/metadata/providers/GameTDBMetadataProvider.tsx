@@ -10,14 +10,14 @@ import { MetadataProvider } from "../MetadataProvider";
 import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
 import { separator, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
-import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game, isSwitchGame } from "../../../shortcuts";
+import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game, isRyujinxGame } from "../../../shortcuts";
 import { getAppDetails } from "../../../util";
-import { callable } from "@decky/api";
+import { callable, toaster } from "@decky/api";
 import { MetadataData, StoreCategory } from "../../../Interfaces";
 import { FaG } from "react-icons/fa6";
 import { MultiIdCemuResolver } from "../../resolvers/MultiId/MultiIdCemuResolver";
 import type { GlobalResolver } from "../../resolvers/GlobalResolver";
-import { SwitchSerialResolver, type SwitchSerialResolverCaches, type SwitchSerialResolverConfigs } from "../../resolvers/SwitchSerialResolver";
+import { RyujinxSerialResolver, type RyujinxSerialResolverCaches, type RyujinxSerialResolverConfigs } from "../../resolvers/RyujinxSerialResolver";
 
 const wiiUrl = "https://www.gametdb.com/wiitdb.zip";
 const wiiUUrl = "https://www.gametdb.com/wiiutdb.zip";
@@ -42,12 +42,12 @@ type GameTDBGame = {
 	}[];
 };
 
-export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'cemu' | 'rpcs3'> & SwitchSerialResolverConfigs, ResolverConfig>
+export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'cemu' | 'rpcs3'> & RyujinxSerialResolverConfigs, ResolverConfig>
 {
 	language: string // ZH -> ZHCN / ZHTW (in order)
 }
 
-export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'cemu' | 'rpcs3'> & SwitchSerialResolverCaches, ResolverCache>
+export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'cemu' | 'rpcs3'> & RyujinxSerialResolverCaches, ResolverCache>
 {
 	
 }
@@ -57,7 +57,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 	resolvers: GlobalResolver<any>[] = [
 		new MultiIdDolphinResolver(this),
 		new MultiIdCemuResolver(this),
-		new SwitchSerialResolver(this),
+		new RyujinxSerialResolver(this),
 		new MultiIdRPCS3Resolver(this)
 	];
 
@@ -79,7 +79,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 	set language(language: string)
 	{
 		this.module.config.providers.gametdb.language = language;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	override async mount(): Promise<void> {
@@ -99,8 +99,14 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 				errors.push(e);
 			}
 		}
-		if(errors.length)
+		if(errors.length){
+			toaster.toast({
+				title: `${this.module.title} - ${this.title}`,
+				body: t("initError")
+			});
+			
 			this.logger.error("Error while retrieving one or more zip file", errors);
+		}
 	}
 
 	private getLocalized(
@@ -127,14 +133,14 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 
 	async provide(appId: number): Promise<MetadataData | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return undefined;
 
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
+		
 		const launchCommand = getLaunchCommand(details);
-
 		const cats = await getShortcutCategories(launchCommand);
 		cats.push(StoreCategory.SinglePlayer);
 		
@@ -170,8 +176,8 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 					cats.push(StoreCategory.TrackedControllerSupport);
 			}
 		}
-		else if(isSwitchGame(launchCommand)){
-			entries = await this.getSwitchGameEntries(appId);
+		else if(isRyujinxGame(launchCommand)){
+			entries = await this.getRyujinxGameEntries(appId);
 
 			if(entries.length){
 				cats.push(StoreCategory.FullController);
@@ -207,7 +213,9 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			id: entries[0].id,
 			title: this.getLocalized(locales, l => l.title)?.title
 				?? entries[0].name,
+
 			description: this.getLocalized(locales, l => l.synopsis)?.synopsis || t("noDescription"),
+
 			release_date: release ? Math.floor(Date.parse(release) / 1000) : undefined,
 			developers: entries
 				.find(e => e.developer)?.developer
@@ -244,7 +252,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 						</>
 					} />
 			</DialogControlsSection>
-		)
+		);
 	}
 
 	// Here we do not check excludedApps because this might be used externally
@@ -292,12 +300,12 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		return this.getGameEntries(appId, wiiUUrl);
 	}
 
-	public async getSwitchGameEntries(appId: number): Promise<GameTDBGame[]>{
+	public async getRyujinxGameEntries(appId: number): Promise<GameTDBGame[]>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return [];
 		const launchCommand = getLaunchCommand(details);
-		if(!isSwitchGame(launchCommand))
+		if(!isRyujinxGame(launchCommand))
 			return [];
 		
 		return this.getGameEntries(appId, switchUrl);

@@ -1,7 +1,7 @@
-import { call, fetchNoCors } from "@decky/api";
+import { call, fetchNoCors, toaster } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import {
-	getLaunchCommand, isCemuGame, isEmulatedGame, isRPCS3Game, isShadPS4Game, isSwitchGame,
+	getLaunchCommand, isCemuGame, isEmulatedGame, isRPCS3Game, isShadPS4Game, isRyujinxGame,
 	isVita3KGame, isXemuGame, isXeniaGame, romRegex
 } from "../../shortcuts";
 import { t } from "../../useTranslations";
@@ -9,6 +9,7 @@ import { getAppDetails } from "../../util";
 import type { ResolverCache, ResolverConfig } from "../Resolver";
 import { GlobalResolver } from "./GlobalResolver";
 import { version } from "@decky/pkg";
+import { FaGamepad } from "react-icons/fa";
 
 export interface RetroAchievementsResolverConfig extends ResolverConfig
 {
@@ -51,8 +52,12 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 				"User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)`,
 			}
 		});
-		if(!response.ok)
-			return;
+		if(!response.ok){
+			toaster.toast({
+				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
+				body: t("initError")
+			});
+		}
 
 		const body = await response.text();
 		this.hashRAIds = (JSON.parse(body.toLowerCase()) as { md5list: Record<string, number>; }).md5list;
@@ -68,7 +73,7 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 		return isEmulatedGame(launchCommand) &&
 			!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isVita3KGame(launchCommand) &&
 			!isXemuGame(launchCommand) && !isXeniaGame(launchCommand) &&
-			!isCemuGame(launchCommand) && !isSwitchGame(launchCommand);
+			!isCemuGame(launchCommand) && !isRyujinxGame(launchCommand);
 	}
 
 	async resolve(appId: number): Promise<ID | undefined>
@@ -93,4 +98,6 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 
 		return this.hashRAIds[md5];
 	}
+
+	override icon = <FaGamepad/>;
 }

@@ -1,4 +1,4 @@
-import { call, fetchNoCors, FileSelectionType, openFilePicker } from "@decky/api";
+import { call, fetchNoCors, FileSelectionType, openFilePicker, toaster } from "@decky/api";
 import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
@@ -95,7 +95,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 	set userPath(data: string)
 	{
 		(this.config as RPCS3AchievementsProviderConfig).user_path = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get language(): string
@@ -106,7 +106,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 	set language(data: string)
 	{
 		(this.config as RPCS3AchievementsProviderConfig).language = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get trophyCategories(): boolean
@@ -117,7 +117,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 	set trophyCategories(data: boolean)
 	{
 		(this.config as RPCS3AchievementsProviderConfig).trophy_categories = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get PSNNPSSO(): string
@@ -128,7 +128,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 	set PSNNPSSO(data: string)
 	{
 		(this.config as RPCS3AchievementsProviderConfig).psn_npsso = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get gameTrophies(): Record<number, RPCS3GameTrophies | null>{
@@ -136,8 +136,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 	}
 
 	override async mount(): Promise<void> {
-		await super.mount();
-
+		// Check path first, before mounting the resolver
 		if(this.userPath){
 			try{
 				if(!await call<[string], boolean>("rpcs3_check_user_path", this.userPath))
@@ -147,16 +146,29 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 					this.resolvers[0].hddPath = this.userPath.split('/dev_hdd0/home/')[0] + '/dev_hdd0/';
 			}
 			catch{
+				toaster.toast({
+					title: `${this.module.title} - ${this.title}`,
+					body: t("rpcs3PathError")
+				});
+
 				this.userPath = "";
 				if(this.resolvers[0].hddPath)
 					this.resolvers[0].hddPath = "";
 			}
 		}
 
+		await super.mount();
+
 		if(this.language.toLowerCase() != "en"){
 			let locale = await call<[string], number | null>("rpcs3_locale_to_ps3", this.language.toLowerCase());
-			if(locale == null)
+			if(locale == null){
+				toaster.toast({
+					title: `${this.module.title} - ${this.title}`,
+					body: t("languageError")
+				});
+
 				this.language = "EN";
+			}
 		}
 
 		if(this.PSNNPSSO){
@@ -178,6 +190,11 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 						allow_redirects: false
 					});
 				if(!accessCodeResponse.success || typeof accessCodeResponse.result === 'string' || !accessCodeResponse.result?.headers["Location"]?.includes("?code=")){
+					toaster.toast({
+						title: `${this.module.title} - ${this.title}`,
+						body: t("apiKeyError")
+					});
+
 					this.PSNNPSSO = "";
 				}
 				else{
@@ -228,13 +245,18 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 				}
 			}
 			catch{
+				toaster.toast({
+					title: `${this.module.title} - ${this.title}`,
+					body: t("apiKeyError")
+				});
+
 				this.PSNNPSSO = "";
 			}
 		}
 	}
 
 	override async provide(appId: number): Promise<AchievementsData | undefined> {
-		if(!this.userPath || !this.resolvers[0].hddPath || this.excludedApps.indexOf(appId) !== -1)
+		if(!this.userPath || !this.resolvers[0].hddPath || this.excludedApps.includes(appId))
 			return undefined;
 		
 		if(this.gameTrophies[appId] === null)
@@ -316,6 +338,11 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 						})).json()
 					}
 					catch(e){
+						toaster.toast({
+							title: `${this.module.title} - ${this.title}`,
+							body: t("apiKeyError")
+						});
+
 						this.logger.debug(`${appId} PSN token refresh error`, e);
 						this._psnTokens = undefined;
 						this._psnTokensExpiration = undefined;

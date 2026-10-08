@@ -4,6 +4,7 @@ import {getAppDetails} from "../../../util";
 import { type MultiIdResolverConfigs } from "./MultiIdResolver";
 import { call } from "@decky/api";
 import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache } from "./MultiIdSerialStation";
+import { SiPlaystation3 } from "react-icons/si";
 
 export const rpcs3IdRegex = '\\/dev_hdd0\\/game\\/([A-Z0-9]+)\\/';
 export const rpcs3RomPathRegex = '(\\/home\\/deck\\/.+\\/PS3_GAME)\\/USRDIR\\/EBOOT\\.BIN';
@@ -53,6 +54,8 @@ export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver
 
 		return titleId;
 	}
+
+	override icon = <SiPlaystation3/>;
 
 	// DEV: maybe retrieve and match title from GameTDB to retrieve other regions?
 }

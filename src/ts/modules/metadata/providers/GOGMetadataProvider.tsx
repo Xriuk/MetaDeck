@@ -91,7 +91,7 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 
 	provide(appId: number): Promise<MetadataData | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return Promise.resolve(undefined);
 
 		return this.throttle(async () => {

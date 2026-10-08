@@ -3,11 +3,11 @@ import {AsyncMountable} from "../System";
 import {Provider, ProviderCache, ProviderConfig} from "./Provider";
 import {MetaDeckState} from "../MetaDeckState";
 import {ID} from "../Interfaces";
+import type { ReactNode } from "react";
 
 export interface ResolverConfig
 {
-	enabled: boolean,
-	ordinal: number
+	enabled: boolean
 }
 
 export interface ResolverCache
@@ -84,7 +84,7 @@ export abstract class Resolver<
 	set enabled(enabled: boolean)
 	{
 		this.config.enabled = enabled
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	abstract test(appId: number): Promise<boolean>
@@ -94,4 +94,6 @@ export abstract class Resolver<
 	apply(_appId: number, _data: Data): Promise<void> {
 		return Promise.resolve();
 	}
+
+	icon?: ReactNode;
 }

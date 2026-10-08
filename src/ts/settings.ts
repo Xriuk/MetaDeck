@@ -43,54 +43,54 @@ export class Settings
 				excluded_apps: [],
 				providers: {
 					// Id-based (localized)
+					titledb: {
+						enabled: true,
+						excluded_apps: [],
+						language: "US.en",
+						resolvers: {
+							ryujinx: {
+								enabled: true
+							}
+						}
+					},
 					gametdb: {
 						enabled: true,
-						ordinal: 0,
 						excluded_apps: [],
+						language: "EN",
 						resolvers: {
 							dolphin: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							},
 							cemu: {
-								enabled: true,
-								ordinal: 1
+								enabled: true
 							},
-							switch: {
-								enabled: true,
-								ordinal: 2
+							ryujinx: {
+								enabled: true
 							},
 							rpcs3: {
-								enabled: true,
-								ordinal: 3
+								enabled: true
 							}
-						},
-						language: "EN"
+						}
 					},
 					// Id-based (english)
 					gog: { // Can resolve to Steam if finds id
 						enabled: true,
-						ordinal: 1,
 						excluded_apps: [],
 						resolvers: {
 							junk: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							},
 							nsl: {
-								enabled: true,
-								ordinal: 1
+								enabled: true
 							},
 							heroic: {
-								enabled: true,
-								ordinal: 2
+								enabled: true
 							}
 						}
 					},
 					// Id-based/Fuzzy search (localized)
 					steam: {
 						enabled: true,
-						ordinal: 2,
 						fuzziness: 5,
 						overrides: {},
 						language: "english",
@@ -100,7 +100,6 @@ export class Settings
 					// Fuzzy search (english)
 					lizardbyte: { // Can resolve to Steam if finds id
 						enabled: true,
-						ordinal: 3,
 						fuzziness: 5,
 						excluded_apps: [],
 						overrides: {},
@@ -108,7 +107,6 @@ export class Settings
 					},
 					rawg: {
 						enabled: true,
-						ordinal: 4,
 						fuzziness: 5,
 						api_key: '',
 						excluded_apps: [],
@@ -118,7 +116,6 @@ export class Settings
 					// Id-based (fallback)
 					ra: {
 						enabled: true,
-						ordinal: 5,
 						excluded_apps: [],
 						resolvers: {}
 					}
@@ -134,63 +131,53 @@ export class Settings
 					// Id-based
 					pcsx2: {
 						enabled: true,
-						ordinal: 0,
 						excluded_apps: [],
 						resolvers: {
 							pcsx2: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							}
 						}
 					},
 					rpcs3: {
 						enabled: true,
-						ordinal: 1,
 						excluded_apps: [],
 						resolvers: {
 							rpcs3: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							}
 						}
 					},
 					xenia: {
 						enabled: true,
-						ordinal: 2,
 						excluded_apps: [],
 						resolvers: {
 							xenia: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							}
 						}
 					},
 					// Id-based, fallback to fuzzy search
 					dolphin: {
 						enabled: true,
-						ordinal: 3,
 						fuzziness: 5,
 						excluded_apps: [],
 						overrides: {},
 						resolvers: {
 							dolphin: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							}
 						}
 					},
+					// Fuzzy search
 					cemu: {
 						enabled: true,
-						ordinal: 4,
 						fuzziness: 5,
 						excluded_apps: [],
 						overrides: {},
 						resolvers: {}
 					},
-					// Fuzzy search
 					emudeck: {
 						enabled: true,
-						ordinal: 5,
 						fuzziness: 5,
 						excluded_apps: [],
 						overrides: {},
@@ -207,21 +194,18 @@ export class Settings
 				providers: {
 					ra: {
 						enabled: true,
-						ordinal: 0,
 						username: '',
 						api_key: '',
 						points: true,
 						excluded_apps: [],
 						resolvers: {
 							ra: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							}
 						}
 					},
 					rpcs3: {
 						enabled: true,
-						ordinal: 1,
 						user_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/home/00000001',
 						language: 'EN',
 						trophy_categories: true,
@@ -230,14 +214,12 @@ export class Settings
 						resolvers: {
 							rpcs3: {
 								enabled: true,
-								ordinal: 0,
 								hdd_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/'
 							}
 						}
 					},
 					xenia: {
 						enabled: true,
-						ordinal: 2,
 						user_path: '',
 						language: 'EN',
 						gamerscore: true,
@@ -245,8 +227,7 @@ export class Settings
 						excluded_apps: [],
 						resolvers: {
 							xenia: {
-								enabled: true,
-								ordinal: 0
+								enabled: true
 							}
 						}
 					}
@@ -282,8 +263,9 @@ export class Settings
 							cemu: {
 								game_codes: {}
 							},
-							switch: {
-								title_ids: {}
+							ryujinx: {
+								title_ids: {},
+								ryujinx_prod_keys: undefined
 							},
 							rpcs3: {
 								title_ids: {}
@@ -295,6 +277,14 @@ export class Settings
 					},
 					ra: {
 						resolvers: {}
+					},
+					titledb: {
+						resolvers: {
+							ryujinx: {
+								title_ids: {},
+								ryujinx_prod_keys: undefined
+							}
+						}
 					}
 				}
 			},
@@ -374,10 +364,12 @@ export class Settings
 	configData: ConfigData = merge({}, Settings.defaultConfig);
 	private readonly configMutex = new Mutex();
 	private configRead = false; // To avoid writing before reading
+	private configAllowSaving = true;
 
 	cacheData: CacheData = merge({}, Settings.defaultCache);
 	private readonly cacheMutex = new Mutex();
 	private cacheRead = false; // To avoid writing before reading
+	private cacheAllowSaving = true;
 
 	constructor(state: MetaDeckState)
 	{
@@ -386,58 +378,54 @@ export class Settings
 	}
 
 
-	get config(): ConfigData
-	{
+	private createProxy<T extends object>(targetObj: T, name: string): T{
 		const self: Settings = this;
+
 		const createHandler = <T>(path: string[] = []) => ({
 			get: (target: T, key: keyof T): any => {
-				if (key == 'isProxy') return true;
-				if (typeof target[key] === 'object' && target[key] != null)
+				if (key == 'isProxy')
+					return true;
+
+				if (typeof target[key] === 'object' && target[key] != null){
 					return new Proxy(
-						   target[key],
-						   createHandler<any>([...path, key as string])
+						target[key],
+						createHandler<any>([...path, key as string])
 					);
+				}
+
 				return target[key];
 			},
 			set: (target: T, key: keyof T, value: any) =>  {
-				self.logger.debug(`Setting ${[...path, key]} to: `, value);
+				self.logger.debug(`Setting ${name} ${[...path, key]} to: `, value);
+
 				target[key] = value;
-				void self.writeConfig();
+
+				self.state.notifyUpdate();
+				return true;
+			},
+			deleteProperty: (target: T, key: keyof T) => {
+				self.logger.debug(`Deleting ${name} ${[...path, key]}`);
+
+				delete target[key];
+
 				self.state.notifyUpdate();
 				return true;
 			}
 		});
 
-		return new Proxy(this.configData, createHandler<ConfigData>());
+		return new Proxy(targetObj, createHandler<T>() as any);
 	}
 
-	get cache(): CacheData
-	{
-		const self: Settings = this
-
-		const createHandler = <T>(path: string[] = []) => ({
-			get: (target: T, key: keyof T): any => {
-				if (key == 'isProxy') return true;
-				if (typeof target[key] === 'object' && target[key] != null)
-					return new Proxy(
-						   target[key],
-						   createHandler<any>([...path, key as string])
-					);
-				return target[key];
-			},
-			set: (target: T, key: keyof T, value: any) =>  {
-				self.logger.debug(`Setting ${[...path, key]} to: `, value);
-				target[key] = value;
-				void self.writeCache();
-				self.state.notifyUpdate();
-				return true;
-			}
-		});
-
-		return new Proxy(self.cacheData, createHandler<CacheData>());
+	public get config(): ConfigData{
+		return this.createProxy(this.configData, 'config');
 	}
 
-	async readSettings(): Promise<void>
+	public get cache(): CacheData{
+		return this.createProxy(this.cacheData, 'cache');
+	}
+	
+
+	public async readSettings(): Promise<void>
 	{
 		this.logger.debug("Reading settings...");
 		const start = systemClock.getTimeMs();
@@ -447,7 +435,7 @@ export class Settings
 		this.logger.debug("Read settings in " + (end - start) + "ms");
 	}
 
-	async writeSettings(): Promise<void>
+	public async writeSettings(): Promise<void>
 	{
 		this.logger.debug("Writing settings...");
 		const start = systemClock.getTimeMs();
@@ -456,6 +444,7 @@ export class Settings
 		const end = systemClock.getTimeMs();
 		this.logger.debug("Wrote settings in " + (end - start) + "ms");
 	}
+
 
 	private async readConfig(): Promise<void>
 	{
@@ -474,11 +463,11 @@ export class Settings
 		}
 	}
 
-	private async writeConfig(): Promise<void>
+	public async writeConfig(): Promise<void>
 	{
 		const release = await this.configMutex.acquire();
 		try{
-			if(!this.configRead)
+			if(!this.configRead || !this.configAllowSaving)
 				return;
 
 			this.logger.debug("Writing config...");
@@ -491,6 +480,7 @@ export class Settings
 			release();
 		}
 	}
+
 
 	private async readCache(): Promise<void>
 	{
@@ -509,11 +499,11 @@ export class Settings
 		}
 	}
 
-	private async writeCache(): Promise<void>
+	public async writeCache(): Promise<void>
 	{
 		const release = await this.cacheMutex.acquire();
 		try{
-			if(!this.cacheRead)
+			if(!this.cacheRead || !this.cacheAllowSaving)
 				return;
 
 			this.logger.debug("Writing cache...");
@@ -524,6 +514,53 @@ export class Settings
 		}
 		finally{
 			release();
+		}
+	}
+
+
+	public async runInDisabledSaveState(action: () => Promise<void>): Promise<void>{
+		let configAllowSavingBackup: boolean;
+		let releaseConfig = await this.configMutex.acquire();
+		try{
+			configAllowSavingBackup = this.configAllowSaving;
+			this.configAllowSaving = false;
+		}
+		finally{
+			releaseConfig();
+		}
+
+		try{
+			let cacheAllowSavingBackup: boolean;
+			let releaseCache = await this.cacheMutex.acquire();
+			try{
+				cacheAllowSavingBackup = this.cacheAllowSaving;
+				this.cacheAllowSaving = false;
+			}
+			finally{
+				releaseCache();
+			}
+			
+			try{
+				await action();
+			}
+			finally{
+				releaseCache = await this.cacheMutex.acquire();
+				try{
+					this.cacheAllowSaving = cacheAllowSavingBackup;
+				}
+				finally{
+					releaseCache();
+				}
+			}
+		}
+		finally{
+			releaseConfig = await this.configMutex.acquire();
+			try{
+				this.configAllowSaving = configAllowSavingBackup;
+			}
+			finally{
+				releaseConfig();
+			}
 		}
 	}
 }

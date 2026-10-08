@@ -8,7 +8,7 @@ import {
 	isPPSSPPGame, isRosaliesMupenGUIGame, isVita3KGame, isNSLGame, isJunkStoreGame,
 	isHeroicGame, isFlycastGame,
 	getLaunchCommand,
-	isSwitchGame
+	isRyujinxGame
 } from "../../../shortcuts";
 import { t } from "../../../useTranslations";
 import { distanceWithLimit, closestWithLimit, getAppDetails, fetchNoCorsLegacyTimeout } from "../../../util";
@@ -19,6 +19,7 @@ import { IdOverrideComponent, type OverrideEntry } from "../../IdOverrideCompone
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import { FaR } from "react-icons/fa6";
+import { toaster } from "@decky/api";
 
 type RAWGAchievement = {
 	name: string;
@@ -53,7 +54,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 	set apiKey(api_key: string)
 	{
 		this.module.config.providers.rawg.api_key = api_key;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	private async getPlatformIds(appId: number): Promise<string | undefined>{
@@ -93,7 +94,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 			return '26,43,24'; // Game Boy / Game Boy Color / Game Boy Advance
 		else if(isRosaliesMupenGUIGame(launchCommand))
 			return '83'; // Nintendo 64
-		else if(isSwitchGame(launchCommand))
+		else if(isRyujinxGame(launchCommand))
 			return '7'; // Switch
 
 		else if(isFlycastGame(launchCommand))
@@ -105,7 +106,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	override async test(appId: number): Promise<boolean>
 	{
-		if(!this.apiKey || this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+		if(!this.apiKey || this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -205,8 +206,14 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 			return[]
 		else{
 			// Clear to avoid errors
-			if(response.status == 403)
+			if(response.status == 403){
+				toaster.toast({
+					title: `${this.module.title} - ${this.title}`,
+					body: t("apiKeyError")
+				});
+
 				this.apiKey = '';
+			}
 			
 			throw Error(`Could not find metadata for "${title}": \n${await response.text()}`);
 		}
@@ -247,7 +254,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	protected override async getMetadataForGame(appId: number, external = false): Promise<MetadataData | undefined>
 	{
-		if((!external && this.excludedApps.indexOf(appId) !== -1) || this.overrides[appId] === 0)
+		if((!external && this.excludedApps.includes(appId)) || this.overrides[appId] === 0)
 			return undefined;
 
 		const details = await getAppDetails(appId);
@@ -293,7 +300,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 
 	protected override async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title' | 'id'>> | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return undefined;
 
 		const details = await getAppDetails(appId);

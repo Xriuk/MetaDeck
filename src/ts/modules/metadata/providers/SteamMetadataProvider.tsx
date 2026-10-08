@@ -43,7 +43,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 	set language(language: string)
 	{
 		this.module.config.providers.steam.language = language;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	protected async search(title: string): Promise<MetadataData[]>
@@ -68,7 +68,6 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 					include_release: true
 				}
 			}))));
-		this.logger.debug(title, response);
 		if (response.ok)
 		{
 			let games: {
@@ -201,7 +200,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 
 	// Missing release_date
 	public async getAppMetadata(appId: number, external = false): Promise<MetadataData | undefined>{
-		if(!external && this.excludedApps.indexOf(appId) !== -1)
+		if(!external && this.excludedApps.includes(appId))
 			return undefined;
 
 		const response = await fetchNoCorsLegacyTimeout(

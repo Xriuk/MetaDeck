@@ -37,7 +37,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 	set overrides(data: IDDictionary)
 	{
 		(this.config as FuzzySearchMetadataProviderConfig).overrides = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get fuzziness(): number
@@ -48,13 +48,13 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 	set fuzziness(fuzziness: number)
 	{
 		(this.config as FuzzySearchMetadataProviderConfig).fuzziness = fuzziness;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	// DEV: maybe make abstract and avoid double-search?
 	override async test(appId: number): Promise<boolean>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -71,7 +71,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	provide(appId: number): Promise<MetadataData | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return Promise.resolve(undefined);
 
 		return this.throttle(() => this.getMetadataForGame(appId));
@@ -86,7 +86,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	protected async getMetadataForGame(appId: number): Promise<MetadataData | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return undefined;
 
 		const details = await getAppDetails(appId);
@@ -131,7 +131,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	protected async getAllMetadataForGame(appId: number): Promise<Record<ID, Pick<MetadataData, 'title' | 'id'>> | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return undefined;
 
 		const details = await getAppDetails(appId);
@@ -157,7 +157,7 @@ export abstract class FuzzySearchMetadataProvider extends MetadataProvider<any>{
 
 	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return;
 
 		const details = await getAppDetails(appId);

@@ -1,37 +1,37 @@
 import {ResolverCache, ResolverConfig} from "../Resolver";
-import {getLaunchCommand, isSwitchGame, romRegex} from "../../shortcuts";
+import {getLaunchCommand, isXeniaGame, romRegex} from "../../shortcuts";
 import {getAppDetails} from "../../util";
 import { call } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import { GlobalResolver } from "./GlobalResolver";
+import { FaXbox } from "react-icons/fa";
 
-export interface SwitchTitleIdResolverConfig extends ResolverConfig
+export interface XeniaResolverConfig extends ResolverConfig
 {
 	
 }
 
-export interface SwitchTitleIdResolverCache extends ResolverCache
+export interface XeniaResolverCache extends ResolverCache
 {
 	title_ids: Record<number, string | null>;
 }
 
-export interface SwitchTitleIdResolverConfigs
+export interface XeniaResolverConfigs
 {
-	switch: SwitchTitleIdResolverConfig;
+	xenia: XeniaResolverConfig;
 }
 
-export interface SwitchTitleIdResolverCaches
+export interface XeniaResolverCaches
 {
-	switch: SwitchTitleIdResolverCache;
+	xenia: XeniaResolverCache;
 }
 
-// Returns actual title ids (eg: 01007EF00011E000)
-export class SwitchTitleIdResolver extends GlobalResolver<SwitchTitleIdResolver>
+export class XeniaResolver extends GlobalResolver<XeniaResolver>
 {
-	identifier: keyof SwitchTitleIdResolverConfigs = "switch";
+	identifier: keyof XeniaResolverConfigs = "xenia";
 
 	get titleIds(): Record<number, string | null>{
-		return (this.cache as SwitchTitleIdResolverCache).title_ids;
+		return (this.cache as XeniaResolverCache).title_ids;
 	}
 
 	async test(appId: number): Promise<boolean>
@@ -39,7 +39,7 @@ export class SwitchTitleIdResolver extends GlobalResolver<SwitchTitleIdResolver>
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
-		return isSwitchGame(getLaunchCommand(details));
+		return isXeniaGame(getLaunchCommand(details));
 	}
 
 	async resolve(appId: number): Promise<ID | undefined> {
@@ -56,10 +56,12 @@ export class SwitchTitleIdResolver extends GlobalResolver<SwitchTitleIdResolver>
 		if(!rom)
 			return undefined;
 
-		titleId = await call<[string], string | null>("switch_get_titleid", rom) ?? null;
+		titleId = await call<[string], string | null>("xenia_get_titleid", rom) ?? null;
 
 		this.titleIds[appId] = titleId;
 
 		return titleId ?? undefined;
 	}
+
+	override icon = <FaXbox/>;
 }

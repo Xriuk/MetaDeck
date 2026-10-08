@@ -131,7 +131,7 @@ export class CompatdataModule extends Module<
 
 						   // @ts-ignore
 						   const overview: SteamAppOverview = this
-						   if (overview.app_type == SteamAppTypeShortcut && module.excludedApps.indexOf(overview.appid) === -1)
+						   if (overview.app_type == SteamAppTypeShortcut && !module.excludedApps.includes(overview.appid))
 							   void module.applyOverview(overview);
 
 						   return ret
@@ -147,7 +147,7 @@ export class CompatdataModule extends Module<
 				const overview: SteamAppOverview = ret.props.children.props.overview;
 				const details: SteamAppDetails = ret.props.children.props.details;
 
-				if (overview.app_type == SteamAppTypeShortcut && module.excludedApps.indexOf(overview.appid) === -1)
+				if (overview.app_type == SteamAppTypeShortcut && !module.excludedApps.includes(overview.appid))
 					void this.applyApp(overview, details)
 
 				return ret;
@@ -198,11 +198,10 @@ export class CompatdataModule extends Module<
 
 		const categories = this.computeCompatCategories(data);
 
-		return format(t("foundCompatdata"),
-			`Deck: ${compat(categories.deck_compat_category)} - ` +
-			`Machine: ${compat(categories.machine_compat_category)} - ` +
-			`Frame: ${compat(categories.frame_compat_category)} - ` +
-			`OS: ${compat(categories.os_compat_category)}`);
+		return `Deck: ${compat(categories.deck_compat_category)}\n` +
+			`Machine: ${compat(categories.machine_compat_category)}\n` +
+			`Frame: ${compat(categories.frame_compat_category)}\n` +
+			`OS: ${compat(categories.os_compat_category)}`;
 	}
 
 	get verified(): boolean
@@ -213,6 +212,7 @@ export class CompatdataModule extends Module<
 	set verified(verified: boolean)
 	{
 		this.config.verified = verified;
+		void this.saveConfig();
 	}
 
 	get notes(): boolean
@@ -223,6 +223,7 @@ export class CompatdataModule extends Module<
 	set notes(notes: boolean)
 	{
 		this.config.notes = notes;
+		void this.saveConfig();
 	}
 
 	get test_results(): boolean
@@ -233,6 +234,7 @@ export class CompatdataModule extends Module<
 	set test_results(test_results: boolean)
 	{
 		this.config.test_results = test_results;
+		void this.saveConfig();
 	}
 
 	override icon = <FaCheckCircle/>;
@@ -288,7 +290,7 @@ export class CompatdataModule extends Module<
 
 	applyOverview(overview: SteamAppOverview): Promise<void>
 	{
-		if (!this.verified || this.excludedApps.indexOf(overview.appid) !== -1)
+		if (!this.verified || this.excludedApps.includes(overview.appid))
 			return Promise.resolve();
 
 		const categories = this.computeCompatCategories(this.data[overview.appid]);
@@ -305,7 +307,7 @@ export class CompatdataModule extends Module<
 
 	applyDetails(details: SteamAppDetails): Promise<void>
 	{
-		if(!this.verified || this.excludedApps.indexOf(details.unAppID) !== -1)
+		if(!this.verified || this.excludedApps.includes(details.unAppID))
 			return Promise.resolve();
 
 		const compatdata = this.data[details.unAppID];

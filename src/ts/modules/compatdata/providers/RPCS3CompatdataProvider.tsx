@@ -46,7 +46,7 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<any>
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{
-		if (this.excludedApps.indexOf(appId) !== -1)
+		if (this.excludedApps.includes(appId))
 			return undefined;
 
 		// RPCS3 groups the title id for different regions

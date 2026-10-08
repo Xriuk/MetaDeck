@@ -1,15 +1,16 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult, VerifiedDBResults, YesNo, type ID} from "../../../Interfaces";
 import {closestWithLimit, distanceWithLimit, getAppDetails} from "../../../util";
-import {fetchNoCors} from "@decky/api";
+import {fetchNoCors, toaster} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
 	getLaunchCommand, isCemuGame, isDolphinGame, isDuckstationGame, isEmulatedGame, isFlycastGame,
 	isMelonDSGame, isMGBAGame, isPCSX2Game, isPPSSPPGame, isRosaliesMupenGUIGame, isRPCS3Game,
-	isShadPS4Game, isSwitchGame, isVita3KGame, isXemuGame, isXeniaGame
+	isShadPS4Game, isRyujinxGame, isVita3KGame, isXemuGame, isXeniaGame
 } from "../../../shortcuts";
 import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
 import Logger from "../../../logger";
 import { FaGamepad } from "react-icons/fa";
+import { distance } from "fastest-levenshtein";
 
 export interface EmuDeckCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig
 {
@@ -37,20 +38,23 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		await super.mount();
 
 		const response = (await fetchNoCors("https://opensheet.elk.sh/1fRqvAh_wW8Ho_8i966CCSBgPJ2R_SuDFIvvKsQCv05w/Database"));
-		if (response.ok)
-		{
-			if (response.status === 200)
-			{
-				const verifiedDB: VerifiedDBResults[] = await response.json()
-				this.verifiedDB = verifiedDB
-					.filter(r => !r.Platform || r.Platform.trim() === "Steam Deck")
-					.reduce<Record<string, VerifiedDBResults>>((acc, curr, i) => {
-						acc[curr.Game] = curr;
-						acc[curr.Game].Row = i;
-						return acc;
-					}, {});
-			}
+		if (!response.ok || response.status !== 200){
+			toaster.toast({
+				title: `${this.module.title} - ${this.title}`,
+				body: t("initError")
+			});
+
+			return;
 		}
+
+		const verifiedDB: VerifiedDBResults[] = await response.json();
+		this.verifiedDB = verifiedDB
+			.filter(r => !r.Platform || r.Platform.trim() === "Steam Deck")
+			.reduce<Record<string, VerifiedDBResults>>((acc, curr, i) => {
+				acc[curr.Game] = curr;
+				acc[curr.Game].Row = i;
+				return acc;
+			}, {});
 	}
 
 	private async getConsoleNames(appId: number): Promise<string[] | undefined>{
@@ -87,7 +91,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 			return ['Gameboy', 'Gameboy Color', 'Gameboy Advance'];
 		else if(isRosaliesMupenGUIGame(launchCommand))
 			return ['N64'];
-		else if(isSwitchGame(launchCommand))
+		else if(isRyujinxGame(launchCommand))
 			return ['Switch'];
 
 		else if(isFlycastGame(launchCommand))
@@ -99,7 +103,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	override async test(appId: number): Promise<boolean>
 	{
-		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -118,10 +122,12 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 		// If we have console(s), filter by them
 		if(consoleNames?.length)
-			results = results.filter(r => consoleNames.indexOf(r.Console) !== -1);
+			results = results.filter(r => consoleNames.includes(r.Console));
 
-		// Take max 5 results
-		results = results.slice(0, 5);
+		// Take max 5 results sorted by distance
+		results = results
+			.sort((a, b) => distance(title, a.Game) - distance(title, b.Game))
+			.slice(0, 5);
 
 		// Group by name
 		let dict: Record<string, VerifiedDBResults[]> = {};
@@ -272,7 +278,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 
 		// Portable consoles should have correct interface text size on Deck
-		if(isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) || isMelonDSGame(launchCommand) || isMGBAGame(launchCommand) || isSwitchGame(launchCommand)){
+		if(isPPSSPPGame(launchCommand) || isVita3KGame(launchCommand) || isMelonDSGame(launchCommand) || isMGBAGame(launchCommand) || isRyujinxGame(launchCommand)){
 			game.deck_test_results.push({
 				test_loc_token: '#SteamDeckVerified_TestResult_InterfaceTextIsLegible',
 				test_result: SteamTestResult.Verified
@@ -280,7 +286,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 
 		// Only PS3, PS4, Xbox 360 and Switch should have the correct deck resolution
-		if(!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isXeniaGame(launchCommand) && !isSwitchGame(launchCommand)){
+		if(!isRPCS3Game(launchCommand) && !isShadPS4Game(launchCommand) && !isXeniaGame(launchCommand) && !isRyujinxGame(launchCommand)){
 			game.deck_test_results.push({
 				test_loc_token: '#SteamDeckVerified_TestResult_NativeResolutionNotDefault',
 				test_result: SteamTestResult.Playable
@@ -288,9 +294,8 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 	}
 
-	protected override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
-	{
-		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+	protected override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>{
+		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return undefined;
 
 		const details = await getAppDetails(appId);
@@ -330,7 +335,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title' | 'id'>> | undefined>
 	{
-		if (this.excludedApps.indexOf(appId) !== -1)
+		if (this.excludedApps.includes(appId))
 			return undefined;
 
 		const details = await getAppDetails(appId);

@@ -35,7 +35,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 	set overrides(data: IDDictionary)
 	{
 		(this.config as FuzzySearchCompatdataProviderConfig).overrides = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get fuzziness(): number
@@ -46,13 +46,13 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 	set fuzziness(fuzziness: number)
 	{
 		(this.config as FuzzySearchCompatdataProviderConfig).fuzziness = fuzziness;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	// DEV: maybe make abstract and avoid double-search?
 	override async test(appId: number): Promise<boolean>
 	{
-		if (this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -69,7 +69,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	provide(appId: number): Promise<CompatdataData | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return Promise.resolve(undefined);
 
 		return this.throttle(() => this.getCompatdataForGame(appId));
@@ -84,7 +84,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	protected async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1 || this.overrides[appId] === 0)
+		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return undefined;
 
 		const details = await getAppDetails(appId);
@@ -123,7 +123,7 @@ export abstract class FuzzySearchCompatdataProvider extends CompatdataProvider<a
 
 	protected async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title' | 'id'>> | undefined>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return undefined;
 
 		const details = await getAppDetails(appId);

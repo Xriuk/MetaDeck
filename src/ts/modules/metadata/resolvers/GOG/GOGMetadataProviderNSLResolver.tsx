@@ -7,6 +7,7 @@ import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesD
 import {getAppDetails} from "../../../../util";
 import {GOGMetadataProviderResolverConfigs} from "../../providers/GOGMetadataProvider";
 import {callable} from "@decky/api";
+import { FaRocket } from "react-icons/fa";
 
 export interface GOGMetadataProviderNSLResolverConfig extends ResolverConfig
 {
@@ -63,8 +64,12 @@ export class GOGMetadataProviderNSLResolver extends GOGMetadataProviderResolver
 
 	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
+		if(data.install_size && data.install_date)
+			return;
+
 		const resolved = await this.resolve(appId);
-		if (!resolved) return;
+		if (!resolved)
+			return;
 
 		const [platform, id] = resolved.toString().split(separator);
 
@@ -82,4 +87,6 @@ export class GOGMetadataProviderNSLResolver extends GOGMetadataProviderResolver
 		data.install_size = plaform_data.install_size;
 		data.install_date = plaform_data.install_date;
 	}
+
+	override icon = <FaRocket/>;
 }

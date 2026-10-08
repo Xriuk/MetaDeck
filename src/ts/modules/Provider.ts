@@ -10,7 +10,6 @@ import type { SteamAppOverview } from "../SteamTypes";
 export interface ProviderConfig<ResConfigs extends Record<keyof ResConfigs, ResConfig>, ResConfig extends ResolverConfig>
 {
 	enabled: boolean,
-	ordinal: number,
 	excluded_apps: number[],
 	resolvers: ResConfigs
 }
@@ -81,11 +80,8 @@ export abstract class Provider<
 	{
 		try
 		{
-			this.resolvers.sort((a, b) => a.config.ordinal - b.config.ordinal)
-			if (this.enabled)
-			{
-				for (const resolver of this.resolvers)
-				{
+			if (this.enabled){
+				for (const resolver of this.resolvers){
 					if (resolver.enabled)
 						await resolver.mount();
 				}
@@ -121,7 +117,7 @@ export abstract class Provider<
 	set enabled(enabled: boolean)
 	{
 		this.config.enabled = enabled;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get excludedApps(): number[]
@@ -137,12 +133,13 @@ export abstract class Provider<
 	set excludedAppsSelf(apps: number[])
 	{
 		this.config.excluded_apps = apps;
+		void this.module.saveConfig();
 	}
 
 	get overviews(): SteamAppOverview[]
 	{
 		return this.module.overviews
-			.filter(a => this.excludedAppsSelf.indexOf(a.appid) === -1);
+			.filter(a => !this.excludedAppsSelf.includes(a.appid));
 	}
 
 	get apps(): number[]
@@ -152,7 +149,7 @@ export abstract class Provider<
 	
 	async resolve(appId: number, external = false): Promise<ID | undefined>
 	{
-		if(!external && this.excludedApps.indexOf(appId) !== -1)
+		if(!external && this.excludedApps.includes(appId))
 			return undefined;
 
 		for (const resolver of this.resolvers)
@@ -170,7 +167,7 @@ export abstract class Provider<
 
 	async apply(appId: number, data: Data): Promise<void>
 	{
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(this.excludedApps.includes(appId))
 			return;
 
 		for (const resolver of this.resolvers)
@@ -185,7 +182,7 @@ export abstract class Provider<
 
 	async test(appId: number, external = false): Promise<boolean>
 	{
-		if(!external && this.excludedApps.indexOf(appId) !== -1)
+		if(!external && this.excludedApps.includes(appId))
 			return false;
 
 		for(let resolver of this.resolvers){
@@ -196,7 +193,7 @@ export abstract class Provider<
 		return false;
 	}
 
-	protected async onOverridesChange(oldOverrides: IDDictionary, newOverrides: IDDictionary){
+	protected onOverridesChange(oldOverrides: IDDictionary, newOverrides: IDDictionary){
 		// Retrieve changed app ids: new values, values with changed ids and removed values
 		let changedIds = Object.entries(newOverrides)
 			.filter(([a, i]) => oldOverrides[a as any] !== i)
@@ -204,24 +201,7 @@ export abstract class Provider<
 			.concat(Object.keys(oldOverrides).filter(a => !newOverrides[a as any]) as unknown as number[])
 			.map(a => +a);
 
-		// Remove cache and re-fetch
-		for(let changedId of changedIds){
-			await this.module.removeCache(changedId);
-			await this.module.fetchDataAsync(changedId);
-		}
-	}
-
-	async onExcludedChange(oldExcluded: number[], newExcluded: number[]){
-		// Retrieve changed app ids: new values and removed values
-		let changedIds = newExcluded
-			.filter(a => oldExcluded.indexOf(a) === -1)
-			.concat(oldExcluded.filter(a => newExcluded.indexOf(a) === -1));
-
-		// Remove cache and re-fetch
-		for(let changedId of changedIds){
-			await this.module.removeCache(changedId);
-			await this.module.fetchDataAsync(changedId);
-		}
+		return this.module.onExcludedChange([], changedIds);
 	}
 
 	abstract provide(appId: number): Promise<Data | undefined>;

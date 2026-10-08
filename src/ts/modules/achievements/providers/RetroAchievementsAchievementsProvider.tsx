@@ -14,6 +14,7 @@ import { useState } from "react"
 import { Markdown } from "../../../markdown"
 import React from "react"
 import { version } from "@decky/pkg"
+import { toaster } from "@decky/api"
 
 export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<RetroAchievementsResolverConfigs, RetroAchievementsResolverConfig>
 {
@@ -50,7 +51,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	set username(data: string)
 	{
 		(this.config as RetroAchievementsAchievementsProviderConfig).username = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get apiKey(): string
@@ -61,7 +62,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	set apiKey(data: string)
 	{
 		(this.config as RetroAchievementsAchievementsProviderConfig).api_key = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get points(): boolean
@@ -72,7 +73,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	set points(data: boolean)
 	{
 		(this.config as RetroAchievementsAchievementsProviderConfig).points = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get gameInfo(): RetroAchievementsAchievementsProviderCache['game_info']
@@ -81,14 +82,14 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	}
 
 	override test(appId: number, external = false): Promise<boolean> {
-		if(!this.username || !this.apiKey || this.excludedApps.indexOf(appId) !== -1)
+		if(!this.username || !this.apiKey || this.excludedApps.includes(appId))
 			return Promise.resolve(false);
 
 		return super.test(appId, external);
 	}
 
 	provide(appId: number): Promise<AchievementsData | undefined> {
-		if(this.excludedApps.indexOf(appId) !== -1)
+		if(!this.username || !this.apiKey || this.excludedApps.includes(appId))
 			return Promise.resolve(undefined);
 
 		return this.throttle(async () => {
@@ -231,12 +232,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 					{
 						headers: { "User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)` }
 					});
-				if (
-					response.status == 429 ||
-					response.status == 504 ||
-					response.status == 500
-				)
-				{
+				if (response.status == 429 || response.status == 504 || response.status == 500){
 					this.logger.debug(`Response status for app id ${appId} (RA id: ${resolved}) was ${response.status}, retrying`, retry);
 					retry++;
 				}
@@ -247,16 +243,20 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 					if(game)
 						this.gameInfo[resolved] = game;
-					else
-						delete this.gameInfo[resolved];
 
 					return game;
 				}
 				else
 				{
 					// Clear to avoid errors
-					if(response.status == 403)
+					if(response.status == 403){
+						toaster.toast({
+							title: `${this.module.title} - ${this.title}`,
+							body: t("apiKeyError")
+						});
+
 						this.apiKey = '';
+					}
 
 					this.logger.debug(`Response status for app id ${appId} (RA id: ${resolved}) ${response.status}`);
 					throw new Error(`${response.status}`);

@@ -46,19 +46,25 @@ export function isEmulatedGame(launchCommand: string){
 	return romRegex.test(launchCommand);
 }
 
+// Cache by path, because scripts are limited in number, no need to check the same file multiple times
+const flatPakCache: Record<string, boolean> = {};
 async function isFlatpakGame(launchCommand: string){
+	if(launchCommand.includes("flatpak"))
+		return true;
+
 	const scriptPath = launchCommand.match(scriptRegex)?.[0];
-	if (scriptPath)
-	{
-		try
-		{
-			return launchCommand.includes("flatpak") ||
-				(await call<[string], string>("read_file", scriptPath)).includes("flatpak");
+	if (scriptPath){
+		if(flatPakCache[scriptPath] === undefined){
+			try{
+				flatPakCache[scriptPath] = (await call<[string], string>("read_file", scriptPath)).includes("flatpak");
+			}
+			catch{ }
 		}
-		catch (e){ }
+
+		return flatPakCache[scriptPath] ?? false;
 	}
 
-	return launchCommand.includes("flatpak");
+	return false;
 }
 
 export function isEpicGame(launchCommand: string)
@@ -206,25 +212,9 @@ export function isRosaliesMupenGUIGame(launchCommand: string)
 	return isEmulatedGame(launchCommand) && launchCommand.includes("/rosaliesmupengui.sh");
 }
 
-
-export function isCitronGame(launchCommand: string)
-{
-	return isEmulatedGame(launchCommand) && launchCommand.includes("/citron.sh");
-}
 export function isRyujinxGame(launchCommand: string)
 {
 	return isEmulatedGame(launchCommand) && launchCommand.includes("/ryujinx.sh");
-}
-export function isYuzuGame(launchCommand: string)
-{
-	return isEmulatedGame(launchCommand) && launchCommand.includes("/yuzu.sh");
-}
-export function isEdenGame(launchCommand: string)
-{
-	return isEmulatedGame(launchCommand) && launchCommand.includes("/eden.sh");
-}
-export function isSwitchGame(launchCommand: string){
-	return isCitronGame(launchCommand) || isRyujinxGame(launchCommand) || isYuzuGame(launchCommand) || isEdenGame(launchCommand);
 }
 
 export function isFlycastGame(launchCommand: string)

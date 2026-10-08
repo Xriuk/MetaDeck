@@ -1,11 +1,12 @@
-import { call } from "@decky/api";
+import { call, toaster } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import { getLaunchCommand, isRPCS3Game, romRegex } from "../../shortcuts";
-import { t } from "../../useTranslations";
 import { getAppDetails } from "../../util";
 import type { ResolverCache, ResolverConfig } from "../Resolver";
 import { GlobalResolver } from "./GlobalResolver";
 import { rpcs3IdRegex, rpcs3RomPathRegex } from "./MultiId/MultiIdRPCS3Resolver";
+import { t } from "../../useTranslations";
+import { SiPlaystation3 } from "react-icons/si";
 
 export interface RPCS3NPWRResolverConfig extends ResolverConfig
 {
@@ -30,9 +31,7 @@ export interface RPCS3NPWRResolverCaches
 
 export class RPCS3NPWRResolver extends GlobalResolver<RPCS3NPWRResolver>{
 	static identifier: keyof RPCS3NPWRResolverConfigs = "rpcs3";
-	static title: string = t("providerCompatdataRPCS3");
 	identifier: keyof RPCS3NPWRResolverConfigs = RPCS3NPWRResolver.identifier;
-	title: string = RPCS3NPWRResolver.title;
 
 	get hddPath(): string
 	{
@@ -42,12 +41,30 @@ export class RPCS3NPWRResolver extends GlobalResolver<RPCS3NPWRResolver>{
 	set hddPath(data: string)
 	{
 		(this.config as RPCS3NPWRResolverConfig).hdd_path = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get NPWRIds(): Record<number, string | null>
 	{
 		return (this.cache as RPCS3NPWRResolverCache).npwr_ids;
+	}
+
+	override async mount(): Promise<void> {
+		if(!this.hddPath)
+			return;
+
+		try{
+			if(!await call<[], boolean>("rpcs3_check_hdd_path"))
+				throw new Error("");
+		}
+		catch{
+			toaster.toast({
+				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
+				body: t("rpcs3PathError")
+			});
+
+			this.hddPath = "";
+		}
 	}
 
 	override async test(appId: number): Promise<boolean> {
@@ -57,6 +74,7 @@ export class RPCS3NPWRResolver extends GlobalResolver<RPCS3NPWRResolver>{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return false;
+		
 		return isRPCS3Game(getLaunchCommand(details));
 	}
 
@@ -94,4 +112,6 @@ export class RPCS3NPWRResolver extends GlobalResolver<RPCS3NPWRResolver>{
 
 		return npwrId ?? undefined;
 	}
+	
+	override icon = <SiPlaystation3/>;
 }

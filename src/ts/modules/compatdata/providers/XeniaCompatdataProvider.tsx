@@ -1,5 +1,5 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {fetchNoCors} from "@decky/api";
+import {fetchNoCors, toaster} from "@decky/api";
 import {t} from "../../../useTranslations";
 import Logger from "../../../logger";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
@@ -39,14 +39,19 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 
 	private compatData: Record<string, XeniaCompatData> = {}; // Formatted id: compat
 
-	override async mount(): Promise<void>
-	{
+	override async mount(): Promise<void>{
 		await super.mount();
 		
 		// Retrieve compat page source
 		let response = await fetchNoCors("https://github.com/xenia-canary/game-compatibility/releases/download/game-compatibility/compatibility_data.json");
-		if(!response.ok)
+		if(!response.ok){
+			toaster.toast({
+				title: `${this.module.title} - ${this.title}`,
+				body: t("initError")
+			});
+
 			return;
+		}
 
 		let data: XeniaCompatData[] = await response.json();
 		for(let entry of data){
@@ -55,7 +60,7 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{
-		if (this.excludedApps.indexOf(appId) !== -1)
+		if (this.excludedApps.includes(appId))
 			return undefined;
 		
 		const titleId = (await this.resolve(appId))?.toString().toUpperCase();

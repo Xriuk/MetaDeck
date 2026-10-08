@@ -2,8 +2,10 @@ import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isCemuGame, romRegex} from "../../../shortcuts";
 import {getAppDetails} from "../../../util";
 import { MultiIdResolver, separator, type MultiIdResolverConfigs } from "./MultiIdResolver";
-import { call, fetchNoCors } from "@decky/api";
+import { call, fetchNoCors, toaster } from "@decky/api";
 import type { ID } from "../../../Interfaces";
+import { t } from "../../../useTranslations";
+import { MdOutlineTablet } from "react-icons/md";
 
 export interface MultiIdCemuResolverConfig extends ResolverConfig
 {
@@ -28,8 +30,14 @@ export class MultiIdCemuResolver extends MultiIdResolver
 
 	override async mount(): Promise<void> {
 		const response = await fetchNoCors("https://www.gametdb.com/wiiutdb.txt?LANG=ORIG");
-		if(!response.ok)
+		if(!response.ok){
+			toaster.toast({
+				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
+				body: t("initError")
+			});
+
 			return;
+		}
 
 		let entries = (await response.text()).split('\n');
 		for(let entry of entries){
@@ -100,4 +108,6 @@ export class MultiIdCemuResolver extends MultiIdResolver
 			])
 		].join(separator);
 	}
+
+	override icon = <MdOutlineTablet/>; // WiiU tabled (kind of)
 }

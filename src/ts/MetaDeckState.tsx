@@ -119,7 +119,7 @@ class GlobalLoadingDataImpl implements GlobalLoadingData
 
 	get percentage(): number
 	{
-		return (this.processed / this.total) * 100;
+		return this.total ? (this.processed / this.total) * 100 : 0;
 	}
 
 	private _total: number = 0;
@@ -215,7 +215,7 @@ class ModuleLoadingDataImpl implements ModuleLoadingData
 
 	get percentage(): number
 	{
-		return (this.processed / this.total) * 100;
+		return this.total ? (this.processed / this.total) * 100 : 0;
 	}
 
 	private _total = 0;
@@ -335,12 +335,13 @@ export class MetaDeckState implements AsyncMountable
 	set excludedApps(apps: number[])
 	{
 		this.settings.config.excluded_apps = apps;
+		void this.settings.writeConfig();
 	}
 
 	get overviews(): SteamAppOverview[]
 	{
 		return this.rootOverviews
-			.filter(a => this.excludedApps.indexOf(a.appid) === -1);
+			.filter(a => !this.excludedApps.includes(a.appid));
 	}
 
 	get rootOverviews(): SteamAppOverview[]
@@ -381,28 +382,35 @@ export class MetaDeckState implements AsyncMountable
 
 	async refresh(): Promise<void>
 	{
+		toaster.toast({
+			title: t("title"),
+			body: t("refreshingData")
+		});
+
 		await this.settings.readSettings();
 		this.loadingData.loading = true;
 		this.loadingData.total = Object.values(this.modules).filter((mod) => mod.isValid).length;
 		this.loadingData.processed = 0;
 		this.notifyUpdate();
-		for (let module of Object.values(this.modules).filter((mod) => mod.isValid))
-		{
-			this.loadingData.module = module.identifier;
-			if(this.loadingData.currentModule){
-				this.loadingData.currentModule.total = module.apps.length;
-				this.loadingData.currentModule.processed = 0;
+		await this.settings.runInDisabledSaveState(async () => {
+			for (let module of Object.values(this.modules).filter((mod) => mod.isValid))
+			{
+				this.loadingData.module = module.identifier;
+				if(this.loadingData.currentModule){
+					this.loadingData.currentModule.total = module.apps.length;
+					this.loadingData.currentModule.processed = 0;
+				}
+				await module.refresh();
+				if(this.loadingData.currentModule){
+					this.loadingData.currentModule.game = t("initializing");
+					this.loadingData.currentModule.description = "";
+					this.loadingData.currentModule.total = 0;
+					this.loadingData.currentModule.processed = 0;
+				}
+				this.loadingData.processed++;
+				this.notifyUpdate();
 			}
-			await module.refresh();
-			if(this.loadingData.currentModule){
-				this.loadingData.currentModule.game = t("initializing");
-				this.loadingData.currentModule.description = "";
-				this.loadingData.currentModule.total = 0;
-				this.loadingData.currentModule.processed = 0;
-			}
-			this.loadingData.processed++;
-			this.notifyUpdate();
-		}
+		});
 		this.loadingData.loading = false;
 		this.loadingData.total = 0;
 		this.loadingData.processed = 0;
@@ -416,31 +424,30 @@ export class MetaDeckState implements AsyncMountable
 		this.loadingData.total = 0;
 		this.loadingData.processed = 0;
 		this.notifyUpdate();
-		for (let module of Object.values(this.modules))
-		{
-			await module.clearCache();
-		}
+		await this.settings.runInDisabledSaveState(async () => {
+			for (let module of Object.values(this.modules)){
+				await module.clearCache();
+			}
+		});
+		await this.state.settings.writeSettings();
+
 		toaster.toast({
 			title: t("title"),
 			body: t("cacheCleared")
 		});
+		
 		this.loadingData.loading = false;
 		this.notifyUpdate();
 	}
 
 	async onExcludedChange(oldExcluded: number[], newExcluded: number[]){
-		// Retrieve changed app ids: new values and removed values
-		let changedIds = newExcluded
-			.filter(a => oldExcluded.indexOf(a) === -1)
-			.concat(oldExcluded.filter(a => newExcluded.indexOf(a) === -1));
-
-		// Remove cache and re-fetch
-		for(let changedId of changedIds){
-			for(let module in this.state.modules){
-				await this.state.modules[module].removeCache(changedId);
-				await this.state.modules[module].fetchDataAsync(changedId);
+		await this.settings.runInDisabledSaveState(async () => {
+			for(let module of Object.values(this.state.modules)){
+				await module.onExcludedChange(oldExcluded, newExcluded);
 			}
-		}
+		});
+
+		await this.settings.writeSettings();
 	}
 
 	notifyUpdate(): void

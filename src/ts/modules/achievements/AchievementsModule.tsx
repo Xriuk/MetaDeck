@@ -128,7 +128,7 @@ export class AchievementsModule extends Module<
 					"LoadMyAchievements",
 					args =>
 					{
-						if(!module.isValid || module.excludedApps.indexOf(args[0]) !== -1)
+						if(!module.isValid || module.excludedApps.includes(args[0]))
 							return callOriginal;
 
 						module.logger.debug("LoadMyAchievements");
@@ -188,7 +188,7 @@ export class AchievementsModule extends Module<
 					function (args)
 					{
 						// @ts-ignore
-						if (!module.isValid || !module.category || module.excludedApps.indexOf((this as SteamAppOverview).appid) !== -1)
+						if (!module.isValid || !module.category || module.excludedApps.includes((this as SteamAppOverview).appid))
 							return callOriginal;
 
 						// @ts-ignore
@@ -220,7 +220,7 @@ export class AchievementsModule extends Module<
 					"GetAchievements",
 					args =>
 					{
-						if(!module.isValid || module.overlayMenu || module.excludedApps.indexOf(args[0]) !== -1)
+						if(!module.isValid || module.overlayMenu || module.excludedApps.includes(args[0]))
 							return;
 
 						const overview = appStore.GetAppOverviewByAppID(args[0]);
@@ -262,7 +262,7 @@ export class AchievementsModule extends Module<
 					"GetAppData",
 					(args, appData: AppData) =>
 					{
-						if(!module.isValid || !module.overlayMenu || module.excludedApps.indexOf(args[0]) !== -1 || !appData.details)
+						if(!module.isValid || !module.overlayMenu || module.excludedApps.includes(args[0]) || !appData.details)
 							return appData;
 
 						const overview = appStore.GetAppOverviewByAppID(args[0]);
@@ -325,7 +325,7 @@ export class AchievementsModule extends Module<
 				return afterPatch(AppDetailsSections.prototype, 'GetSections', function(this: any, _: Record<string, unknown>[], ret: Set<string>)
 				{
 					const overview: SteamAppOverview = this?.props?.overview;
-					if (module.isValid && overview?.app_type === SteamAppTypeShortcut || (overview && module.excludedApps.indexOf(overview.appid) !== -1)){
+					if (module.isValid && overview?.app_type === SteamAppTypeShortcut || (overview && module.excludedApps.includes(overview.appid))){
 						if (module.appDetails)
 							ret.add("achievements");
 						else
@@ -345,7 +345,7 @@ export class AchievementsModule extends Module<
 			mount: function (): void
 			{
 				overlayOpenLifetimeHook = SteamClient.Overlay.RegisterForOverlayActivated((_, appId, active) => {
-					if (!module.isValid || module.excludedApps.indexOf(appId) !== -1)
+					if (!module.isValid || module.excludedApps.includes(appId))
 						return;
 
 					module.logger.debug("overlay", appId, active);
@@ -356,7 +356,7 @@ export class AchievementsModule extends Module<
 				});
 				appCloseLifetimeHook = SteamClient.GameSessions.RegisterForAppLifetimeNotifications(update =>
 				{
-					if (!module.isValid || module.excludedApps.indexOf(update.unAppID) !== -1)
+					if (!module.isValid || module.excludedApps.includes(update.unAppID))
 						return;
 
 					module.logger.debug("lifetime", update);
@@ -380,32 +380,35 @@ export class AchievementsModule extends Module<
 
 	get category(): boolean
 	{
-		return this.config.category
+		return this.config.category;
 	}
 
 	set category(category: boolean)
 	{
-		this.config.category = category
+		this.config.category = category;
+		void this.saveConfig();
 	}
 
 	get appDetails(): boolean
 	{
-		return this.config.app_details
+		return this.config.app_details;
 	}
 
 	set appDetails(app_details: boolean)
 	{
-		this.config.app_details = app_details
+		this.config.app_details = app_details;
+		void this.saveConfig();
 	}
 
 	get overlayMenu(): boolean
 	{
-		return this.config.overlay_menu
+		return this.config.overlay_menu;
 	}
 
 	set overlayMenu(overlay_menu: boolean)
 	{
-		this.config.overlay_menu = overlay_menu
+		this.config.overlay_menu = overlay_menu;
+		void this.saveConfig();
 	}
 
 	override icon = <FaClipboardCheck/>; // In honor of Emuchievements

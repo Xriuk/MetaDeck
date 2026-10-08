@@ -1,4 +1,4 @@
-import { call, FileSelectionType, openFilePicker } from "@decky/api";
+import { call, FileSelectionType, openFilePicker, toaster } from "@decky/api";
 import type { AchievementsData } from "../../../Interfaces";
 import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
@@ -92,7 +92,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 	set userPath(data: string)
 	{
 		(this.config as XeniaAchievementsProviderConfig).user_path = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get language(): string
@@ -103,7 +103,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 	set language(data: string)
 	{
 		(this.config as XeniaAchievementsProviderConfig).language = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get gamerscore(): boolean
@@ -114,7 +114,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 	set gamerscore(data: boolean)
 	{
 		(this.config as XeniaAchievementsProviderConfig).gamerscore = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get descriptionLocked(): boolean | null
@@ -125,7 +125,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 	set descriptionLocked(data: boolean | null)
 	{
 		(this.config as XeniaAchievementsProviderConfig).description_locked = data;
-		void this.module.saveData();
+		void this.module.saveConfig();
 	}
 
 	get gameAchievements(): Record<number, XeniaGameAchievements | null>{
@@ -141,19 +141,30 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 					throw new Error("");
 			}
 			catch{
+				toaster.toast({
+					title: `${this.module.title} - ${this.title}`,
+					body: t("xeniaPathError")
+				});
+
 				this.userPath = "";
 			}
 		}
 
 		if(this.language.toLowerCase() != "en"){
 			let locale = await call<[string], number | null>("xenia_locale_to_xbox360", this.language.toLowerCase());
-			if(locale == null)
+			if(locale == null){
+				toaster.toast({
+					title: `${this.module.title} - ${this.title}`,
+					body: t("languageError")
+				});
+
 				this.language = "EN";
+			}
 		}
 	}
 
 	override async provide(appId: number): Promise<AchievementsData | undefined> {
-		if(!this.userPath || this.excludedApps.indexOf(appId) !== -1)
+		if(!this.userPath || this.excludedApps.includes(appId))
 			return undefined;
 
 		if(this.gameAchievements[appId] === undefined)
@@ -412,6 +423,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 						description={t("xeniaGamerscoreDesc")}>
 						<Toggle
 							value={gamerscore}
+							disabled={loadingData.loading}
 							onChange={(checked) => {
 								setGamerscore(checked);
 								this.gamerscore = checked;
@@ -428,6 +440,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 								{ data: false, label: t("xeniaDescriptionUnlocked") },
 							]}
 							selectedOption={descriptionLocked}
+							disabled={loadingData.loading}
 							onChange={(newVal) => {
 								setDescriptionLocked(newVal.data);
 								this.descriptionLocked = newVal.data;

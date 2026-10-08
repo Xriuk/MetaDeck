@@ -91,7 +91,7 @@ const LoadingProgressBar: FC = () =>
 		<ProgressBar
 			focusable={false}
 			indeterminate={!loadingData.currentModule?.total}
-			nProgress={loadingData.percentage}
+			nProgress={loadingData.currentModule?.percentage}
 		/>
 		<Field
 			label={loadingData.currentModule?.game}
@@ -138,8 +138,10 @@ const ModulesList: FC = () => {
 							description={`${hasData.length}/${apps.length}`}
 							childrenLayout="below"
 							onActivate={() => {
-								setActive(m.identifier);
-								activeModule = m.identifier;
+								if(hasData.length){
+									setActive(m.identifier);
+									activeModule = m.identifier;
+								}
 							}}>
 							<ProgressBar
 								focusable={false}

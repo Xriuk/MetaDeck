@@ -62,6 +62,8 @@ class Plugin:
 
 	gametdb = {} # url: { id: { game } }
 
+	titledb = {} # language: { id: { game } }
+
 	async def read_config(self) -> dict:
 		with open(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json"), "r") as f:
 			try:
@@ -176,6 +178,9 @@ class Plugin:
 
 	async def rpcs3_check_user_path(self, user_path: str) -> bool:
 		return os.path.isdir(user_path)
+
+	async def rpcs3_check_hdd_path(self, hdd_path: str) -> bool:
+		return os.path.isdir(hdd_path)
 	
 	# REF: https://github.com/justin-delano/PlayniteAchievements/blob/24b1bcab770277a645ef93f52795823739e0ae0e/source/Providers/RPCS3/Rpcs3TrophyParser.cs#L789
 	async def rpcs3_locale_to_ps3(self, locale: str) -> int | None:
@@ -563,26 +568,46 @@ class Plugin:
 
 			return result.stdout.strip()
 
-	async def switch_get_serial(self, rom_path: str) -> str | None:
+	async def ryujinx_check_prod_keys(self) -> bool:
+		if os.path.isfile(os.path.join(decky.HOME, "Emulation/bios/ryujinx/keys/prod.keys")):
+			cmd = [
+				'ln',
+				'-sf',
+				os.path.join(decky.HOME, "Emulation/bios/ryujinx/keys/prod.keys"),
+				os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "NX.Game.Info", "prod.keys")
+			]
+			subprocess.run(
+				cmd,
+				check=True
+			)
+
+			return True
+		else:
+			return False
+	
+	async def ryujinx_get_titleid(self, rom_path: str) -> str | None:
 		if not os.path.isfile(rom_path):
 			return None
 
+		# Setting working dir to find for prod.keys
 		cmd = [
 			os.path.join(decky.HOME, ".local/share/Steam/steamapps/common/Proton - Experimental/files/bin/wine"),
-			os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "nxgameinfo_cli.exe"),
+			"./nxgameinfo_cli.exe",
 			rom_path
 		]
 		result = subprocess.run(
 			cmd,
+			cwd=os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "NX.Game.Info"),
 			capture_output=True,
 			text=True,
-			check=True
+			check=True,
+			encoding='iso-8859-1'
 		)
 
 		lines = result.stdout.strip().split('\n')
 		for line in lines:
-			if line.startswith('├ Title ID:'):
-				return line.split('├ Title ID:')[1].strip().upper()
+			if 'Title ID:' in line and not 'Base Title ID:' in line:
+				return line.split('Title ID:')[1].strip().upper()
 
 		return None
 
@@ -715,7 +740,7 @@ class Plugin:
 			"-d", temp_res_path,
 			temp_xex_path
 		]
-		result = subprocess.run(cmd)
+		subprocess.run(cmd)
 
 		# Remove default.xex
 		os.remove(temp_xex_path)
@@ -1003,6 +1028,7 @@ class Plugin:
 		ssl._create_default_https_context = get_ssl_context
 		temp_filename = urllib.request.urlretrieve(url)[0]
 		ssl._create_default_https_context = ssl_backup
+
 		with zipfile.ZipFile(temp_filename, 'r') as zip_ref:
 			xml_bytes = zip_ref.read(filename.replace('.zip', '.xml'))
 			datafile = xmltodict.parse(xml_bytes, encoding='utf-8', force_list=['locale', 'control'])['datafile']
@@ -1053,6 +1079,44 @@ class Plugin:
 			return None
 		else:
 			return json.dumps(Plugin.gametdb[url][id])
+
+	async def titledb_get_language(self, language: str) -> None:
+		if language in Plugin.titledb:
+			return
+
+		result = {}
+
+		url = "https://github.com/blawar/titledb/blob/master/" + language + ".json"
+		ssl_backup = ssl._create_default_https_context
+		ssl._create_default_https_context = get_ssl_context
+		temp_filename = urllib.request.urlretrieve(url)[0]
+		ssl._create_default_https_context = ssl_backup
+
+		with open(temp_filename) as f:
+			data = json.load(f)
+			for entry in data:
+				if not "id" in data[entry]:
+					continue
+					
+				result[data[entry]["id"]] = {
+					"id": data[entry]["id"],
+					"name": data[entry]["name"],
+					"description": data[entry]["description"] if "description" in data[entry] and data[entry]["description"] != "" else None,
+					"intro": data[entry]["intro"] if "intro" in data[entry] and data[entry]["intro"] != "" else None,
+					"developer": data[entry]["developer"] if "developer" in data[entry] and data[entry]["developer"] != "" else None,
+					"publisher": data[entry]["publisher"] if "publisher" in data[entry] and data[entry]["publisher"] != "" else None,
+					"releaseDate": data[entry]["releaseDate"] if "releaseDate" in data[entry] else None,
+					"numberOfPlayers": data[entry]["numberOfPlayers"] if "numberOfPlayers" in data[entry] else None,
+					"size": data[entry]["size"] if "size" in data[entry] else None
+				}
+
+		Plugin.titledb[language] = result
+
+	async def titledb_get_entry(self, language: str, id: str) -> str | None:
+		if not language in Plugin.titledb or not id in Plugin.titledb[language]:
+			return None
+		else:
+			return json.dumps(Plugin.titledb[language][id])
 
 	async def hash(self, path: str) -> str:
 		logger.debug(f"Hashing ROM: {path}")

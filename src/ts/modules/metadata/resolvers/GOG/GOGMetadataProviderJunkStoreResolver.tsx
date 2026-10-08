@@ -7,6 +7,7 @@ import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesD
 import {getAppDetails} from "../../../../util";
 import {GOGMetadataProviderResolverConfigs} from "../../providers/GOGMetadataProvider";
 import {callable} from "@decky/api";
+import { FaStore } from "react-icons/fa";
 
 export interface GOGMetadataProviderJunkStoreResolverConfig extends ResolverConfig
 {
@@ -57,6 +58,9 @@ export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderRes
 
 	override async apply(appId: number, data: MetadataData): Promise<void>
 	{
+		if(data.install_size && data.install_date)
+			return;
+
 		let details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -67,4 +71,6 @@ export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderRes
 		data.install_size = await this.directory_size(exe);
 		data.install_date = await this.file_date(exe);
 	}
+
+	override icon = <FaStore/>;
 }
