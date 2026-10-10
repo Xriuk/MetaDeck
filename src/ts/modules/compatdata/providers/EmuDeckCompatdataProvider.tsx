@@ -1,6 +1,6 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult, VerifiedDBResults, YesNo, type ID} from "../../../Interfaces";
-import {closestWithLimit, distanceWithLimit, getAppDetails} from "../../../util";
-import {fetchNoCors, toaster} from "@decky/api";
+import {closestWithLimit, distanceWithLimit, getAppDetails, toasterToast} from "../../../util";
+import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
 	getLaunchCommand, isCemuGame, isDolphinGame, isDuckstationGame, isEmulatedGame, isFlycastGame,
@@ -39,10 +39,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 
 		const response = (await fetchNoCors("https://opensheet.elk.sh/1fRqvAh_wW8Ho_8i966CCSBgPJ2R_SuDFIvvKsQCv05w/Database"));
 		if (!response.ok || response.status !== 200){
-			toaster.toast({
-				title: `${this.module.title} - ${this.title}`,
-				body: t("initError")
-			});
+			toasterToast(t("initError"), this);
 
 			return;
 		}

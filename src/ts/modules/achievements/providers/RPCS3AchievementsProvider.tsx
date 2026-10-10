@@ -1,4 +1,4 @@
-import { call, fetchNoCors, FileSelectionType, openFilePicker, toaster } from "@decky/api";
+import { call, callable, fetchNoCors, FileSelectionType, openFilePicker } from "@decky/api";
 import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
@@ -7,13 +7,13 @@ import type { AchievementsProviderConfigs } from "../AchievementsModule";
 import { AchievementsProvider } from "../AchievementsProvider";
 import type { AchievementsData } from "../../../Interfaces";
 import { getUserTrophiesEarnedForTitle, type AuthTokensResponse, type UserThinTrophy } from "psn-api";
-import { fetchNoCorsLegacyTimeout, getAppDetails, grayScaleIcon } from "../../../util";
+import { fetchNoCorsLegacyTimeout, getAppDetails, getLanguageTitle, grayScaleIcon, toasterToast } from "../../../util";
 import { getLaunchCommand, romRegex } from "../../../shortcuts";
 import { rpcs3RomPathRegex } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
 import { SiPlaystation3 } from "react-icons/si";
 import { useState } from "react";
 import { useMetaDeckState } from "../../../MetaDeckState";
-import { DialogButton, DialogControlsSection, Field, TextField, Toggle } from "@decky/ui";
+import { DialogButton, DialogControlsSection, Dropdown, Field, TextField, Toggle } from "@decky/ui";
 import React from "react";
 import { Markdown } from "../../../markdown";
 import { RAWGMetadataProvider } from "../../metadata/providers/RAWGMetadataProvider";
@@ -45,7 +45,8 @@ export interface RPCS3AchievementsProviderConfig extends ProviderConfig<RPCS3NPW
 {
 	// Like /home/deck/Emulation/storage/rpcs3/dev_hdd0/home/00000001
 	user_path: string;
-	// EN, IT, FR, ... (saved as lowercase)
+	// https://github.com/justin-delano/PlayniteAchievements/blob/24b1bcab770277a645ef93f52795823739e0ae0e/source/Providers/RPCS3/Rpcs3TrophyParser.cs#L789
+	// https://www.psdevwiki.com/ps3/Languages
 	language: string;
 	trophy_categories: boolean;
 	psn_npsso: string; // 64-chars token to access PSN API
@@ -71,6 +72,9 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 	resolvers: RPCS3NPWRResolver[] = [
 		new RPCS3NPWRResolver(this)
 	];
+
+	private rpcs3_get_all_trophies_game = callable<[string, string], string>("rpcs3_get_all_trophies_game");
+	private rpcs3_get_all_trophies_user = callable<[string, string], string>("rpcs3_get_all_trophies_user");
 
 	private _psnTokens?: AuthTokensResponse;
 	private _psnTokensExpiration?: Date;
@@ -146,10 +150,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 					this.resolvers[0].hddPath = this.userPath.split('/dev_hdd0/home/')[0] + '/dev_hdd0/';
 			}
 			catch{
-				toaster.toast({
-					title: `${this.module.title} - ${this.title}`,
-					body: t("rpcs3PathError")
-				});
+				toasterToast(t("rpcs3PathError"), this);
 
 				this.userPath = "";
 				if(this.resolvers[0].hddPath)
@@ -158,18 +159,6 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 		}
 
 		await super.mount();
-
-		if(this.language.toLowerCase() != "en"){
-			let locale = await call<[string], number | null>("rpcs3_locale_to_ps3", this.language.toLowerCase());
-			if(locale == null){
-				toaster.toast({
-					title: `${this.module.title} - ${this.title}`,
-					body: t("languageError")
-				});
-
-				this.language = "EN";
-			}
-		}
 
 		if(this.PSNNPSSO){
 			try{
@@ -190,10 +179,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 						allow_redirects: false
 					});
 				if(!accessCodeResponse.success || typeof accessCodeResponse.result === 'string' || !accessCodeResponse.result?.headers["Location"]?.includes("?code=")){
-					toaster.toast({
-						title: `${this.module.title} - ${this.title}`,
-						body: t("apiKeyError")
-					});
+					toasterToast(t("apiKeyError"), this);
 
 					this.PSNNPSSO = "";
 				}
@@ -245,10 +231,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 				}
 			}
 			catch{
-				toaster.toast({
-					title: `${this.module.title} - ${this.title}`,
-					body: t("apiKeyError")
-				});
+				toasterToast(t("apiKeyError"), this);
 
 				this.PSNNPSSO = "";
 			}
@@ -294,19 +277,19 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 			}
 
 			// Try retrieving the trophies from the user directory first
-			let result = await call<[string, string], string>("rpcs3_get_all_trophies_user", this.userPath, trophyId.toString()) ?? null;
+			let result = await this.rpcs3_get_all_trophies_user(this.userPath, trophyId.toString()) ?? null;
 			trophies = JSON.parse(result ?? '{}') as RPCS3GameTrophies;
 
 			// If we found nothing we search the game folder
 			let titleId: string | null | undefined;
 			if(!trophies.trophies.length){
 				if(romFolder)
-					result = await call<[string, string], string>("rpcs3_get_all_trophies_game", romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language.toLowerCase()) ?? null;
+					result = await this.rpcs3_get_all_trophies_game(romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language) ?? null;
 				else{
 					if(titleId === undefined)
 						titleId = await call<[string], string | null>("rpcs3_get_titleid", romFolder) ?? null;
 					if(titleId)
-						result = await call<[string, string], string>("rpcs3_get_all_trophies_game", this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language.toLowerCase()) ?? null;
+						result = await this.rpcs3_get_all_trophies_game(this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language) ?? null;
 					else
 						result = '';
 				}
@@ -338,10 +321,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 						})).json()
 					}
 					catch(e){
-						toaster.toast({
-							title: `${this.module.title} - ${this.title}`,
-							body: t("apiKeyError")
-						});
+						toasterToast(t("apiKeyError"), this);
 
 						this.logger.debug(`${appId} PSN token refresh error`, e);
 						this._psnTokens = undefined;
@@ -385,7 +365,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 				// If we have trophies we'll need to match them with local ones, but we need english titles
 				if(rawgAchievements?.length){
 					let trophiesNames: Record<string, string> = {}; // English name: trophy id ("001", "002")
-					if(this.language.toLowerCase() == "en"){
+					if(this.language === '01'){ // en
 						for(let trophy of trophies.trophies){
 							trophiesNames[trophy.name] = trophy.id;
 						}
@@ -570,19 +550,40 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<any>{
 					</Field>
 					<Field
 						label={t("language")}
-						description={
-							<>
-								<TextField
-									value={language}
-									disabled={loadingData.loading}
-									onChange={(event) => {
-										setLanguage(event.target.value);
-										this.language = event.target.value;
-									}}/>
-								<br/>
-								<span>{t("languageShortDescription")}</span>
-							</>
-						} />
+						childrenContainerWidth={'fixed'}>
+						<Dropdown
+							rgOptions={[
+								{ data: '01', label: getLanguageTitle('en') }, // US
+								{ data: '00', label: getLanguageTitle('ja') },
+								{ data: '02', label: getLanguageTitle('fr') },
+								{ data: '03', label: getLanguageTitle('es') },
+								{ data: '04', label: getLanguageTitle('de') },
+
+								{ data: '05', label: getLanguageTitle('it') },
+								{ data: '06', label: getLanguageTitle('nl') },
+								{ data: '07', label: getLanguageTitle('pt') },
+								{ data: '17', label: getLanguageTitle('ptBr') },
+								{ data: '08', label: getLanguageTitle('ru') },
+
+								{ data: '09', label: getLanguageTitle('ko') },
+								{ data: '11', label: getLanguageTitle('zhCn') },
+								{ data: '10', label: getLanguageTitle('zhTw') },
+								{ data: '12', label: getLanguageTitle('fi') },
+								{ data: '13', label: getLanguageTitle('sv') },
+								
+								{ data: '14', label: getLanguageTitle('da') },
+								{ data: '15', label: getLanguageTitle('no') },
+								{ data: '16', label: getLanguageTitle('pl') },
+								// '18' is en UK
+								{ data: '19', label: getLanguageTitle('tr') }
+							]}
+							selectedOption={language}
+							disabled={loadingData.loading}
+							onChange={(newVal) => {
+								setLanguage(newVal.data);
+								this.language = newVal.data;
+							}} />
+					</Field>
 				</DialogControlsSection>
 
 				<DialogControlsSection>

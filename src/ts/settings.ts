@@ -9,10 +9,12 @@ import { Mutex } from "async-mutex";
 export type ConfigData = {
 	excluded_apps: number[];
 	modules: ModuleConfigs;
+	resolvers: Re
 }
 
 export type CacheData = {
 	modules: ModuleCaches;
+	resolvers: 
 }
 
 export class Settings
@@ -358,6 +360,9 @@ export class Settings
 					}
 				}
 			}
+		},
+		resolvers: {
+
 		}
 	}
 

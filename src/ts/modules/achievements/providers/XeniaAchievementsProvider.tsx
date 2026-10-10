@@ -1,4 +1,4 @@
-import { call, FileSelectionType, openFilePicker, toaster } from "@decky/api";
+import { call, callable, FileSelectionType, openFilePicker } from "@decky/api";
 import type { AchievementsData } from "../../../Interfaces";
 import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
@@ -8,7 +8,7 @@ import type { AchievementsProviderConfigs } from "../AchievementsModule";
 import { AchievementsProvider } from "../AchievementsProvider";
 import { FaXbox } from "react-icons/fa";
 import { getLaunchCommand, romRegex } from "../../../shortcuts";
-import { getAppDetails, grayScaleIcon } from "../../../util";
+import { getAppDetails, getLanguageTitle, grayScaleIcon, toasterToast } from "../../../util";
 import { RAWGMetadataProvider } from "../../metadata/providers/RAWGMetadataProvider";
 import { DialogControlsSection, Field, TextField, DialogButton, Toggle, Dropdown } from "@decky/ui";
 import React, { useState } from "react";
@@ -49,8 +49,8 @@ export interface XeniaAchievementsProviderConfig extends ProviderConfig<XeniaRes
 {
 	// Like /home/deck/Emulation/roms/xbox360/content/<A010000011AA1111>/FFFE07D1/00010000/<A010000011AA1111>
 	user_path: string;
-	// EN, IT, FR, ... (saved as lowercase)
-	language: string;
+	// https://github.com/XboxChef/XeXtractor/blob/5fb6d8b17e5d38a6100590ce43962fb0df07770b/XDBF.cs#L126
+	language: number;
 	gamerscore: boolean;
 	description_locked: boolean | null; // null: show locked/unlocked, true: show locked, false: show unlocked
 }
@@ -67,6 +67,8 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 	title: string = XeniaAchievementsProvider.title;
 
 	logger: Logger = new Logger(XeniaAchievementsProvider.identifier);
+
+	private xenia_get_all_achievements_game = callable<[string, string, number], string>("xenia_get_all_achievements_game");
 
 	resolvers: XeniaResolver[] = [
 		new XeniaResolver(this)
@@ -95,12 +97,12 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 		void this.module.saveConfig();
 	}
 
-	get language(): string
+	get language(): number
 	{
 		return (this.config as XeniaAchievementsProviderConfig).language;
 	}
 
-	set language(data: string)
+	set language(data: number)
 	{
 		(this.config as XeniaAchievementsProviderConfig).language = data;
 		void this.module.saveConfig();
@@ -141,24 +143,9 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 					throw new Error("");
 			}
 			catch{
-				toaster.toast({
-					title: `${this.module.title} - ${this.title}`,
-					body: t("xeniaPathError")
-				});
+				toasterToast(t("xeniaPathError"), this);
 
 				this.userPath = "";
-			}
-		}
-
-		if(this.language.toLowerCase() != "en"){
-			let locale = await call<[string], number | null>("xenia_locale_to_xbox360", this.language.toLowerCase());
-			if(locale == null){
-				toaster.toast({
-					title: `${this.module.title} - ${this.title}`,
-					body: t("languageError")
-				});
-
-				this.language = "EN";
 			}
 		}
 	}
@@ -211,7 +198,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 			// If we found nothing we search the game ROM
 			if(!achievements.achievements.length && rom){
 				// Retrieve achievements info from the game rom
-				result = await call<[string, string, string], string>("xenia_get_all_achievements_game", rom, titleId.toString(), this.language.toLowerCase()) ?? null;
+				result = await this.xenia_get_all_achievements_game(rom, titleId.toString(), this.language) ?? null;
 				if(result){
 					achievements.achievements = (JSON.parse(result ?? '{}') as XeniaGameAchievements).achievements;
 					achievementsFromUser = false;
@@ -227,13 +214,13 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 				// If we have achievements we'll need to match them with local ones, but we need english titles
 				if(rawgAchievements?.length){
 					let achievementsNames: Record<string, number> = {}; // English name: achievement id
-					if(this.language.toLowerCase() == "en"){
+					if(this.language === 1){ // en
 						for(let achievement of achievements.achievements){
 							achievementsNames[achievement.name] = achievement.id;
 						}
 					}
 					else{
-						result = await call<[string, string, string], string>("xenia_get_all_achievements_game", rom, titleId.toString(), this.language.toLowerCase()) ?? null;
+						result = await this.xenia_get_all_achievements_game(rom, titleId.toString(), this.language) ?? null;
 						if(result){
 							let englishAchievements = (JSON.parse(result ?? '{}') as XeniaGameAchievements).achievements;
 							for(let achievement of englishAchievements){
@@ -402,19 +389,31 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 					</Field>
 					<Field
 						label={t("language")}
-						description={
-							<>
-								<TextField
-									value={language}
-									disabled={loadingData.loading}
-									onChange={(event) => {
-										setLanguage(event.target.value);
-										this.language = event.target.value;
-									}}/>
-								<br/>
-								<span>{t("languageShortDescription")}</span>
-							</>
-						} />
+						childrenContainerWidth={'fixed'}>
+						<Dropdown
+							rgOptions={[
+								{ data: 1, label: getLanguageTitle('en') }, // US
+								{ data: 2, label: getLanguageTitle('ja') },
+								{ data: 3, label: getLanguageTitle('de') },
+								{ data: 4, label: getLanguageTitle('fr') },
+								{ data: 5, label: getLanguageTitle('es') },
+
+								{ data: 6, label: getLanguageTitle('it') },
+								{ data: 7, label: getLanguageTitle('ko') },
+								{ data: 10, label: getLanguageTitle('zhCn') },
+								{ data: 8, label: getLanguageTitle('zhTw') },
+								{ data: 9, label: getLanguageTitle('pt') },
+								
+								{ data: 11, label: getLanguageTitle('pl') },
+								{ data: 12, label: getLanguageTitle('ru') }
+							]}
+							selectedOption={language}
+							disabled={loadingData.loading}
+							onChange={(newVal) => {
+								setLanguage(newVal.data);
+								this.language = newVal.data;
+							}} />
+					</Field>
 				</DialogControlsSection>
 
 				<DialogControlsSection>
@@ -437,15 +436,14 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 							rgOptions={[
 								{ data: null, label: t("xeniaDescriptionBoth") },
 								{ data: true, label: t("xeniaDescriptionLocked") },
-								{ data: false, label: t("xeniaDescriptionUnlocked") },
+								{ data: false, label: t("xeniaDescriptionUnlocked") }
 							]}
 							selectedOption={descriptionLocked}
 							disabled={loadingData.loading}
 							onChange={(newVal) => {
 								setDescriptionLocked(newVal.data);
 								this.descriptionLocked = newVal.data;
-							}}
-						/>
+							}} />
 					</Field>
 				</DialogControlsSection>
 			</>

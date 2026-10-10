@@ -1,7 +1,7 @@
-import { call, toaster } from "@decky/api";
+import { call } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import { getLaunchCommand, isRPCS3Game, romRegex } from "../../shortcuts";
-import { getAppDetails } from "../../util";
+import { getAppDetails, toasterToast } from "../../util";
 import type { ResolverCache, ResolverConfig } from "../Resolver";
 import { GlobalResolver } from "./GlobalResolver";
 import { rpcs3IdRegex, rpcs3RomPathRegex } from "./MultiId/MultiIdRPCS3Resolver";
@@ -58,10 +58,7 @@ export class RPCS3NPWRResolver extends GlobalResolver<RPCS3NPWRResolver>{
 				throw new Error("");
 		}
 		catch{
-			toaster.toast({
-				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
-				body: t("rpcs3PathError")
-			});
+			toasterToast(t("rpcs3PathError"), this);
 
 			this.hddPath = "";
 		}

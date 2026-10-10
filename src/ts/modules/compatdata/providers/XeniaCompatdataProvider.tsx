@@ -1,5 +1,5 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {fetchNoCors, toaster} from "@decky/api";
+import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import Logger from "../../../logger";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
@@ -7,6 +7,7 @@ import type { ResolverConfig, ResolverCache } from "../../Resolver";
 import { XeniaResolver, type XeniaResolverCaches, type XeniaResolverConfigs } from "../../resolvers/XeniaResolver";
 import { CompatdataProvider } from "../CompatdataProvider";
 import { FaXbox } from "react-icons/fa";
+import { toasterToast } from "../../../util";
 
 type XeniaCompatData = {
 	title: string;
@@ -45,10 +46,7 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>
 		// Retrieve compat page source
 		let response = await fetchNoCors("https://github.com/xenia-canary/game-compatibility/releases/download/game-compatibility/compatibility_data.json");
 		if(!response.ok){
-			toaster.toast({
-				title: `${this.module.title} - ${this.title}`,
-				body: t("initError")
-			});
+			toasterToast(t("initError"), this);
 
 			return;
 		}

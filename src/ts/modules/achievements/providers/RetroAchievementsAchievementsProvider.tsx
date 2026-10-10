@@ -1,6 +1,6 @@
 import type { AchievementsData, ID } from "../../../Interfaces"
 import { t } from "../../../useTranslations"
-import { fetchNoCorsLegacyTimeout, getAppDetails } from "../../../util"
+import { fetchNoCorsLegacyTimeout, getAppDetails, toasterToast } from "../../../util"
 import type { ProviderCache, ProviderConfig } from "../../Provider"
 import type { AchievementsProviderConfigs } from "../AchievementsModule"
 import { AchievementsProvider } from "../AchievementsProvider"
@@ -14,7 +14,6 @@ import { useState } from "react"
 import { Markdown } from "../../../markdown"
 import React from "react"
 import { version } from "@decky/pkg"
-import { toaster } from "@decky/api"
 
 export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<RetroAchievementsResolverConfigs, RetroAchievementsResolverConfig>
 {
@@ -250,10 +249,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 				{
 					// Clear to avoid errors
 					if(response.status == 403){
-						toaster.toast({
-							title: `${this.module.title} - ${this.title}`,
-							body: t("apiKeyError")
-						});
+						toasterToast(t("apiKeyError"), this);
 
 						this.apiKey = '';
 					}

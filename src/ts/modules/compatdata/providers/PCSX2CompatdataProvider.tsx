@@ -1,5 +1,5 @@
 import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../../Interfaces";
-import {fetchNoCors, toaster} from "@decky/api";
+import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import { removeAfterAndIncluding, removeBeforeAndIncluding } from "../../GamesDBResult";
 import Logger from "../../../logger";
@@ -9,6 +9,7 @@ import { separator, type MultiIdResolver, type MultiIdResolverCaches, type Multi
 import { CompatdataProvider } from "../CompatdataProvider";
 import { MultiIdPCSX2Resolver } from "../../resolvers/MultiId/MultiIdPCSX2Resolver";
 import { SiPlaystation2 } from "react-icons/si";
+import { toasterToast } from "../../../util";
 
 type PCSX2CompatData = {
 	title: string;
@@ -113,12 +114,8 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<any>
 			init = true;
 		}
 		finally{
-			if(!init){
-				toaster.toast({
-					title: `${this.module.title} - ${this.title}`,
-					body: t("initError")
-				});
-			}
+			if(!init)
+				toasterToast(t("initError"), this);
 		}
 	}
 

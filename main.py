@@ -53,6 +53,16 @@ GDFX_MAGIC = b"MICROSOFT*XBOX*MEDIA"
 SECTOR_SIZE = 2048
 BASE_SECTOR = 0x20
 
+class CleanedTextStream:
+    def __init__(self, file_obj):
+        self.file = file_obj
+
+    def read(self, size=-1):
+        chunk = self.file.read(size)
+        if not chunk:
+            return ""
+        return chunk.replace('\u2028', '\n').replace('\u2029', '\n')
+
 class Plugin:
 	egs_nsl: Dict[str, Dict[str, any]] | None = None
 	gog_nsl: Dict[int, Dict[str, any]] | None = None
@@ -182,30 +192,6 @@ class Plugin:
 	async def rpcs3_check_hdd_path(self, hdd_path: str) -> bool:
 		return os.path.isdir(hdd_path)
 	
-	# REF: https://github.com/justin-delano/PlayniteAchievements/blob/24b1bcab770277a645ef93f52795823739e0ae0e/source/Providers/RPCS3/Rpcs3TrophyParser.cs#L789
-	async def rpcs3_locale_to_ps3(self, locale: str) -> int | None:
-		match locale.lower():
-			case "ja": return 0
-			case "en": return 1
-			case "fr": return 2
-			case "es": return 3
-			case "de": return 4
-			case "it": return 5
-			case "nl": return 6
-			case "pt": return 7
-			case "ru": return 8
-			case "ko": return 9
-			case "zh": return 11 # Simplified Chinese; 10 is Traditional
-			case "fi": return 12
-			case "sv": return 13
-			case "da": return 14
-			case "no": return 15
-			case "pl": return 16
-			case "pt-br": return 17
-			case "tr": return 19
-
-		return None
-
 	# REF: https://github.com/justin-delano/PlayniteAchievements/blob/24b1bcab770277a645ef93f52795823739e0ae0e/source/Providers/RPCS3/Rpcs3TrpArchiveReader.cs#L46
 	async def rpcs3_parse_trp_directory(self, trp_bytes: bytes) -> Dict[str, Tuple[int, int]]:
 		magic = trp_bytes[0:4]
@@ -320,12 +306,6 @@ class Plugin:
 		except:
 			return json.dumps(result)
 
-		ps3_locale = await Plugin.rpcs3_locale_to_ps3(self, locale)
-		if not ps3_locale is None:
-			ps3_locale = str(ps3_locale).zfill(2)
-		else:
-			ps3_locale = '01'
-
 		# Load info from TROPCONF.SFM
 		if 'TROPCONF.SFM' in trp:
 			entry = trp['TROPCONF.SFM']
@@ -334,8 +314,8 @@ class Plugin:
 		# Try retrieving in order: the requested language, English or default
 		if 'trophies' in result and len(result['trophies']) > 0:
 			lang_result = {'trophies': []}
-			if f'TROP_{ps3_locale}.SFM' in trp:
-				entry = trp[f'TROP_{ps3_locale}.SFM']
+			if f'TROP_{locale}.SFM' in trp:
+				entry = trp[f'TROP_{locale}.SFM']
 				lang_result = await Plugin.rpcs3_get_all_trophies_file(self, trp_bytes[entry[0]:entry[0] + entry[1]])
 			elif 'TROP.SFM' in trp:
 				entry = trp['TROP.SFM']
@@ -789,33 +769,12 @@ class Plugin:
 		else:
 			return None
 
-	# https://github.com/XboxChef/XeXtractor/blob/5fb6d8b17e5d38a6100590ce43962fb0df07770b/XDBF.cs#L126
-	async def xenia_locale_to_xbox360(self, locale: str) -> int:
-		match locale.lower():
-			case "en": return 1
-			case "ja": return 2
-			case "de": return 3
-			case "fr": return 4
-			case "es": return 5
-			case "it": return 6
-			case "ko": return 7
-			case "pt": return 9
-			case "zh": return 10 # 8 is zh-TW
-			case "pl": return 11
-			case "ru": return 12
-
-		return None
-
 	async def xenia_get_localization(self, xdbf_bytes: bytes, locale: str) -> Dict[int, str]:
 		def xstr_predicate(xdbf_bytes, ns, id, offset, size):
-			if ns == 3 and id == xbox360_locale:
+			if ns == 3 and id == locale:
 				return xdbf_bytes[offset:offset + size]
 			else:
 				return None
-
-		xbox360_locale = await Plugin.xenia_locale_to_xbox360(self, locale)
-		if xbox360_locale is None:
-			return None
 
 		localization = {}
 
@@ -871,7 +830,7 @@ class Plugin:
 			'edited': (flags & 1048576) != 0
 		}
 
-	async def xenia_get_all_achievements_game(self, iso_path: str, title_id: str, locale: str) -> str:
+	async def xenia_get_all_achievements_game(self, iso_path: str, title_id: str, locale: int) -> str:
 		def xach_predicate(xdbf_bytes, ns, id, offset, size):
 			if ns == 1 and id == 1480672072:
 				return xdbf_bytes[offset:offset + size]
@@ -1086,29 +1045,32 @@ class Plugin:
 
 		result = {}
 
-		url = "https://github.com/blawar/titledb/blob/master/" + language + ".json"
-		ssl_backup = ssl._create_default_https_context
-		ssl._create_default_https_context = get_ssl_context
-		temp_filename = urllib.request.urlretrieve(url)[0]
-		ssl._create_default_https_context = ssl_backup
+		try:
+			url = "https://github.com/blawar/titledb/blob/master/" + language + ".json"
+			ssl_backup = ssl._create_default_https_context
+			ssl._create_default_https_context = get_ssl_context
+			temp_filename = urllib.request.urlretrieve(url)[0]
+			ssl._create_default_https_context = ssl_backup
 
-		with open(temp_filename) as f:
-			data = json.load(f)
-			for entry in data:
-				if not "id" in data[entry]:
-					continue
-					
-				result[data[entry]["id"]] = {
-					"id": data[entry]["id"],
-					"name": data[entry]["name"],
-					"description": data[entry]["description"] if "description" in data[entry] and data[entry]["description"] != "" else None,
-					"intro": data[entry]["intro"] if "intro" in data[entry] and data[entry]["intro"] != "" else None,
-					"developer": data[entry]["developer"] if "developer" in data[entry] and data[entry]["developer"] != "" else None,
-					"publisher": data[entry]["publisher"] if "publisher" in data[entry] and data[entry]["publisher"] != "" else None,
-					"releaseDate": data[entry]["releaseDate"] if "releaseDate" in data[entry] else None,
-					"numberOfPlayers": data[entry]["numberOfPlayers"] if "numberOfPlayers" in data[entry] else None,
-					"size": data[entry]["size"] if "size" in data[entry] else None
-				}
+			with open(temp_filename, "r", encoding='utf-8') as f:
+				data = json.load(CleanedTextStream(f))
+				for entry in data:
+					if not "id" in data[entry]:
+						continue
+						
+					result[data[entry]["id"]] = {
+						"id": data[entry]["id"],
+						"name": data[entry]["name"],
+						"description": data[entry]["description"] if "description" in data[entry] and data[entry]["description"] != "" else None,
+						"intro": data[entry]["intro"] if "intro" in data[entry] and data[entry]["intro"] != "" else None,
+						"developer": data[entry]["developer"] if "developer" in data[entry] and data[entry]["developer"] != "" else None,
+						"publisher": data[entry]["publisher"] if "publisher" in data[entry] and data[entry]["publisher"] != "" else None,
+						"releaseDate": data[entry]["releaseDate"] if "releaseDate" in data[entry] else None,
+						"numberOfPlayers": data[entry]["numberOfPlayers"] if "numberOfPlayers" in data[entry] else None,
+						"size": data[entry]["size"] if "size" in data[entry] else None
+					}
+		except Exception as e:
+			raise Exception(repr(e))
 
 		Plugin.titledb[language] = result
 

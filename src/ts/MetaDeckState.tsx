@@ -4,10 +4,9 @@ import {t} from "./useTranslations";
 import {MetadataModule} from "./modules/metadata/MetadataModule";
 import {AsyncMountable, Mounts, systemClock} from "./System";
 import {Module} from "./modules/Module";
-import {getAllNonSteamAppOverviews} from "./util";
+import {getAllNonSteamAppOverviews, toasterToast} from "./util";
 import {Provider} from "./modules/Provider";
 import {CompatdataModule} from "./modules/compatdata/CompatdataModule";
-import {toaster} from "@decky/api";
 import {EventBus} from "./events";
 import {SteamAppOverview} from "./SteamTypes";
 import { AchievementsModule } from "./modules/achievements/AchievementsModule";
@@ -382,10 +381,7 @@ export class MetaDeckState implements AsyncMountable
 
 	async refresh(): Promise<void>
 	{
-		toaster.toast({
-			title: t("title"),
-			body: t("refreshingData")
-		});
+		toasterToast(t("refreshingData"));
 
 		await this.settings.readSettings();
 		this.loadingData.loading = true;
@@ -431,10 +427,7 @@ export class MetaDeckState implements AsyncMountable
 		});
 		await this.state.settings.writeSettings();
 
-		toaster.toast({
-			title: t("title"),
-			body: t("cacheCleared")
-		});
+		toasterToast(t("cacheCleared"));
 		
 		this.loadingData.loading = false;
 		this.notifyUpdate();

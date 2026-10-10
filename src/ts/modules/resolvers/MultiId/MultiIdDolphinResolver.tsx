@@ -1,8 +1,8 @@
 import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isDolphinGame, romRegex} from "../../../shortcuts";
-import {getAppDetails} from "../../../util";
+import {getAppDetails, toasterToast} from "../../../util";
 import { MultiIdResolver, separator, type MultiIdResolverConfigs } from "./MultiIdResolver";
-import { call, fetchNoCors, toaster } from "@decky/api";
+import { call, fetchNoCors } from "@decky/api";
 import type { ID } from "../../../Interfaces";
 import { t } from "../../../useTranslations";
 import { SiDolphin } from "react-icons/si";
@@ -30,10 +30,7 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 	override async mount(): Promise<void> {
 		const response = await fetchNoCors("https://www.gametdb.com/wiitdb.txt?LANG=ORIG");
 		if(!response.ok){
-			toaster.toast({
-				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
-				body: t("initError")
-			});
+			toasterToast(t("initError"), this);
 
 			return;
 		}

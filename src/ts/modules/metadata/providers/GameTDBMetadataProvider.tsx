@@ -1,5 +1,5 @@
-import { DialogControlsSection, Field, TextField } from "@decky/ui";
-import React, { useState } from "react";
+import { DialogControlsSection, Dropdown, Field } from "@decky/ui";
+import { useState } from "react";
 import Logger from "../../../logger";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import { t } from "../../../useTranslations";
@@ -11,8 +11,8 @@ import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinRe
 import { separator, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
 import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
 import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game, isRyujinxGame } from "../../../shortcuts";
-import { getAppDetails } from "../../../util";
-import { callable, toaster } from "@decky/api";
+import { getAppDetails, getLanguageTitle, toasterToast } from "../../../util";
+import { callable } from "@decky/api";
 import { MetadataData, StoreCategory } from "../../../Interfaces";
 import { FaG } from "react-icons/fa6";
 import { MultiIdCemuResolver } from "../../resolvers/MultiId/MultiIdCemuResolver";
@@ -44,7 +44,8 @@ type GameTDBGame = {
 
 export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'cemu' | 'rpcs3'> & RyujinxSerialResolverConfigs, ResolverConfig>
 {
-	language: string // ZH -> ZHCN / ZHTW (in order)
+	// https://www.gametdb.com/Main/FAQ > Developers > Naming scheme for languages (locale lang)
+	language: string; // ZH -> ZHCN / ZHTW (in order)
 }
 
 export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'cemu' | 'rpcs3'> & RyujinxSerialResolverCaches, ResolverCache>
@@ -100,10 +101,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			}
 		}
 		if(errors.length){
-			toaster.toast({
-				title: `${this.module.title} - ${this.title}`,
-				body: t("initError")
-			});
+			toasterToast(t("initError"), this);
 			
 			this.logger.error("Error while retrieving one or more zip file", errors);
 		}
@@ -118,12 +116,6 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 
 		// Retrieve localized version
 		let locale = locales.find(l => l[0].toUpperCase() == language && predicate(l[1]));
-
-		// If we have chinese language we try China and Taiwan variants in order
-		if(!locale && language == "ZH"){
-			locale = locales.find(l => l[0].toUpperCase() == "ZHCH" && predicate(l[1]))
-				?? locales.find(l => l[0].toUpperCase() == "ZHTW" && predicate(l[1]));
-		}
 
 		// If we haven't found anything we try retrieving english
 		locale ??= locales.find(l => l[0].toUpperCase() == "EN" && predicate(l[1]));
@@ -238,19 +230,30 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 			<DialogControlsSection>
 				<Field
 					label={t("language")}
-					description={
-						<>
-							<TextField
-								value={language}
-								disabled={loadingData.loading}
-								onChange={(event) => {
-									setLanguage(event.target.value);
-									this.language = event.target.value;
-								}}/>
-							<br/>
-							<span>{t("languageShortDescription")}</span>
-						</>
-					} />
+					childrenContainerWidth={'fixed'}>
+					<Dropdown
+						rgOptions={[
+							{ data: 'EN', label: getLanguageTitle('en') }, // US
+							{ data: 'JA', label: getLanguageTitle('ja') },
+							{ data: 'FR', label: getLanguageTitle('fr') },
+							{ data: 'DE', label: getLanguageTitle('de') },
+							{ data: 'ES', label: getLanguageTitle('es') },
+
+							{ data: 'IT', label: getLanguageTitle('it') },
+							{ data: 'NL', label: getLanguageTitle('nl') },
+							{ data: 'PT', label: getLanguageTitle('pt') },
+							{ data: 'ZHCN', label: getLanguageTitle('zhCn') },
+							{ data: 'ZHTW', label: getLanguageTitle('zhTw') },
+
+							{ data: 'KO', label: getLanguageTitle('ko') }
+						]}
+						selectedOption={language}
+						disabled={loadingData.loading}
+						onChange={(newVal) => {
+							setLanguage(newVal.data);
+							this.language = newVal.data;
+						}} />
+				</Field>
 			</DialogControlsSection>
 		);
 	}

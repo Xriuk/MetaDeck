@@ -11,7 +11,7 @@ import {
 	isRyujinxGame
 } from "../../../shortcuts";
 import { t } from "../../../useTranslations";
-import { distanceWithLimit, closestWithLimit, getAppDetails, fetchNoCorsLegacyTimeout } from "../../../util";
+import { distanceWithLimit, closestWithLimit, getAppDetails, fetchNoCorsLegacyTimeout, toasterToast } from "../../../util";
 import { Markdown } from "../../../markdown";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import React from "react";
@@ -19,7 +19,6 @@ import { IdOverrideComponent, type OverrideEntry } from "../../IdOverrideCompone
 import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import { FaR } from "react-icons/fa6";
-import { toaster } from "@decky/api";
 
 type RAWGAchievement = {
 	name: string;
@@ -207,10 +206,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider
 		else{
 			// Clear to avoid errors
 			if(response.status == 403){
-				toaster.toast({
-					title: `${this.module.title} - ${this.title}`,
-					body: t("apiKeyError")
-				});
+				toasterToast(t("apiKeyError"), this);
 
 				this.apiKey = '';
 			}

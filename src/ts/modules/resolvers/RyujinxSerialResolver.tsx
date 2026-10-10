@@ -1,8 +1,9 @@
-import { fetchNoCors, toaster } from "@decky/api";
+import { fetchNoCors } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import { RyujinxTitleIdResolver, type RyujinxTitleIdResolverCache, type RyujinxTitleIdResolverConfig } from "./RyujinxTitleIdResolver";
 import Logger from "../../logger";
 import { t } from "../../useTranslations";
+import { toasterToast } from "../../util";
 
 export interface RyujinxSerialResolverConfig extends RyujinxTitleIdResolverConfig
 {
@@ -44,10 +45,7 @@ export class RyujinxSerialResolver extends RyujinxTitleIdResolver
 		// DEV: maybe retrieve and store on the backend?
 		const response = await fetchNoCors("http://nswdb.com/xml.php");
 		if(!response.ok){
-			toaster.toast({
-				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
-				body: t("initError")
-			});
+			toasterToast(t("initError"), this);
 
 			return;
 		}

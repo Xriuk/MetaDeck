@@ -1,8 +1,8 @@
 import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isCemuGame, romRegex} from "../../../shortcuts";
-import {getAppDetails} from "../../../util";
+import {getAppDetails, toasterToast} from "../../../util";
 import { MultiIdResolver, separator, type MultiIdResolverConfigs } from "./MultiIdResolver";
-import { call, fetchNoCors, toaster } from "@decky/api";
+import { call, fetchNoCors } from "@decky/api";
 import type { ID } from "../../../Interfaces";
 import { t } from "../../../useTranslations";
 import { MdOutlineTablet } from "react-icons/md";
@@ -31,10 +31,7 @@ export class MultiIdCemuResolver extends MultiIdResolver
 	override async mount(): Promise<void> {
 		const response = await fetchNoCors("https://www.gametdb.com/wiiutdb.txt?LANG=ORIG");
 		if(!response.ok){
-			toaster.toast({
-				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
-				body: t("initError")
-			});
+			toasterToast(t("initError"), this);
 
 			return;
 		}

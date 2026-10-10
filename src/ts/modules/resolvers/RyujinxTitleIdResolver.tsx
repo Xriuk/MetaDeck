@@ -1,7 +1,7 @@
 import {ResolverCache, ResolverConfig} from "../Resolver";
 import {getLaunchCommand, isRyujinxGame, romRegex} from "../../shortcuts";
-import {getAppDetails} from "../../util";
-import { call, toaster } from "@decky/api";
+import {getAppDetails, toasterToast} from "../../util";
+import { call } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import { GlobalResolver } from "./GlobalResolver";
 import { t } from "../../useTranslations";
@@ -50,10 +50,7 @@ export class RyujinxTitleIdResolver extends GlobalResolver<RyujinxTitleIdResolve
 		await this.checkRyujinxProdKeys();
 		
 		if(!this.ryujinxProdKeys){
-			toaster.toast({
-				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
-				body: t("ryujinxKeysError")
-			});
+			toasterToast(t("ryujinxKeysError"), this);
 		}
 	}
 

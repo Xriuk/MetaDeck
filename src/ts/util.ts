@@ -2,7 +2,12 @@ import {runInAction} from "mobx";
 import {SteamAppDetails, SteamAppOverview} from "./SteamTypes";
 import {closest, distance} from "fastest-levenshtein";
 import { SteamAppTypeShortcut } from "./Interfaces";
-import type { fetchNoCors } from "@decky/api";
+import { toaster, type fetchNoCors } from "@decky/api";
+import { Module } from "./modules/Module";
+import { Provider } from "./modules/Provider";
+import { Resolver } from "./modules/Resolver";
+import { getCurrentLanguage, t } from "./useTranslations";
+import type languages from "./translations";
 
 export function stateTransaction<T>(block: () => T) {
 	// @ts-ignore
@@ -133,4 +138,163 @@ export async function fetchNoCorsLegacyTimeout(url: string, method: string = 'GE
 			status: 500
 		});
 	}
+}
+
+export function toasterToast(
+	message: string,
+	source?: Module<any, any, any, any, any, any, any, any, any, any, any> |
+		Provider<any, any, any, any, any, any, any, any, any, any, any, any> |
+		Resolver<any, any, any, any, any, any, any, any, any, any, any, any>){
+
+	let title = t("title");
+	if(source){
+		let module: Module<any, any, any, any, any, any, any, any, any, any, any>;
+		if(source instanceof Module)
+			module = source;
+		else
+			module = source.module;
+		title += `: ${module.title}`;
+
+		if(!(source instanceof Module)){
+			let provider: Provider<any, any, any, any, any, any, any, any, any, any, any, any>;
+			if(source instanceof Provider)
+				provider = source;
+			else
+				provider = source.provider;
+			title += ` > ${provider.title}`;
+
+			if(source instanceof Resolver)
+				title += ` (${source.identifier})`;
+		}
+	}
+
+	toaster.toast({
+		title: title,
+		body: message
+	});
+}
+
+export function getLanguageTitle(code: keyof typeof languages, original = true){
+	const languageNames: Record<keyof typeof languages, {
+		localized: string;
+		original: string;
+	}> = {
+		bg: {
+			localized: t("languageBulgarian"),
+			original: 'Български'
+		},
+		cs: {
+			localized: t("languageCzech"),
+			original: 'Čeština'
+		},
+		da: {
+			localized: t("languageDanish"),
+			original: 'Dansk'
+		},
+		de: {
+			localized: t("languageGerman"),
+			original: 'Deutsch'
+		},
+		el: {
+			localized: t("languageGreek"),
+			original: 'Ελληνικά'
+		},
+		en: {
+			localized: t("languageEnglish"),
+			original: 'English'
+		},
+		es: {
+			localized: t("languageSpanishSpain"),
+			original: 'Español (España)'
+		},
+		es419: {
+			localized: t("languageSpanishLatinAmerica"),
+			original: 'Español (América Latina)'
+		},
+		fi: {
+			localized: t("languageFinnish"),
+			original: 'Suomi'
+		},
+		fr: {
+			localized: t("languageFrench"),
+			original: 'Français'
+		},
+		hu: {
+			localized: t("languageHungarian"),
+			original: 'Magyar'
+		},
+		it: {
+			localized: t("languageItalian"),
+			original: 'Italiano'
+		},
+		ja: {
+			localized: t("languageJapanese"),
+			original: '日本語'
+		},
+		ko: {
+			localized: t("languageKorean"),
+			original: '한국어'
+		},
+		nl: {
+			localized: t("languageDutch"),
+			original: 'Nederlands'
+		},
+		no: {
+			localized: t("languageNorwegian"),
+			original: 'Norsk'
+		},
+		pl: {
+			localized: t("languagePolish"),
+			original: 'Polski'
+		},
+		pt: {
+			localized: t("languagePortuguesePortugal"),
+			original: 'Português (Portugal)'
+		},
+		ptBr: {
+			localized: t("languagePortugueseBrazil"),
+			original: 'Português (Brasil)'
+		},
+		ro: {
+			localized: t("languageRomanian"),
+			original: 'Română'
+		},
+		ru: {
+			localized: t("languageRussian"),
+			original: 'Русский'
+		},
+		sv: {
+			localized: t("languageSwedish"),
+			original: 'Svenska'
+		},
+		th: {
+			localized: t("languageThai"),
+			original: 'ไทย'
+		},
+		tr: {
+			localized: t("languageTurkish"),
+			original: 'Türkçe'
+		},
+		uk: {
+			localized: t("languageUkrainian"),
+			original: 'Українська'
+		},
+		vi: {
+			localized: t("languageVietnamese"),
+			original: 'Tiếng Việt'
+		},
+		zhCn: {
+			localized: t("languageChineseSimplified"),
+			original: '汉语'
+		},
+		zhTw: {
+			localized: t("languageChineseTraditional"),
+			original: '漢語'
+		}
+	};
+
+	const currentLanguage = getCurrentLanguage();
+
+	return languageNames[code].localized +
+		(original && code !== currentLanguage ? " - " + languageNames[code].original : "");
 }

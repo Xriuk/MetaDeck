@@ -1,11 +1,11 @@
-import { call, fetchNoCors, toaster } from "@decky/api";
+import { call, fetchNoCors } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import {
 	getLaunchCommand, isCemuGame, isEmulatedGame, isRPCS3Game, isShadPS4Game, isRyujinxGame,
 	isVita3KGame, isXemuGame, isXeniaGame, romRegex
 } from "../../shortcuts";
 import { t } from "../../useTranslations";
-import { getAppDetails } from "../../util";
+import { getAppDetails, toasterToast } from "../../util";
 import type { ResolverCache, ResolverConfig } from "../Resolver";
 import { GlobalResolver } from "./GlobalResolver";
 import { version } from "@decky/pkg";
@@ -52,12 +52,8 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 				"User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)`,
 			}
 		});
-		if(!response.ok){
-			toaster.toast({
-				title: `${this.module.title} - ${this.provider.title} (${this.identifier})`,
-				body: t("initError")
-			});
-		}
+		if(!response.ok)
+			toasterToast(t("initError"), this);
 
 		const body = await response.text();
 		this.hashRAIds = (JSON.parse(body.toLowerCase()) as { md5list: Record<string, number>; }).md5list;

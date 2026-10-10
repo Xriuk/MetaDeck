@@ -1,4 +1,4 @@
-import { call, fetchNoCors, toaster } from "@decky/api";
+import { call, fetchNoCors } from "@decky/api";
 import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
@@ -11,7 +11,7 @@ import { useMetaDeckState } from "../../../MetaDeckState";
 import { useState } from "react";
 import { DialogControlsSection, Dropdown, Field } from "@decky/ui";
 import { StoreCategory, type MetadataData } from "../../../Interfaces";
-import { getAppDetails } from "../../../util";
+import { getAppDetails, toasterToast } from "../../../util";
 import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
 
 type TitleDbEntry = {
@@ -68,10 +68,7 @@ export class TitleDbMetadataProvider extends MetadataProvider<any>{
 		// Retrieve available languages
 		const response = await fetchNoCors("https://raw.githubusercontent.com/blawar/titledb/refs/heads/master/languages.json");
 		if(!response.ok){
-			toaster.toast({
-				title: `${this.module.title} - ${this.title}`,
-				body: t("initError")
-			});
+			toasterToast(t("initError"), this);
 
 			return;
 		}
