@@ -6,43 +6,29 @@ import {
 } from "../../shortcuts";
 import { t } from "../../useTranslations";
 import { getAppDetails, toasterToast } from "../../util";
-import type { ResolverCache, ResolverConfig } from "../Resolver";
-import { GlobalResolver } from "./GlobalResolver";
+import { Resolver, type ResolverCache, type ResolverConfig } from "../Resolver";
 import { version } from "@decky/pkg";
 import { FaGamepad } from "react-icons/fa";
+import Logger from "../../logger";
 
-export interface RetroAchievementsResolverConfig extends ResolverConfig
-{
+export interface RetroAchievementsResolverConfig extends ResolverConfig{
 	
 }
 
-export interface RetroAchievementsResolverCache extends ResolverCache
-{
+export interface RetroAchievementsResolverCache extends ResolverCache{
 	hashes: Record<number, string>;
 }
 
-export interface RetroAchievementsResolverConfigs
-{
-	ra: RetroAchievementsResolverConfig;
-}
+export class RetroAchievementsResolver extends Resolver<"ra">{
+	identifier = "ra" as const;
+	title = t("providerAchievementsRA");
 
-export interface RetroAchievementsResolverCaches
-{
-	ra: RetroAchievementsResolverCache;
-}
-
-export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsResolver>
-{
-	static identifier: keyof RetroAchievementsResolverConfigs = "ra";
-	static title: string = t("providerAchievementsRA");
-	identifier: keyof RetroAchievementsResolverConfigs = RetroAchievementsResolver.identifier;
-	title: string = RetroAchievementsResolver.title;
+	protected logger = new Logger(this.identifier);
 
 	private hashRAIds: Record<string, number> = {};
 
-	get hashes(): Record<number, string | null>
-	{
-		return (this.cache as RetroAchievementsResolverCache).hashes;
+	get hashes(): Record<number, string | null>{
+		return this.cache.hashes;
 	}
 
 	override async mount(): Promise<void> {
@@ -59,8 +45,7 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 		this.hashRAIds = (JSON.parse(body.toLowerCase()) as { md5list: Record<string, number>; }).md5list;
 	}
 
-	override async test(appId: number): Promise<boolean>
-	{
+	override async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return false;
@@ -72,8 +57,7 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 			!isCemuGame(launchCommand) && !isRyujinxGame(launchCommand);
 	}
 
-	async resolve(appId: number): Promise<ID | undefined>
-	{
+	async resolve(appId: number): Promise<ID | undefined>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
@@ -88,7 +72,7 @@ export class RetroAchievementsResolver extends GlobalResolver<RetroAchievementsR
 			if(md5)
 				this.hashes[appId] = md5;
 		}
-		this.module.logger.debug(`${appId} md5: `, md5);
+		this.logger.debug(`${appId} md5: `, md5);
 		if(!md5)
 			return undefined;
 

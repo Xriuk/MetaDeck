@@ -1,39 +1,32 @@
 import {ID, MetadataData} from "../../../../Interfaces";
 import {ResolverCache, ResolverConfig} from "../../../Resolver";
-import {t} from "../../../../useTranslations";
 import {GOGMetadataProviderResolver, separator} from "./GOGMetadataProviderResolver";
 import {getLaunchCommand, isEpicGame, isGOGGame, isNSLGame, isUbisoftGame} from "../../../../shortcuts";
 import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesDBResult";
 import {getAppDetails} from "../../../../util";
-import {GOGMetadataProviderResolverConfigs} from "../../providers/GOGMetadataProvider";
 import {callable} from "@decky/api";
 import { FaRocket } from "react-icons/fa";
 
-export interface GOGMetadataProviderNSLResolverConfig extends ResolverConfig
-{
+export interface GOGMetadataProviderNSLResolverConfig extends ResolverConfig{
+
 }
 
-export interface GOGMetadataProviderNSLResolverCache extends ResolverCache
-{
+export interface GOGMetadataProviderNSLResolverCache extends ResolverCache{
+
 }
 
-export class GOGMetadataProviderNSLResolver extends GOGMetadataProviderResolver
-{
-	static identifier: keyof GOGMetadataProviderResolverConfigs = "nsl";
-	static title: string = t("providerMetadataGOG");
-	identifier: keyof GOGMetadataProviderResolverConfigs = GOGMetadataProviderNSLResolver.identifier;
-	title: string = GOGMetadataProviderNSLResolver.title;
+export class GOGMetadataProviderNSLResolver extends GOGMetadataProviderResolver<"gog_nsl">{
+	identifier = "gog_nsl" as const;
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
+
 		return isNSLGame(getLaunchCommand(details));
 	}
 
-	async resolve(appId: number): Promise<ID | undefined>
-	{
+	async resolve(appId: number): Promise<ID | undefined>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
@@ -62,8 +55,7 @@ export class GOGMetadataProviderNSLResolver extends GOGMetadataProviderResolver
 		'install_path': string
 	}> = callable("nsl_egs_data");
 
-	override async apply(appId: number, data: MetadataData): Promise<void>
-	{
+	override async apply(appId: number, data: MetadataData): Promise<void>{
 		if(data.install_size && data.install_date)
 			return;
 

@@ -2,40 +2,28 @@ import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../..
 import {t} from "../../../useTranslations";
 import Logger from "../../../logger";
 import { CompatdataProvider } from "../CompatdataProvider";
-import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
-import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
+import { separator } from "../../resolvers/MultiId/MultiIdResolver";
 import type { ProviderCache, ProviderConfig } from "../../Provider";
-import type { ResolverCache, ResolverConfig } from "../../Resolver";
 import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBMetadataProvider";
 import { SiPlaystation3 } from "react-icons/si";
 import { fetchNoCorsLegacyTimeout } from "../../../util";
 
-export interface RPCS3CompatdataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'rpcs3'>, ResolverConfig>
-{
+export interface RPCS3CompatdataProviderConfig extends ProviderConfig<'rpcs3'>{
 	
 }
 
-export interface RPCS3CompatdataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'rpcs3'>, ResolverCache>
-{
+export interface RPCS3CompatdataProviderCache extends ProviderCache{
 
 }
 
-export class RPCS3CompatdataProvider extends CompatdataProvider<any>
-{
-	resolvers: MultiIdResolver[] = [
-		new MultiIdRPCS3Resolver(this)
-	];
+export class RPCS3CompatdataProvider extends CompatdataProvider<"rpcs3">{
+	identifier = "rpcs3" as const;
+	title = t("providerCompatdataRPCS3");
 
-	static identifier: string = "rpcs3";
-	static title: string = t("providerCompatdataRPCS3");
-	identifier: string = RPCS3CompatdataProvider.identifier;
-	title: string = RPCS3CompatdataProvider.title;
-
-	logger = new Logger(RPCS3CompatdataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private _gameTDBProvider?: GameTDBMetadataProvider;
-	get gameTDBProvider(): GameTDBMetadataProvider
-	{
+	get gameTDBProvider(): GameTDBMetadataProvider{
 		if(!this._gameTDBProvider){
 			this._gameTDBProvider = this.state.modules.metadata.providers.find(p => p instanceof GameTDBMetadataProvider);
 			if(!this._gameTDBProvider)

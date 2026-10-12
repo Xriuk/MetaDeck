@@ -1,7 +1,6 @@
 import { StoreCategory, type MetadataData } from "../../../Interfaces";
 import Logger from "../../../logger";
 import { t } from "../../../useTranslations";
-import type { MetadataProviderConfigs } from "../MetadataModule";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import { distanceWithLimit, fetchNoCorsLegacyTimeout, getAppDetails, removeWhitespacesAndPuctuation } from "../../../util";
 import type { Company, Game, GameMode, InvolvedCompany, ExternalGame, ReleaseDate} from "igdb-api-types";
@@ -10,34 +9,28 @@ import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
 import { SiIgdb } from "react-icons/si";
 import { distance } from "fastest-levenshtein";
 
-export interface LizardByteGameDBMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
-{
+export interface LizardByteGameDBMetadataProviderConfig extends FuzzySearchMetadataProviderConfig{
 	
 }
 
-export interface LizardByteGameDBMetadataProviderCache extends FuzzySearchMetadataProviderCache
-{
+export interface LizardByteGameDBMetadataProviderCache extends FuzzySearchMetadataProviderCache{
 	
 }
 
 // IGDB-like
 // https://github.com/LizardByte/GameDB
 // DO NOT use fetchNoCors because LizardByte's website hangs, so we need a hard timeout
-export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvider
-{
-	static identifier: keyof MetadataProviderConfigs = "lizardbyte";
-	static title: string = t("providerMetadataLizardByteGameDB");
-	identifier: keyof MetadataProviderConfigs = LizardByteGameDBMetadataProvider.identifier;
-	title: string = LizardByteGameDBMetadataProvider.title;
+export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvider<"lizardbyte">{
+	identifier = "lizardbyte" as const;
+	title = t("providerMetadataLizardByteGameDB");
 
-	logger: Logger = new Logger(LizardByteGameDBMetadataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	// DEV: maybe cache buckets?
 	private _missingBucketsCache = new Set<string>();
 	
 	private _steamProvider?: SteamMetadataProvider;
-	get steamProvider(): SteamMetadataProvider
-	{
+	get steamProvider(): SteamMetadataProvider{
 		if(!this._steamProvider){
 			this._steamProvider = this.module.providers.find(p => p instanceof SteamMetadataProvider);
 			if(!this._steamProvider)
@@ -48,13 +41,10 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 	}
 
 	override async mount(){
-		await super.mount();
-
 		this._missingBucketsCache.clear();
 	}
 
-	protected async search(title: string): Promise<MetadataData[]>
-	{
+	protected async search(title: string): Promise<MetadataData[]>{
 		if(!title?.length)
 			return [];
 

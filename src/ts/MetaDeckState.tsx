@@ -3,13 +3,25 @@ import {Settings} from "./settings";
 import {t} from "./useTranslations";
 import {MetadataModule} from "./modules/metadata/MetadataModule";
 import {AsyncMountable, Mounts, systemClock} from "./System";
-import {Module} from "./modules/Module";
+import {Module, type ModuleIdentifier} from "./modules/Module";
 import {getAllNonSteamAppOverviews, toasterToast} from "./util";
-import {Provider} from "./modules/Provider";
 import {CompatdataModule} from "./modules/compatdata/CompatdataModule";
 import {EventBus} from "./events";
 import {SteamAppOverview} from "./SteamTypes";
 import { AchievementsModule } from "./modules/achievements/AchievementsModule";
+import type { Resolver, ResolverIdentifier } from "./modules/Resolver";
+import { GOGMetadataProviderHeroicResolver } from "./modules/metadata/resolvers/GOG/GOGMetadataProviderHeroicResolver";
+import { GOGMetadataProviderJunkStoreResolver } from "./modules/metadata/resolvers/GOG/GOGMetadataProviderJunkStoreResolver";
+import { GOGMetadataProviderNSLResolver } from "./modules/metadata/resolvers/GOG/GOGMetadataProviderNSLResolver";
+import { MultiIdCemuResolver } from "./modules/resolvers/MultiId/MultiIdCemuResolver";
+import { MultiIdDolphinResolver } from "./modules/resolvers/MultiId/MultiIdDolphinResolver";
+import { MultiIdPCSX2Resolver } from "./modules/resolvers/MultiId/MultiIdPCSX2Resolver";
+import { MultiIdRPCS3Resolver } from "./modules/resolvers/MultiId/MultiIdRPCS3Resolver";
+import { RetroAchievementsResolver } from "./modules/resolvers/RetroAchievementsResolver";
+import { RPCS3NPWRResolver } from "./modules/resolvers/RPCS3NPWRResolver";
+import { RyujinxSerialResolver } from "./modules/resolvers/RyujinxSerialResolver";
+import { RyujinxTitleIdResolver } from "./modules/resolvers/RyujinxTitleIdResolver";
+import { XeniaResolver } from "./modules/resolvers/XeniaResolver";
 
 interface GlobalLoadingData
 {
@@ -63,17 +75,36 @@ interface ModuleLoadingData
 	set error(value: Error | undefined)
 }
 
-export interface Modules extends Record<string, Module<any, Provider<any, any, any, any, any, any, any, any, any, any, any, any>, any, any, any, any, any, any, any, any, any>>
-{
+export interface Modules extends Record<ModuleIdentifier, Module<any, any>>{
 	readonly metadata: MetadataModule;
 	readonly compatdata: CompatdataModule;
 	readonly achievements: AchievementsModule;
+}
+
+export interface Resolvers extends Record<ResolverIdentifier, Resolver<any>>{
+	readonly ra: RetroAchievementsResolver;
+
+	readonly pcsx2: MultiIdPCSX2Resolver;
+	readonly rpcs3: MultiIdRPCS3Resolver;
+	readonly rpcs3_npwr: RPCS3NPWRResolver;
+
+	readonly xenia: XeniaResolver;
+
+	readonly dolphin: MultiIdDolphinResolver;
+	readonly cemu: MultiIdCemuResolver;
+	readonly ryujinx_titleid: RyujinxTitleIdResolver;  // Settings/cache use ryujinx_serial
+	readonly ryujinx_serial: RyujinxSerialResolver;
+
+	readonly gog_nsl: GOGMetadataProviderNSLResolver;
+	readonly gog_junk: GOGMetadataProviderJunkStoreResolver;
+	readonly gog_heroic: GOGMetadataProviderHeroicResolver;
 }
 
 export interface MetaDeckStateContext
 {
 	readonly loadingData: GlobalLoadingData,
 	readonly modules: Modules,
+	readonly resolvers: Resolvers,
 	readonly overviews: SteamAppOverview[],
 	readonly rootOverviews: SteamAppOverview[],
 	readonly settings: Settings,
@@ -160,7 +191,7 @@ class GlobalLoadingDataImpl implements GlobalLoadingData
 		this.state.notifyUpdate();
 	}
 
-	private readonly _modules: Record<keyof Modules | "", ModuleLoadingData> = {}
+	private readonly _modules: Record<keyof Modules | "", ModuleLoadingData> = {} as any;
 
 	get modules(): Record<keyof Modules | "", ModuleLoadingData>
 	{
@@ -265,6 +296,7 @@ export class MetaDeckState implements AsyncMountable
 	private readonly _settings: Settings;
 	private readonly _mounts: Mounts;
 	private readonly _modules: Modules;
+	private readonly _resolvers: Resolvers;
 	private readonly _eventBus: EventBus
 
 	constructor(eventBus: EventBus, mounts: Mounts)
@@ -288,10 +320,28 @@ export class MetaDeckState implements AsyncMountable
 			compatdata: new CompatdataModule(this),
 			achievements: new AchievementsModule(this)
 		};
+		this._resolvers = {
+			ra: new RetroAchievementsResolver(this),
+
+			pcsx2: new MultiIdPCSX2Resolver(this),
+			rpcs3: new MultiIdRPCS3Resolver(this),
+			rpcs3_npwr: new RPCS3NPWRResolver(this),
+
+			xenia: new XeniaResolver(this),
+
+			dolphin: new MultiIdDolphinResolver(this),
+			cemu: new MultiIdCemuResolver(this),
+			ryujinx_titleid: new RyujinxTitleIdResolver(this),
+			ryujinx_serial: new RyujinxSerialResolver(this),
+
+			gog_nsl: new GOGMetadataProviderNSLResolver(this),
+			gog_junk: new GOGMetadataProviderJunkStoreResolver(this),
+			gog_heroic: new GOGMetadataProviderHeroicResolver(this)
+		};
 		this.mounts.addMount(this);
 		for (let key of Object.keys(this.modules))
 		{
-			this.loadingData.modules[key] = new ModuleLoadingDataImpl(this, this.modules[key].identifier);
+			this.loadingData.modules[key as keyof Modules] = new ModuleLoadingDataImpl(this, this.modules[key as keyof Modules].identifier);
 		}
 	}
 
@@ -301,6 +351,7 @@ export class MetaDeckState implements AsyncMountable
 		return {
 			loadingData: this.loadingData,
 			modules: this.modules,
+			resolvers: this.resolvers,
 			overviews: this.overviews,
 			rootOverviews: this.rootOverviews,
 			settings: this.settings,
@@ -319,6 +370,11 @@ export class MetaDeckState implements AsyncMountable
 	get modules(): Modules
 	{
 		return this._modules;
+	}
+
+	get resolvers(): Resolvers
+	{
+		return this._resolvers;
 	}
 
 	get loadingData(): GlobalLoadingData

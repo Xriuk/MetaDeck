@@ -2,22 +2,31 @@ import { DialogControlsSection, Dropdown, Field } from "@decky/ui";
 import { useState } from "react";
 import Logger from "../../../logger";
 import { useMetaDeckState } from "../../../MetaDeckState";
-import { t } from "../../../useTranslations";
+import { t, getLanguageTitle, type Language, getCurrentLanguage } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
-import type { ResolverConfig, ResolverCache } from "../../Resolver";
-import type { MetadataProviderConfigs } from "../MetadataModule";
 import { MetadataProvider } from "../MetadataProvider";
-import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
-import { separator, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
-import { MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
+import { separator } from "../../resolvers/MultiId/MultiIdResolver";
 import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game, isRyujinxGame } from "../../../shortcuts";
-import { getAppDetails, getLanguageTitle, toasterToast } from "../../../util";
+import { getAppDetails, toasterToast } from "../../../util";
 import { callable } from "@decky/api";
 import { MetadataData, StoreCategory } from "../../../Interfaces";
 import { FaG } from "react-icons/fa6";
-import { MultiIdCemuResolver } from "../../resolvers/MultiId/MultiIdCemuResolver";
-import type { GlobalResolver } from "../../resolvers/GlobalResolver";
-import { RyujinxSerialResolver, type RyujinxSerialResolverCaches, type RyujinxSerialResolverConfigs } from "../../resolvers/RyujinxSerialResolver";
+
+const langMap: Partial<Record<Language, string>> = {
+	'en': 'EN', // US
+	'ja': 'JA',
+	'fr': 'FR',
+	'de': 'DE',
+	'es': 'ES',
+
+	'it': 'IT',
+	'nl': 'NL',
+	'pt': 'PT',
+	'zhCn': 'ZHCN',
+	'zhTw': 'ZHTW',
+
+	'ko': 'KO'
+};
 
 const wiiUrl = "https://www.gametdb.com/wiitdb.zip";
 const wiiUUrl = "https://www.gametdb.com/wiiutdb.zip";
@@ -42,50 +51,38 @@ type GameTDBGame = {
 	}[];
 };
 
-export interface GameTDBMetadataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin' | 'cemu' | 'rpcs3'> & RyujinxSerialResolverConfigs, ResolverConfig>
-{
+export interface GameTDBMetadataProviderConfig extends ProviderConfig<'dolphin' | 'cemu' | 'rpcs3' | 'ryujinx_serial'>{
 	// https://www.gametdb.com/Main/FAQ > Developers > Naming scheme for languages (locale lang)
-	language: string; // ZH -> ZHCN / ZHTW (in order)
+	language: string | null; // null will try to guess or fallback to english
 }
 
-export interface GameTDBMetadataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'dolphin' | 'cemu' | 'rpcs3'> & RyujinxSerialResolverCaches, ResolverCache>
-{
+export interface GameTDBMetadataProviderCache extends ProviderCache{
 	
 }
 
 // DEV: add support for DS games
-export class GameTDBMetadataProvider extends MetadataProvider<any>{
-	resolvers: GlobalResolver<any>[] = [
-		new MultiIdDolphinResolver(this),
-		new MultiIdCemuResolver(this),
-		new RyujinxSerialResolver(this),
-		new MultiIdRPCS3Resolver(this)
-	];
+export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
+	identifier = "gametdb" as const;
+	title: string = t("providerMetadataGameTDB");
 
-	static identifier: keyof MetadataProviderConfigs = "gametdb";
-	static title: string = t("providerMetadataGameTDB");
-	identifier: keyof MetadataProviderConfigs = GameTDBMetadataProvider.identifier;
-	title: string = GameTDBMetadataProvider.title;
-
-	logger: Logger = new Logger(GameTDBMetadataProvider.identifier);
+	logger: Logger = new Logger(this.identifier);
 
 	gametdb_get_db = callable<[string]>("gametdb_get_db");
 	gametdb_get_entry = callable<[string, string], string | null>("gametdb_get_entry");
 
-	get language(): string
-	{
-		return this.module.config.providers.gametdb.language;
+	// Retrieve selected language, try guessing, or default to english
+	get language(): string{
+		return this.config.language
+			?? langMap[getCurrentLanguage()]
+			?? langMap['en']!;
 	}
 
-	set language(language: string)
-	{
-		this.module.config.providers.gametdb.language = language;
-		void this.module.saveConfig();
+	set language(language: string){
+		this.config.language = language;
+		void this.saveConfig();
 	}
 
 	override async mount(): Promise<void> {
-		await super.mount();
-
 		// Save in backend instead of returning because there's a lot of data
 		let errors: any[] = [];
 		const urls = [
@@ -123,8 +120,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 		return locale?.[1];
 	}
 
-	async provide(appId: number): Promise<MetadataData | undefined>
-	{
+	async provide(appId: number): Promise<MetadataData | undefined>{
 		if(this.excludedApps.includes(appId))
 			return undefined;
 
@@ -232,21 +228,9 @@ export class GameTDBMetadataProvider extends MetadataProvider<any>{
 					label={t("language")}
 					childrenContainerWidth={'fixed'}>
 					<Dropdown
-						rgOptions={[
-							{ data: 'EN', label: getLanguageTitle('en') }, // US
-							{ data: 'JA', label: getLanguageTitle('ja') },
-							{ data: 'FR', label: getLanguageTitle('fr') },
-							{ data: 'DE', label: getLanguageTitle('de') },
-							{ data: 'ES', label: getLanguageTitle('es') },
-
-							{ data: 'IT', label: getLanguageTitle('it') },
-							{ data: 'NL', label: getLanguageTitle('nl') },
-							{ data: 'PT', label: getLanguageTitle('pt') },
-							{ data: 'ZHCN', label: getLanguageTitle('zhCn') },
-							{ data: 'ZHTW', label: getLanguageTitle('zhTw') },
-
-							{ data: 'KO', label: getLanguageTitle('ko') }
-						]}
+						rgOptions={Object.entries(langMap)
+							.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
+							.sort((a, b) => a.label.localeCompare(b.label))}
 						selectedOption={language}
 						disabled={loadingData.loading}
 						onChange={(newVal) => {

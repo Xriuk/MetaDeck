@@ -4,93 +4,129 @@ import {
 	DropdownOption, Field, Focusable, SteamSpinner
 } from "@decky/ui";
 import {FaPlus, FaTrash} from "react-icons/fa";
-import {IDDictionary} from "../Interfaces";
+import {IDDictionary, type EntryData, type ID} from "../Interfaces";
 import {t} from "../useTranslations";
-import type { Provider } from "./Provider";
-import type { Module } from "./Module";
+import { Provider } from "./Provider";
+import { Module } from "./Module";
+import { useMetaDeckState } from "../MetaDeckState";
 
-interface IdOverrideProps<T extends number | string>
-{
-	// Source of parent apps Provider (Module)
-	provider: Provider<any, any, any, any, any, any, any, any, any, any, any, any>,
-	value: IDDictionary,
-	disabled?: boolean,
-	resultsForApp: (appId: number) => Promise<Record<T, OverrideEntry<T>>>,
-	onChange: (overrides: IDDictionary) => void
+interface IdOverrideProps{
+	// Source of parent apps: Module (State) > Provider (Module)
+	source: Module<any, any> |
+		Provider<any, any>;
+	value: IDDictionary;
+	disabled?: boolean;
+	defaultResults?: (entries: EntryData[], appId: number) => Promise<EntryData[]>;
+	resultsForApp: (appId: number) => Promise<EntryData[]>;
+	onChange: (overrides: IDDictionary) => void;
+
+	label?: string;
+	description?: string;
 }
 
-export interface OverrideEntry<T extends number | string>
-{
-	label: string,
-	title: string,
-	id: T,
-	appId: number
+interface OverrideEntry extends EntryData{
+	appDisplayName: string;
+	appId: number;
 }
 
-function objectMap<K extends string | number | symbol, V, T>(object: Record<K, V>, mapFn: (key: K, value: V) => T)
-{
+function objectMap<K extends string | number | symbol, V, T>(object: Record<K, V>, mapFn: (key: K, value: V) => T){
 	return Object.keys(object).reduce((result, key) => {
 		result[key as K] = mapFn(key as K, object[key as K])
 		return result
 	}, {} as Record<K, T>);
 }
 
-export const IdOverrideComponent = <T extends number | string>({
-		provider,
+export const IdOverrideComponent = ({
+		source,
+		defaultResults,
 		resultsForApp,
 		onChange,
 		value,
-		disabled
-	}: IdOverrideProps<T>) => {
+		disabled,
+		label,
+		description
+	}: IdOverrideProps) => {
+	const { modules, overviews } = useMetaDeckState();
 	const [app, setApp] = useState<number>();
-	const [id, setId] = useState<OverrideEntry<T>>();
+	const [id, setId] = useState<OverrideEntry>();
+	const [entries, setEntries] = useState<Record<number, OverrideEntry>>({});
 	const [appOptions, setAppOptions] = useState<DropdownOption[]>([]);
 	const [idOptions, setIdOptions] = useState<DropdownOption[]>([]);
-	const [entries, setEntries] = useState<Record<number, OverrideEntry<T>>>({});
 	const [loaded, setLoaded] = useState(false);
 
 	useEffect(() => {
 		(async () => {
 			setLoaded(false);
-			const ret: Record<T, OverrideEntry<T>> = {} as any;
-			for (const [key, val] of Object.entries(value))
-			{
-				if (val !== 0)
-					ret[key as T] = (await resultsForApp(+key))[val as T];
+			const ret: Record<ID, OverrideEntry> = {} as any;
+			for (const [key, val] of Object.entries(value)){
+				if (val === 0)
+					continue;
+
+				const appId = +key;
+				let result = (await resultsForApp(appId)).find(r => r.id === val);
+				if(result){
+					ret[key] = {
+						...result,
+						appDisplayName: appStore.GetAppOverviewByAppID(appId).display_name,
+						appId: appId,
+					};
+				}
 			}
 			setEntries(ret);
 
-			// Remove Nones
+			// Remove Nones if needed (above we just filtered them out without saving)
 			if(Object.entries(value).some(v => v[1] === 0))
 				onChange(objectMap(entries, (_, value) => value.id));
 
 			setLoaded(true);
-			provider.module.logger.debug("Loaded", ret);
-		})()
+			modules.metadata.logger.debug("Loaded", ret);
+		})();
 	}, [value]);
 
-	useEffect(() => setAppOptions((provider.module as Module<any, any, any, any, any, any, any, any, any, any, any>)
-		.overviews
-		.filter(app => !Object.values(entries).some((value) => value.appId === app.appid))
-		.map(app => ({
-			label: app.display_name,
-			data: app.appid
-		}))
-	), [entries]);
+	useEffect(() => {
+		let appsSource;
+		// Module (State)
+		// Provider (Module)
+		if(source instanceof Module)
+			appsSource = overviews;
+		else{
+			appsSource = (source.module as Module<any, any>)
+				.overviews;
+		}
+
+		setAppOptions(appsSource
+			.filter(app => !Object.values(entries).some((value) => value.appId === app.appid))
+			.map(app => ({
+				label: app.display_name,
+				data: app.appid
+			}))
+		);
+	}, [entries]);
 
 	useEffect(() => {
 		(async () => {
-			setIdOptions(!!app ? Object.values<OverrideEntry<T>>(await resultsForApp(app)).map(value => ({
-				label: `${value.title} (${value.id})`,
-				data: value
-			})) : [])
-		})()
+			if(app){
+				let results = await resultsForApp(app);
+				let selected = defaultResults ? await defaultResults(results, app) : [];
+
+				// Set selected first, if any
+				setIdOptions(results
+					.filter(r => selected.some(s => s.id === r.id))
+					.concat(results.filter(r => !selected.some(s => s.id === r.id)))
+					.map(value => ({
+						label: `${value.title} (${value.id})`,
+						data: value
+					})));
+			}
+			else
+				setIdOptions([]);
+		})();
 	}, [app]);
 
 	return <Fragment>
 		<Field
-			label={t("settingsOverrides")}
-			description={t("settingsOverridesDesc")}
+			label={(label ?? t("settingsOverrides"))}
+			description={(description ?? t("settingsOverridesDesc"))}
 			childrenLayout={"below"}
 			bottomSeparator={"thick"}
 		>
@@ -148,11 +184,11 @@ export const IdOverrideComponent = <T extends number | string>({
 		{loaded ? <Fragment>
 			{
 				Object.values(entries)
-					.sort((a, b) => a.label.localeCompare(b.label))
+					.sort((a, b) => a.appDisplayName.localeCompare(b.appDisplayName))
 					.map((entry) =>
 
 					<Field
-						label={entry.label}
+						label={entry.appDisplayName}
 						childrenLayout={"inline"}
 						bottomSeparator={"standard"}
 					>
@@ -172,7 +208,7 @@ export const IdOverrideComponent = <T extends number | string>({
 								alignContent: "center"
 							}}>
 
-								{`${entry.title} (${entry.id})`}
+								{`${entry.title}${(entry.id !== entry.title ? ` (${entry.id})` : "")}`}
 							</div>
 							<DialogButton
 								style={{

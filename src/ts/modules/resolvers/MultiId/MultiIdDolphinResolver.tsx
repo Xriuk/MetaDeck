@@ -1,30 +1,27 @@
 import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isDolphinGame, romRegex} from "../../../shortcuts";
 import {getAppDetails, toasterToast} from "../../../util";
-import { MultiIdResolver, separator, type MultiIdResolverConfigs } from "./MultiIdResolver";
+import { MultiIdResolver, separator } from "./MultiIdResolver";
 import { call, fetchNoCors } from "@decky/api";
 import type { ID } from "../../../Interfaces";
 import { t } from "../../../useTranslations";
 import { SiDolphin } from "react-icons/si";
 
-export interface MultiIdDolphinResolverConfig extends ResolverConfig
-{
+export interface MultiIdDolphinResolverConfig extends ResolverConfig{
 	
 }
 
-export interface MultiIdDolphinResolverCache extends ResolverCache
-{
+export interface MultiIdDolphinResolverCache extends ResolverCache{
 	game_id6s: Record<number, string | null>;
 }
 
-export class MultiIdDolphinResolver extends MultiIdResolver
-{
-	identifier: keyof MultiIdResolverConfigs = "dolphin";
+export class MultiIdDolphinResolver extends MultiIdResolver<"dolphin">{
+	identifier = "dolphin" as const;
 
 	private titlesCache: Record<string, string> = {}; // ID6: Title
 
 	get gameId6s(): Record<number, string | null>{
-		return (this.cache as MultiIdDolphinResolverCache).game_id6s;
+		return this.cache.game_id6s;
 	}
 
 	override async mount(): Promise<void> {
@@ -48,11 +45,11 @@ export class MultiIdDolphinResolver extends MultiIdResolver
 		}
 	}
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
+
 		return isDolphinGame(getLaunchCommand(details));
 	}
 

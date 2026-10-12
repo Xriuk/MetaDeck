@@ -1,123 +1,91 @@
 import {AsyncMountable} from "../System";
-import {MetaDeckState} from "../MetaDeckState";
-import {Module, ModuleCache, ModuleConfig} from "./Module";
+import {MetaDeckState, type Resolvers} from "../MetaDeckState";
+import {Module, type ModuleCaches, type ModuleConfigs, type ModuleIdentifier} from "./Module";
 import {FC, type ReactNode} from "react";
 import throttledQueue from "throttled-queue";
-import {Resolver, ResolverCache, ResolverConfig} from "./Resolver";
+import {ModuleResolver, type Resolver, type ResolverIdentifier} from "./Resolver";
 import {ID, type IDDictionary} from "../Interfaces";
 import type { SteamAppOverview } from "../SteamTypes";
 
-export interface ProviderConfig<ResConfigs extends Record<keyof ResConfigs, ResConfig>, ResConfig extends ResolverConfig>
-{
-	enabled: boolean,
-	excluded_apps: number[],
-	resolvers: ResConfigs
+export interface ProviderResolverConfig{
+	enabled: boolean;
 }
 
-export interface ProviderCache<ResCaches extends Record<keyof ResCaches, ResCache>, ResCache extends ResolverCache>
-{
-	resolvers: ResCaches
+export interface ProviderConfig<Resolvers extends ResolverIdentifier = never>{
+	enabled: boolean;
+	excluded_apps: number[];
+	// https://github.com/sindresorhus/type-fest/blob/e9f614f191aa039e4aefa2d41d62c2a3fd070cfd/source/is-never.d.ts#L54
+	resolvers: [Resolvers] extends [never] ? {} : Record<Resolvers, ProviderResolverConfig>;
 }
+
+export interface ProviderCache{
+	
+}
+
+export type ProviderIdentifier<Mod extends Module<any, any, any>> =
+	keyof Mod['config']['providers'] & keyof Mod['cache']['providers'];
+
+type Cast<Type, Dest> = Type extends Dest ? Type : never;
+// https://github.com/sindresorhus/type-fest/blob/e9f614f191aa039e4aefa2d41d62c2a3fd070cfd/source/is-any.d.ts#L29
+type IsAny<Type> = 0 extends 1 & Type ? true : false; // NoInfer<T> gives problems...
 
 export abstract class Provider<
-	   Mod extends Module<Mod, Prov, ModConfig, ProvConfigs, ProvConfig, ProvResConfigs, ModCache, ProvCaches, ProvCache, ProvResCaches, Data>,
-	   Prov extends Provider<Mod, Prov, Res, ModConfig, ProvConfigs, ProvConfig, ProvResConfigs, ModCache, ProvCaches, ProvCache, ProvResCaches, Data>,
-	   Res extends Resolver<Mod, Prov, Res, ModConfig, ProvConfigs, ProvConfig, ProvResConfigs, ModCache, ProvCaches, ProvCache, ProvResCaches, Data>,
-	   ModConfig extends ModuleConfig<ProvConfigs, ProvConfig>,
-	   ProvConfigs extends Record<keyof ProvConfigs, ProvConfig>,
-	   ProvConfig extends ProviderConfig<ProvResConfigs[keyof ProvResConfigs], ResolverConfig & ProvResConfigs[keyof ProvResConfigs][keyof ProvResConfigs[keyof ProvResConfigs]]>,
-	   ProvResConfigs extends Record<keyof ProvResConfigs, Record<keyof ProvResConfigs[keyof ProvResConfigs], ProvResConfigs[keyof ProvResConfigs][keyof ProvResConfigs[keyof ProvResConfigs]]>>,
-	   ModCache extends ModuleCache<ProvCaches, ProvCache, Data>,
-	   ProvCaches extends Record<keyof ProvCaches, ProvCache>,
-	   ProvCache extends ProviderCache<ProvResCaches[keyof ProvResCaches], ResolverCache & ProvResCaches[keyof ProvResCaches][keyof ProvResCaches[keyof ProvResCaches]]>,
-	   ProvResCaches extends Record<keyof ProvResCaches, Record<keyof ProvResCaches[keyof ProvResCaches], ResolverCache & (ProvResCaches[keyof ProvResCaches][keyof ProvResCaches[keyof ProvResCaches]])>>,
-	   Data
+	Mod extends Module<any, any, any>,
+	Identifier extends ProviderIdentifier<Mod>,
+
+	ModId extends ModuleIdentifier = Mod extends Module<infer Id, any, any> ? Id : never,
+	ProvConfig extends ProviderConfig<any> = IsAny<Identifier> extends true ?
+		ProviderConfig<any> :
+		Cast<ModuleConfigs[ModId]['providers'][Identifier], ProviderConfig<any>>
 > implements AsyncMountable
 {
-	private readonly _state: MetaDeckState;
-	get state(): MetaDeckState
-	{
-		return this._state;
+	get state(): MetaDeckState{
+		return this.module.state;
 	}
 
 	private readonly _module: Mod;
-	get module(): Mod
-	{
+	get module(): Mod{
 		return this._module;
 	}
 
-	get config(): ProvConfig
-	{
-		return this.module.config.providers[this.identifier as keyof ProvConfigs];
+	get config(): ProvConfig{
+		return this.module.config.providers[this.identifier];
 	}
 
-	get cache(): ProvCache
-	{
-		return this.module.cache.providers[this.identifier as keyof ProvCaches];
+	get cache(): ModuleCaches[ModId]['providers'][Identifier]{
+		return this.module.cache.providers[this.identifier];
 	}
 
-	abstract identifier: string
-	abstract title: string
-
-	abstract resolvers: Res[]
+	abstract identifier: Identifier;
+	abstract title: string;
 
 	protected throttle = throttledQueue(4, 1000, true);
 
-	constructor(module: Mod)
-	{
-		this._state = module.state;
+	constructor(module: Mod){
 		this._module = module;
 	}
 
-	protected handleError(error: Error): never
-	{
+	protected handleError(error: Error): never{
 		if(this.state.loadingData.currentModule)
 			this.state.loadingData.currentModule.error = error
 		throw error
 	}
 
-	async mount(): Promise<void>
-	{
-		try
-		{
-			if (this.enabled){
-				for (const resolver of this.resolvers){
-					if (resolver.enabled)
-						await resolver.mount();
-				}
-			}
-		} catch (e: any)
-		{
-			this.handleError(e);
-		}
+	mount(): Promise<void>{
+		return Promise.resolve();
 	}
 
-	async dismount(): Promise<void>
-	{
-		try
-		{
-			if (this.enabled)
-			{
-				for (const resolver of this.resolvers)
-				{
-					await resolver.dismount();
-				}
-			}
-		} catch (e: any)
-		{
-			this.handleError(e);
-		}
+	dismount(): Promise<void>{
+		return Promise.resolve();
 	}
 
-	get enabled(): boolean
-	{
+	get enabled(): boolean{
 		return this.config.enabled;
 	}
 
-	set enabled(enabled: boolean)
-	{
+	set enabled(enabled: boolean){
 		this.config.enabled = enabled;
-		void this.module.saveConfig();
+		void this.saveConfig();
 	}
 
 	get excludedApps(): number[]
@@ -133,7 +101,7 @@ export abstract class Provider<
 	set excludedAppsSelf(apps: number[])
 	{
 		this.config.excluded_apps = apps;
-		void this.module.saveConfig();
+		void this.saveConfig();
 	}
 
 	get overviews(): SteamAppOverview[]
@@ -146,16 +114,32 @@ export abstract class Provider<
 	{
 		return this.overviews.map(overview => overview.appid);
 	}
-	
-	async resolve(appId: number, external = false): Promise<ID | undefined>
+
+	get resolvers(): IsAny<Identifier> extends true ? Resolver<any>[] : Resolvers[Cast<keyof ProvConfig['resolvers'], ResolverIdentifier>][]{
+		return Object.keys(this.config.resolvers)
+			.map(r => (this.state.resolvers as any)[r] as Resolver<any>)
+			.filter(r => !!r) as any; // Need to filter because we might have old resolvers in config
+	}
+
+	async test(appId: number, external = false): Promise<boolean>
 	{
+		if(!external && this.excludedApps.includes(appId))
+			return false;
+
+		for(let resolver of this.resolvers){
+			if(resolver.isEnabled(this as any) && await resolver.test(appId))
+				return true;
+		}
+
+		return false;
+	}
+	
+	async resolve(appId: number, external = false): Promise<ID | undefined>{
 		if(!external && this.excludedApps.includes(appId))
 			return undefined;
 
-		for (const resolver of this.resolvers)
-		{
-			if (resolver.enabled && await resolver.test(appId))
-			{
+		for (const resolver of this.resolvers){
+			if (resolver.isEnabled(this as any) && await resolver.test(appId)){
 				let id = await resolver.resolve(appId);
 				if(id !== undefined)
 					return id;
@@ -165,35 +149,19 @@ export abstract class Provider<
 		return undefined;
 	}
 
-	async apply(appId: number, data: Data): Promise<void>
-	{
+	async apply(appId: number, data: Mod['data'][number]): Promise<void>{
 		if(this.excludedApps.includes(appId))
 			return;
 
-		for (const resolver of this.resolvers)
-		{
-			if (resolver.enabled && await resolver.test(appId))
-			{
+		for (const resolver of this.resolvers){
+			if (resolver instanceof ModuleResolver && resolver.isEnabled(this as any) && await resolver.test(appId)){
 				await resolver.apply(appId, data);
 				return;
 			}
 		}
 	}
 
-	async test(appId: number, external = false): Promise<boolean>
-	{
-		if(!external && this.excludedApps.includes(appId))
-			return false;
-
-		for(let resolver of this.resolvers){
-			if(await resolver.test(appId))
-				return true;
-		}
-
-		return false;
-	}
-
-	protected onOverridesChange(oldOverrides: IDDictionary, newOverrides: IDDictionary){
+	protected async onOverridesChange(oldOverrides: IDDictionary, newOverrides: IDDictionary){
 		// Retrieve changed app ids: new values, values with changed ids and removed values
 		let changedIds = Object.entries(newOverrides)
 			.filter(([a, i]) => oldOverrides[a as any] !== i)
@@ -201,10 +169,28 @@ export abstract class Provider<
 			.concat(Object.keys(oldOverrides).filter(a => !newOverrides[a as any]) as unknown as number[])
 			.map(a => +a);
 
-		return this.module.onExcludedChange([], changedIds);
+		// Remove cache and re-fetch
+		await this.state.settings.runInDisabledSaveState(async () => {
+			for(let changedId of changedIds){
+				await this.module.removeCache(changedId);
+				await this.module.fetchDataAsync(changedId);
+			}
+		});
+
+		await this.saveCache();
 	}
 
-	abstract provide(appId: number): Promise<Data | undefined>;
+	saveConfig(): Promise<void>
+	{
+		return this.module.saveConfig();
+	}
+
+	saveCache(): Promise<void>
+	{
+		return this.module.saveCache();
+	}
+
+	abstract provide(appId: number): ReturnType<Mod['fetchDataAsync']>;
 
 	icon?: ReactNode;
 	settingsComponent: FC = () => undefined;

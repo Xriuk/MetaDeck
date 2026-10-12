@@ -2,43 +2,31 @@ import {CompatdataData, SteamDeckCompatCategory, SteamTestResult} from "../../..
 import {t} from "../../../useTranslations";
 import { getLaunchCommand, isDolphinGame, isGameCubeId6 } from "../../../shortcuts";
 import Logger from "../../../logger";
-import { MultiIdDolphinResolver } from "../../resolvers/MultiId/MultiIdDolphinResolver";
-import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
-import type { ProviderCache, ProviderConfig } from "../../Provider";
-import type { ResolverCache, ResolverConfig } from "../../Resolver";
+import { separator } from "../../resolvers/MultiId/MultiIdResolver";
+import type { ProviderConfig } from "../../Provider";
 import { removeBeforeAndIncluding, type WikiSearchResponse } from "../../GamesDBResult";
 import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBMetadataProvider";
 import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
 import { SiDolphin } from "react-icons/si";
 import { fetchNoCorsLegacyTimeout, getAppDetails } from "../../../util";
 
-export interface DolphinCompatdataProviderConfig extends Omit<FuzzySearchCompatdataProviderConfig, 'resolvers'>, ProviderConfig<Pick<MultiIdResolverConfigs, 'dolphin'>, ResolverConfig>
-{
+export interface DolphinCompatdataProviderConfig extends Omit<FuzzySearchCompatdataProviderConfig, 'resolvers'>, Pick<ProviderConfig<"dolphin">, 'resolvers'>{
 	
 }
 
-export interface DolphinCompatdataProviderCache extends Omit<FuzzySearchCompatdataProviderCache, 'resolvers'>, ProviderCache<Pick<MultiIdResolverCaches, 'dolphin'>, ResolverCache>
-{
+export interface DolphinCompatdataProviderCache extends FuzzySearchCompatdataProviderCache{
 
 }
 
 // ID provider which fallbacks to fuzzy search
-export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
-{
-	resolvers: MultiIdResolver[] = [
-		new MultiIdDolphinResolver(this)
-	];
+export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"dolphin">{
+	identifier = "dolphin" as const;
+	title = t("providerCompatdataDolphin");
 
-	static identifier: string = "dolphin";
-	static title: string = t("providerCompatdataDolphin");
-	identifier: string = DolphinCompatdataProvider.identifier;
-	title: string = DolphinCompatdataProvider.title;
-
-	logger = new Logger(DolphinCompatdataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private _gameTDBProvider?: GameTDBMetadataProvider;
-	get gameTDBProvider(): GameTDBMetadataProvider
-	{
+	get gameTDBProvider(): GameTDBMetadataProvider{
 		if(!this._gameTDBProvider){
 			this._gameTDBProvider = this.state.modules.metadata.providers.find(p => p instanceof GameTDBMetadataProvider);
 			if(!this._gameTDBProvider)
@@ -48,8 +36,7 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider
 		return this._gameTDBProvider;
 	}
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 

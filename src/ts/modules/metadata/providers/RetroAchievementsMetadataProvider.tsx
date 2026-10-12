@@ -6,33 +6,24 @@ import { t } from "../../../useTranslations";
 import { getAppDetails } from "../../../util";
 import { RetroAchievementsAchievementsProvider } from "../../achievements/providers/RetroAchievementsAchievementsProvider";
 import type { ProviderCache, ProviderConfig } from "../../Provider";
-import type { ResolverCache, ResolverConfig } from "../../Resolver";
-import type { MetadataProviderConfigs } from "../MetadataModule";
 import { MetadataProvider } from "../MetadataProvider";
 
-export interface RetroAchievementsMetadataProviderConfig extends ProviderConfig<{}, ResolverConfig>
-{
+export interface RetroAchievementsMetadataProviderConfig extends ProviderConfig{
 	
 }
 
-export interface RetroAchievementsMetadataProviderCache extends ProviderCache<{}, ResolverCache>
-{
+export interface RetroAchievementsMetadataProviderCache extends ProviderCache{
 	
 }
 
 export class RetroAchievementsMetadataProvider extends MetadataProvider<any>{
-	resolvers = [];
+	identifier = "ra" as const;
+	title = t("providerAchievementsRA");
 
-	static identifier: keyof MetadataProviderConfigs = "ra";
-	static title: string = t("providerAchievementsRA");
-	identifier: keyof MetadataProviderConfigs = RetroAchievementsMetadataProvider.identifier;
-	title: string = RetroAchievementsMetadataProvider.title;
-
-	logger: Logger = new Logger(RetroAchievementsMetadataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private _raProvider?: RetroAchievementsAchievementsProvider;
-	get raProvider(): RetroAchievementsAchievementsProvider
-	{
+	get raProvider(): RetroAchievementsAchievementsProvider{
 		if(!this._raProvider){
 			this._raProvider = this.state.modules.achievements.providers.find(p => p instanceof RetroAchievementsAchievementsProvider);
 			if(!this._raProvider)

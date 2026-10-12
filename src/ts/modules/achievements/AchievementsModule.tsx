@@ -17,71 +17,33 @@ import { XeniaAchievementsProvider, type XeniaAchievementsProviderCache, type Xe
 
 // DEV: figure out what is bypassCounter in MetadataModule and if we can use that too (maybe it's to avoid multiple requests or ripples?)
 
-// DEV: check how to re-implement loading check
-
-export interface AchievementsConfig extends ModuleConfig<AchievementsProviderConfigs, AchievementsProviderConfigTypes>
-{
+export interface AchievementsConfig extends ModuleConfig<AchievementsProviderConfigs>{
 	category: boolean,
 	app_details: boolean,
 	overlay_menu: boolean
 }
 
-export interface AchievementsCache extends ModuleCache<AchievementsProviderCaches, AchievementsProviderCacheTypes, AchievementsData>
-{
+export interface AchievementsCache extends ModuleCache<AchievementsProviderCaches, AchievementsData>{
 
 }
 
-export interface AchievementsProviderConfigs
-{
+export interface AchievementsProviderConfigs{
 	ra: RetroAchievementsAchievementsProviderConfig;
 	rpcs3: RPCS3AchievementsProviderConfig;
 	xenia: XeniaAchievementsProviderConfig;
 }
 
-export interface AchievementsProviderCaches
-{
+export interface AchievementsProviderCaches{
 	ra: RetroAchievementsAchievementsProviderCache;
 	rpcs3: RPCS3AchievementsProviderCache;
 	xenia: XeniaAchievementsProviderCache;
 }
 
-export interface AchievementsProviderResolverConfigs
-{
-	ra: RetroAchievementsAchievementsProviderConfig['resolvers'];
-	rpcs3: RPCS3AchievementsProviderConfig['resolvers'];
-	xenia: XeniaAchievementsProviderConfig['resolvers'];
-}
+export class AchievementsModule extends Module<"achievements", AchievementsProvider<any>>{
+	identifier = "achievements" as const;
+	title = t("moduleAchievements");
 
-export interface AchievementsProviderResolverCaches
-{
-	ra: RetroAchievementsAchievementsProviderCache['resolvers'];
-	rpcs3: RPCS3AchievementsProviderCache['resolvers'];
-	xenia: XeniaAchievementsProviderCache['resolvers'];
-}
-
-export type AchievementsProviderConfigTypes = AchievementsProviderConfigs[keyof AchievementsProviderConfigs];
-
-export type AchievementsProviderCacheTypes = AchievementsProviderCaches[keyof AchievementsProviderCaches];
-
-export class AchievementsModule extends Module<
-	   AchievementsModule,
-	   AchievementsProvider<any>,
-	   AchievementsConfig,
-	   AchievementsProviderConfigs,
-	   AchievementsProviderConfigTypes,
-	   AchievementsProviderResolverConfigs,
-	   AchievementsCache,
-	   AchievementsProviderCaches,
-	   AchievementsProviderCacheTypes,
-	   AchievementsProviderResolverCaches,
-	   AchievementsData
->{
-
-	static identifier: string = "achievements";
-	static title: string = t("moduleAchievements");
-	identifier: string = AchievementsModule.identifier;
-	title: string = AchievementsModule.title;
-	logger: Logger = new Logger(AchievementsModule.identifier)
+	logger: Logger = new Logger(this.identifier);
 
 	providers: AchievementsProvider<any>[] = [
 		new RetroAchievementsAchievementsProvider(this),
@@ -93,7 +55,7 @@ export class AchievementsModule extends Module<
 		return false;
 	}
 
-	public override async removeCache(appId: number): Promise<void> {
+	override async removeCache(appId: number): Promise<void> {
 		await super.removeCache(appId);
 
 		let appData = appDetailsStore.GetAppData(appId);

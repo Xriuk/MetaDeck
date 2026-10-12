@@ -1,5 +1,5 @@
-import {CompatdataData, SteamDeckCompatCategory, SteamTestResult, VerifiedDBResults, YesNo, type ID} from "../../../Interfaces";
-import {closestWithLimit, distanceWithLimit, getAppDetails, toasterToast} from "../../../util";
+import {CompatdataData, SteamDeckCompatCategory, SteamTestResult, VerifiedDBResults, YesNo} from "../../../Interfaces";
+import {distanceWithLimit, getAppDetails, toasterToast} from "../../../util";
 import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import {
@@ -12,31 +12,23 @@ import Logger from "../../../logger";
 import { FaGamepad } from "react-icons/fa";
 import { distance } from "fastest-levenshtein";
 
-export interface EmuDeckCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig
-{
+export interface EmuDeckCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig{
 
 }
 
-export interface EmuDeckCompatdataProviderCache extends FuzzySearchCompatdataProviderCache
-{
+export interface EmuDeckCompatdataProviderCache extends FuzzySearchCompatdataProviderCache{
 
 }
 
-export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
-{
-	static identifier: string = "emudeck";
-	static title: string = t("providerCompatdataEmuDeck");
-	identifier: string = EmuDeckCompatdataProvider.identifier;
-	title: string = EmuDeckCompatdataProvider.title;
+export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider<"emudeck">{
+	identifier = "emudeck" as const;
+	title = t("providerCompatdataEmuDeck");
 
-	logger: Logger = new Logger(EmuDeckCompatdataProvider.identifier)
+	logger = new Logger(this.identifier);
 
 	private verifiedDB: Record<string, VerifiedDBResults> = {};
 
-	override async mount(): Promise<void>
-	{
-		await super.mount();
-
+	override async mount(): Promise<void>{
 		const response = (await fetchNoCors("https://opensheet.elk.sh/1fRqvAh_wW8Ho_8i966CCSBgPJ2R_SuDFIvvKsQCv05w/Database"));
 		if (!response.ok || response.status !== 200){
 			toasterToast(t("initError"), this);
@@ -98,8 +90,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 			return undefined; // Unknown (match all)
 	}
 
-	override async test(appId: number): Promise<boolean>
-	{
+	override async test(appId: number): Promise<boolean>{
 		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 
@@ -291,67 +282,17 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider
 		}
 	}
 
-	protected override async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>{
+	protected override async getAllCompatdataForGame(appId: number): Promise<CompatdataData[]>{
 		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
-			return undefined;
+			return [];
 
 		const details = await getAppDetails(appId);
 		if(!details)
-			return undefined;
-
-		this.logger.debug(`Fetching compatdata for game ${appId}`);
+			return [];
 
 		const display_name = details.strDisplayName;
 		const console_names = await this.getConsoleNames(appId);
-		const results = await this.search(display_name, console_names);
-		if (!results.length)
-			return undefined;
-
-		const data_id = this.overrides[appId];
-		this.logger.debug("data_id", data_id);
-		
-		let games: CompatdataData[];
-		if (data_id === undefined)
-		{
-			const names = results.map(value => value.title);
-			const closest_name = closestWithLimit(this.fuzziness, display_name, names);
-			this.logger.debug(closest_name, names);
-
-			games = results.filter(value => value.title === closest_name);
-			this.logger.debug("Games: ", games);
-		}
-		else
-			games = results.filter(value => value.id === data_id);
-		
-		const game = games.reverse().pop();
-		if (game)
-			await this.enrichCompatdataForGame(appId, game);
-		this.logger.debug(game);
-		return game;
-	}
-
-	protected override async getAllCompatdataForGame(appId: number): Promise<Record<ID, Pick<CompatdataData, 'title' | 'id'>> | undefined>
-	{
-		if (this.excludedApps.includes(appId))
-			return undefined;
-
-		const details = await getAppDetails(appId);
-		if(!details)
-			return undefined;
-
-		const display_name = details.strDisplayName;
-		const console_names = await this.getConsoleNames(appId);
-		const results = await this.search(display_name, console_names);
-
-		// We add all results without limiting them for overrides
-		if (!results.length)
-			return undefined;
-
-		let ret: Record<ID, Pick<CompatdataData, 'title' | 'id'>> = {};
-		for (let game of results){
-			ret[game.id] = game;
-		}
-		return ret;
+		return await this.search(display_name, console_names);
 	}
 
 	override icon = <FaGamepad/>;

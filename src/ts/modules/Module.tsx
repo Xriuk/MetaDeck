@@ -9,112 +9,110 @@ import {SteamAppDetails, SteamAppOverview} from "../SteamTypes";
 import {getAppDetails, stateTransaction} from "../util";
 import {format, t} from "../useTranslations";
 import PromisePool from "es6-promise-pool";
-import {ResolverCache, ResolverConfig} from "./Resolver";
 import { SteamAppTypeShortcut } from "../Interfaces";
 import type { AchievementsCache, AchievementsConfig } from "./achievements/AchievementsModule";
 import { Settings } from "../settings";
 import { merge } from "lodash-es";
 
-export interface ModuleConfig<ProvConfigs extends Record<keyof ProvConfigs, ProvConfig>, ProvConfig extends ProviderConfig<any, any>>
-{
-	enabled: boolean,
-	excluded_apps: number[],
-	providers: ProvConfigs
+type ProviderOverrides<Providers extends string | symbol | number = string> = Record<number, Extract<Providers, string>>;
+
+export interface ModuleConfig<ProvConfigs extends Record<keyof ProvConfigs, ProviderConfig<any>>>{
+	enabled: boolean;
+	excluded_apps: number[];
+	providers_overrides: ProviderOverrides<keyof ProvConfigs>;
+	providers: ProvConfigs;
 }
 
-export interface ModuleCache<ProvCaches extends Record<keyof ProvCaches, ProvCache>, ProvCache extends ProviderCache<any, any>, Data>
-{
-	data: Record<number, Data>,
-	data_providers: Record<number, string>,
-	providers: ProvCaches
+export interface ModuleCache<ProvCaches extends Record<keyof ProvCaches, ProviderCache>, Data>{
+	data: Record<number, Data>;
+	data_providers: Record<number, keyof ProvCaches>;
+	providers: ProvCaches;
 }
 
-export interface ModuleConfigs
-{
+export interface ModuleConfigs{
 	metadata: MetadataConfig;
 	compatdata: CompatdataConfig;
 	achievements: AchievementsConfig;
 }
 
-export interface ModuleCaches
-{
+export interface ModuleCaches{
 	metadata: MetadataCache;
 	compatdata: CompatdataCache;
 	achievements: AchievementsCache;
 }
 
+export type ModuleIdentifier = keyof ModuleConfigs & keyof ModuleCaches;
+
 export abstract class Module<
-	   Mod extends Module<Mod, Prov, ModConfig, ProvConfigs, ProvConfig, ProvResConfigs, ModCache, ProvCaches, ProvCache, ProvResCaches, Data>,
-	   Prov extends Provider<Mod, Prov, any, ModConfig, ProvConfigs, ProvConfig, ProvResConfigs, ModCache, ProvCaches, ProvCache, ProvResCaches, Data>,
-	   ModConfig extends ModuleConfig<ProvConfigs, ProvConfig>,
-	   ProvConfigs extends Record<keyof ProvConfigs, ProvConfig>,
-	   ProvConfig extends ProviderConfig<ProvResConfigs[keyof ProvResConfigs], ResolverConfig & ProvResConfigs[keyof ProvResConfigs][keyof ProvResConfigs[keyof ProvResConfigs]]>,
-	   ProvResConfigs extends Record<keyof ProvResConfigs, Record<keyof ProvResConfigs[keyof ProvResConfigs], ProvResConfigs[keyof ProvResConfigs][keyof ProvResConfigs[keyof ProvResConfigs]]>>,
-	   ModCache extends ModuleCache<ProvCaches, ProvCache, Data>,
-	   ProvCaches extends Record<keyof ProvCaches, ProvCache>,
-	   ProvCache extends ProviderCache<ProvResCaches[keyof ProvResCaches], ResolverCache & ProvResCaches[keyof ProvResCaches][keyof ProvResCaches[keyof ProvResCaches]]>,
-	   ProvResCaches extends Record<keyof ProvResCaches, Record<keyof ProvResCaches[keyof ProvResCaches], ProvResCaches[keyof ProvResCaches][keyof ProvResCaches[keyof ProvResCaches]]>>,
-	   Data
+	Identifier extends ModuleIdentifier,
+	Prov extends Provider<any, any>,
+
+	Data = ModuleCaches[Identifier]['data'][number]
 > implements AsyncMountable
 {
 
-	state: MetaDeckState;
+	private readonly _state: MetaDeckState;
+	get state(): MetaDeckState{
+		return this._state;
+	}
 
-	abstract identifier: string;
+
+	abstract identifier: Identifier;
 	abstract title: string;
 
 	abstract logger: Logger;
 
 	abstract providers: Prov[];
 
-	get config(): ModConfig
-	{
-		return this.state.settings.config.modules[this.identifier as keyof typeof this.state.settings.config.modules] as unknown as ModConfig;
+	get config(){
+		return this.state.settings.config.modules[this.identifier];
 	}
 
-	get cache(): ModCache
-	{
-		return this.state.settings.cache.modules[this.identifier as keyof typeof this.state.settings.cache.modules] as unknown as ModCache;
+	get cache(){
+		return this.state.settings.cache.modules[this.identifier];
 	}
 
-	dependencies: (keyof Modules)[] = []
+	dependencies: (keyof Modules)[] = [];
 
 	private _unmetDependency: boolean = false;
 
-	constructor(state: MetaDeckState)
-	{
+	constructor(state: MetaDeckState){
 		state.mounts.addMount(this);
 		this.addMounts(state.mounts);
-		this.state = state;
+		this._state = state;
 	}
 
-	protected handleError(error: Error): never
-	{
+	protected handleError(error: Error): never{
 		if(this.state.loadingData.currentModule)
 			this.state.loadingData.currentModule.error = error
 		throw error
 	}
 
-	get data(): Record<number, Data>
-	{
-		return this.cache.data;
+	get data(): Record<number, Data>{
+		return this.cache.data as any;
 	}
 
-	set data(data: Record<number, Data>)
-	{
-		this.cache.data = data;
+	set data(data: Record<number, Data>){
+		this.cache.data = data as any;
 		void this.saveCache();
 	}
 
-	get dataProviders(): Record<number, string>
-	{
+	get dataProviders(){
 		return this.cache.data_providers;
 	}
 
-	set dataProviders(data: Record<number, string>)
-	{
+	set dataProviders(data: typeof this.cache.data_providers){
 		this.cache.data_providers = data;
 		void this.saveCache();
+	}
+
+	get providerOverrides(){
+		return this.config.providers_overrides;
+	}
+
+	set providerOverrides(data: typeof this.config.providers_overrides){
+		this.config.providers_overrides = data;
+		void this.saveConfig();
 	}
 
 	get enabled(): boolean
@@ -180,8 +178,7 @@ export abstract class Module<
 			await this.applyApp(overview, await getAppDetails(appId));
 	}
 
-	async applyApp(overview: SteamAppOverview, details: SteamAppDetails | null)
-	{
+	async applyApp(overview: SteamAppOverview, details: SteamAppDetails | null){
 		if(this.excludedApps.includes(overview.appid))
 			return;
 
@@ -195,36 +192,31 @@ export abstract class Module<
 						await this.applyDetails(details)
 				})
 			}
-		} catch (e: any)
-		{
+		}
+		catch (e: any){
 			this.handleError(e);
 		}
 
 	}
 
-	applyOverview(_overview: SteamAppOverview): Promise<void>
-	{
+	applyOverview(_overview: SteamAppOverview): Promise<void>{
 		return Promise.resolve();
 	}
 
-	applyDetails(_details: SteamAppDetails): Promise<void>
-	{
+	applyDetails(_details: SteamAppDetails): Promise<void>{
 		return Promise.resolve();
 	}
 
-	async removeCache(appId: number): Promise<void>
-	{
+	async removeCache(appId: number): Promise<void>{
 		await this.state.settings.runInDisabledSaveState(() => {
 			delete this.data[appId];
-			delete this.dataProviders[appId];
 			return Promise.resolve();
 		});
 
 		await this.saveCache();
 	}
 
-	async clearCache(): Promise<void>
-	{
+	async clearCache(): Promise<void>{
 		await this.state.settings.runInDisabledSaveState(async () => {
 			for (let appId of Object.keys(this.data)){
 				await this.removeCache(+appId);
@@ -238,13 +230,11 @@ export abstract class Module<
 		await this.saveCache();
 	}
 
-	saveConfig(): Promise<void>
-	{
+	saveConfig(): Promise<void>{
 		return this.state.settings.writeConfig();
 	}
 
-	saveCache(): Promise<void>
-	{
+	saveCache(): Promise<void>{
 		return this.state.settings.writeCache();
 	}
 
@@ -252,18 +242,15 @@ export abstract class Module<
 
 	abstract progressDescription(data?: Data): string
 
-	get missingDescription(): string
-	{
+	get missingDescription(): string{
 		return format(t("noData"), this.title)
 	}
 
-	public hasData(appId: number): boolean
-	{
+	public hasData(appId: number): boolean{
 		return !!this.data[appId];
 	}
 
-	public fetchData(appId: number): Data | undefined
-	{
+	public fetchData(appId: number): Data | undefined{
 		if(this.excludedApps.includes(appId))
 			return undefined;
 
@@ -286,21 +273,52 @@ export abstract class Module<
 			if (!this.hasData(appId)){
 				// Prevent saving multiple times inside providers
 				await this.state.settings.runInDisabledSaveState(async () => {
-					for (const provider of this.providers){
-						if (provider.enabled && await provider.test(appId)){
+					// Check if we have a saved provider
+					if(this.dataProviders[appId] || this.providerOverrides[appId]){
+						let providerId = this.dataProviders[appId] ?? this.providerOverrides[appId];
+						const provider = this.providers.find(p => p.identifier === providerId);
+						if(provider?.enabled && await provider.test(appId)){
 							const data = await provider.provide(appId);
-							if (data){
+							if(data){
+								// DEV: merge with below
 								await this.provideAdditional(appId, data);
 								this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
 
 								this.data[appId] = data;
 								this.dataProviders[appId] = provider.identifier;
-								break;
 							}
+							else if(!this.providerOverrides[appId])
+								delete this.dataProviders[appId];
+							else
+								return undefined;
+						}
+						else if(!this.providerOverrides[appId])
+							delete this.dataProviders[appId];
+						else
+							return undefined;
+					}
+
+					// Retrieve a new provider
+					if(!this.hasData(appId)){
+						for (const provider of this.providers){
+							if(!provider.enabled || !await provider.test(appId))
+								continue;
+							
+							const data = await provider.provide(appId);
+							if(!data)
+								continue;
+							
+							await this.provideAdditional(appId, data);
+							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
+
+							this.data[appId] = data;
+							this.dataProviders[appId] = provider.identifier;
+							break;
 						}
 					}
 					
-					if(!this.data[appId]){
+					// Provide default data, if any
+					if(!this.hasData(appId)){
 						let defaultData = await this.provideDefault(appId);
 						if(defaultData){
 							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, defaultData, 'default');
@@ -308,7 +326,7 @@ export abstract class Module<
 							this.data[appId] = defaultData;
 						}
 						else
-							this.logger.debug(appId, "no provider");
+							this.logger.debug(appId, "no provider/default");
 					}
 				});
 
@@ -434,6 +452,7 @@ export abstract class Module<
 		return undefined
 	}
 
+	// DEV: find a way to remove/merge(?)
 	async provideAdditional(appId: number, data: Data): Promise<void>
 	{
 		if(this.excludedApps.includes(appId))
@@ -449,16 +468,28 @@ export abstract class Module<
 		}
 	}
 
+	onOverridesChange(oldOverrides: typeof this.config.providers_overrides, newOverrides: typeof this.config.providers_overrides){
+		// Retrieve changed app ids: new values, values with changed ids and removed values
+		let changedIds = Object.entries(newOverrides)
+			.filter(([a, i]) => oldOverrides[a as any] !== i)
+			.map(([a, _]) => a as unknown as number)
+			.concat(Object.keys(oldOverrides).filter(a => !newOverrides[a as any]) as unknown as number[])
+			.map(a => +a);
+
+		return this.onExcludedChange([], changedIds);
+	}
+
 	async onExcludedChange(oldExcluded: number[], newExcluded: number[]){
 		// Retrieve changed app ids: new values and removed values
 		let changedIds = newExcluded
 			.filter(a => !oldExcluded.includes(a))
 			.concat(oldExcluded.filter(a => !newExcluded.includes(a)));
 
-		// Remove cache and re-fetch
+		// Remove cache, clear provider and re-fetch
 		await this.state.settings.runInDisabledSaveState(async () => {
 			for(let changedId of changedIds){
 				await this.removeCache(changedId);
+				delete this.dataProviders[changedId];
 				await this.fetchDataAsync(changedId);
 			}
 		});

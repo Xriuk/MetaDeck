@@ -3,7 +3,6 @@ import {useMetaDeckState} from "../MetaDeckState";
 import {DialogBody, DialogControlsSection, SidebarNavigation, SidebarNavigationPage} from "@decky/ui";
 import {ModuleSettingsComponent} from "./ModuleSettingsComponent";
 import {Module} from "./Module";
-import {Provider} from "./Provider";
 import { t } from "../useTranslations";
 import { FaWrench } from "react-icons/fa";
 import { ExcludeAppComponent } from "./ExcludeAppComponent";
@@ -30,8 +29,7 @@ export const SettingsComponent: FC = () => {
 		</DialogBody>
 	}];
 
-	for (let module of (Object.values(state.modules) as Module<any, Provider<any, any, any, any, any, any, any, any, any, any, any, any>, any, any, any, any, any, any, any, any, any>[]))
-	{
+	for (let module of (Object.values(state.modules) as Module<any, any>[])){
 		pages.push({
 			title: module.title,
 			icon: module.icon,

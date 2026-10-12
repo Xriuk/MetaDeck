@@ -8,78 +8,24 @@ import {
 	getLaunchCommand,
 	getShortcutCategories
 } from "../../../shortcuts";
-import {ResolverCache, ResolverConfig} from "../../Resolver";
-import {
-	GOGMetadataProviderJunkStoreResolver,
-	GOGMetadataProviderJunkStoreResolverCache,
-	GOGMetadataProviderJunkStoreResolverConfig
-} from "../resolvers/GOG/GOGMetadataProviderJunkStoreResolver";
-import {GOGMetadataProviderResolver, separator} from "../resolvers/GOG/GOGMetadataProviderResolver";
-import {
-	GOGMetadataProviderNSLResolver,
-	GOGMetadataProviderNSLResolverCache,
-	GOGMetadataProviderNSLResolverConfig
-} from "../resolvers/GOG/GOGMetadataProviderNSLResolver";
-import {
-	GOGMetadataProviderHeroicResolver,
-	GOGMetadataProviderHeroicResolverCache,
-	GOGMetadataProviderHeroicResolverConfig
-} from "../resolvers/GOG/GOGMetadataProviderHeroicResolver";
-import {MetadataProviderConfigs} from "../MetadataModule";
 import { SteamMetadataProvider } from "./SteamMetadataProvider";
 import { SiGogdotcom } from "react-icons/si";
+import { separator } from "../resolvers/GOG/GOGMetadataProviderResolver";
 
-export interface GOGMetadataProviderConfig extends ProviderConfig<GOGMetadataProviderResolverConfigs, GOGMetadataProviderResolverConfig>
-{
+export interface GOGMetadataProviderConfig extends ProviderConfig<'gog_nsl' | 'gog_junk' | 'gog_heroic'>{
 	
 }
 
-export interface GOGMetadataProviderCache extends ProviderCache<GOGMetadataProviderResolverCaches, GOGMetadataProviderResolverCache>
-{
+export interface GOGMetadataProviderCache extends ProviderCache{
 
 }
 
-export interface GOGMetadataProviderResolverConfigs
-{
-	junk: GOGMetadataProviderJunkStoreResolverConfig,
-	nsl: GOGMetadataProviderNSLResolverConfig,
-	heroic: GOGMetadataProviderHeroicResolverConfig
-}
-
-export interface GOGMetadataProviderResolverCaches
-{
-	junk: GOGMetadataProviderJunkStoreResolverCache,
-	nsl: GOGMetadataProviderNSLResolverCache,
-	heroic: GOGMetadataProviderHeroicResolverCache
-}
-
-export interface GOGMetadataProviderResolverConfig extends ResolverConfig
-{
-
-}
-
-export interface GOGMetadataProviderResolverCache extends ResolverCache
-{
-	
-}
-
-export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderResolver>
-{
-
-	static identifier: keyof MetadataProviderConfigs = "gog";
-	static title: string = t("providerMetadataGOG");
-	identifier: keyof MetadataProviderConfigs = GOGMetadataProvider.identifier;
-	title: string = GOGMetadataProvider.title;
-
-	resolvers: GOGMetadataProviderResolver[] = [
-		new GOGMetadataProviderJunkStoreResolver(this),
-		new GOGMetadataProviderNSLResolver(this),
-		new GOGMetadataProviderHeroicResolver(this)
-	];
+export class GOGMetadataProvider extends MetadataProvider<"gog">{
+	identifier = "gog" as const;
+	title = t("providerMetadataGOG");
 
 	private _steamProvider?: SteamMetadataProvider;
-	get steamProvider(): SteamMetadataProvider
-	{
+	get steamProvider(): SteamMetadataProvider{
 		if(!this._steamProvider){
 			this._steamProvider = this.module.providers.find(p => p instanceof SteamMetadataProvider);
 			if(!this._steamProvider)
@@ -89,8 +35,7 @@ export class GOGMetadataProvider extends MetadataProvider<GOGMetadataProviderRes
 		return this._steamProvider;
 	}
 
-	provide(appId: number): Promise<MetadataData | undefined>
-	{
+	provide(appId: number): Promise<MetadataData | undefined>{
 		if(this.excludedApps.includes(appId))
 			return Promise.resolve(undefined);
 

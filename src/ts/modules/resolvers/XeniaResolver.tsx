@@ -1,41 +1,27 @@
-import {ResolverCache, ResolverConfig} from "../Resolver";
+import {Resolver, ResolverCache, ResolverConfig} from "../Resolver";
 import {getLaunchCommand, isXeniaGame, romRegex} from "../../shortcuts";
 import {getAppDetails} from "../../util";
 import { call } from "@decky/api";
 import type { ID } from "../../Interfaces";
-import { GlobalResolver } from "./GlobalResolver";
 import { FaXbox } from "react-icons/fa";
 
-export interface XeniaResolverConfig extends ResolverConfig
-{
+export interface XeniaResolverConfig extends ResolverConfig{
 	
 }
 
-export interface XeniaResolverCache extends ResolverCache
-{
+export interface XeniaResolverCache extends ResolverCache{
 	title_ids: Record<number, string | null>;
 }
 
-export interface XeniaResolverConfigs
-{
-	xenia: XeniaResolverConfig;
-}
 
-export interface XeniaResolverCaches
-{
-	xenia: XeniaResolverCache;
-}
-
-export class XeniaResolver extends GlobalResolver<XeniaResolver>
-{
-	identifier: keyof XeniaResolverConfigs = "xenia";
+export class XeniaResolver extends Resolver<"xenia">{
+	identifier = "xenia" as const;
 
 	get titleIds(): Record<number, string | null>{
-		return (this.cache as XeniaResolverCache).title_ids;
+		return this.cache.title_ids;
 	}
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;

@@ -1,29 +1,7 @@
-import {Provider} from "../Provider";
-import {AchievementsData} from "../../Interfaces";
-import {
-	AchievementsCache,
-	AchievementsConfig,
-	AchievementsModule, AchievementsProviderCaches, AchievementsProviderCacheTypes,
-	AchievementsProviderConfigs,
-	AchievementsProviderConfigTypes, AchievementsProviderResolverCaches, AchievementsProviderResolverConfigs
-} from "./AchievementsModule";
-import type { AchievementsProviderResolver } from "./AchievementsProviderResolver";
+import {Provider, type ProviderIdentifier} from "../Provider";
+import type { AchievementsModule } from "./AchievementsModule";
 
-// DEV: maybe fetch separately achievements details and progress? Add method?
-
-export abstract class AchievementsProvider<Res extends AchievementsProviderResolver<Res>> extends Provider<
-	   AchievementsModule,
-	   AchievementsProvider<Res>,
-	   Res,
-	   AchievementsConfig,
-	   AchievementsProviderConfigs,
-	   AchievementsProviderConfigTypes,
-	   AchievementsProviderResolverConfigs,
-	   AchievementsCache,
-	   AchievementsProviderCaches,
-	   AchievementsProviderCacheTypes,
-	   AchievementsProviderResolverCaches,
-	   AchievementsData
->
-{
+export abstract class AchievementsProvider<Identifier extends ProviderIdentifier<AchievementsModule>>
+	extends Provider<AchievementsModule, Identifier, "achievements">{
+	
 }

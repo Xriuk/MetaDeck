@@ -1,30 +1,25 @@
-import {ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isPCSX2Game, romRegex} from "../../../shortcuts";
 import {getAppDetails} from "../../../util";
-import { type MultiIdResolverConfigs } from "./MultiIdResolver";
 import { call } from "@decky/api";
-import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache } from "./MultiIdSerialStation";
+import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache, type MultiIdSerialStationResolverConfig } from "./MultiIdSerialStationResolver";
 import { SiPlaystation2 } from "react-icons/si";
 
-export interface MultiIdPCSX2ResolverConfig extends ResolverConfig
-{
+export interface MultiIdPCSX2ResolverConfig extends MultiIdSerialStationResolverConfig{
 	
 }
 
-export interface MultiIdPCSX2ResolverCache extends MultiIdSerialStationResolverCache
-{
+export interface MultiIdPCSX2ResolverCache extends MultiIdSerialStationResolverCache{
 
 }
 
-export class MultiIdPCSX2Resolver extends MultiIdSerialStationResolver
-{
-	identifier: keyof MultiIdResolverConfigs = "pcsx2";
+export class MultiIdPCSX2Resolver extends MultiIdSerialStationResolver<"pcsx2">{
+	identifier = "pcsx2" as const;
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
+
 		return isPCSX2Game(getLaunchCommand(details));
 	}
 

@@ -12,17 +12,18 @@ import {Provider} from "./Provider";
 import {Modules, useMetaDeckState} from "../MetaDeckState";
 import {format, t} from "../useTranslations";
 import { ExcludeAppComponent } from "./ExcludeAppComponent";
+import { IdOverrideComponent } from "./IdOverrideComponent";
 
-export interface ModuleSettingsProps
-{
-	module: Module<any, any, any, any, any, any, any, any, any, any, any>,
-	providers: Provider<any, any, any, any, any, any, any, any, any, any, any, any>[]
+export interface ModuleSettingsProps{
+	module: Module<any, Provider<any, any>>;
+	providers: Provider<any, any>[];
 }
 
 export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 	const {modules, loadingData} = useMetaDeckState();
 
 	const [enabled, setEnabled] = useState(module.enabled);
+	const [overrides, setOverrides] = useState(module.providerOverrides);
 	const [excluded, setExcluded] = useState(module.excludedAppsSelf);
 
 	const disabled = module.dependencies
@@ -33,6 +34,11 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 		.map((key) => modules[key])
 		.filter((mod) => !mod.isValid)
 		.map((mod) => mod.title);
+
+	const providers = Promise.resolve(module.providers.map(p => ({
+		title: p.title,
+		id: p.identifier
+	})));
 
 	return (
 		<DialogBody>
@@ -71,6 +77,25 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 			</DialogControlsSection>
 
 			<module.settingsComponent/>
+
+			<DialogControlsSection>
+				<IdOverrideComponent
+					description={t("settingsProviderOverridesDesc")}
+					source={module}
+					value={overrides}
+					disabled={loadingData.loading}
+					onChange={async (value) => {
+						let oldValue = module.providerOverrides;
+						setOverrides(value as any);
+						module.providerOverrides = value as any;
+						await module.onOverridesChange(oldValue, value as any);
+					}}
+					resultsForApp={_ => providers}
+					defaultResults={(results, appId) => {
+						let selected = module.providerOverrides[appId];
+						return Promise.resolve(selected ? results.filter(r => r.id === selected) : []);
+					}} />
+			</DialogControlsSection>
 
 			<DialogControlsSection>
 				<ExcludeAppComponent

@@ -5,16 +5,17 @@ import {callable} from "@decky/api";
 import {ModuleCaches, ModuleConfigs} from "./modules/Module";
 import {merge} from "lodash-es";
 import { Mutex } from "async-mutex";
+import type { ResolverConfigs, ResolverCaches } from "./modules/Resolver";
 
 export type ConfigData = {
 	excluded_apps: number[];
 	modules: ModuleConfigs;
-	resolvers: Re
+	resolvers: ResolverConfigs;
 }
 
 export type CacheData = {
 	modules: ModuleCaches;
-	resolvers: 
+	resolvers: ResolverCaches;
 }
 
 export class Settings
@@ -43,14 +44,15 @@ export class Settings
 				install_size: true,
 				install_date: true,
 				excluded_apps: [],
+				providers_overrides: {},
 				providers: {
 					// Id-based (localized)
 					titledb: {
 						enabled: true,
 						excluded_apps: [],
-						language: "US.en",
+						language: null,
 						resolvers: {
-							ryujinx: {
+							ryujinx_titleid: {
 								enabled: true
 							}
 						}
@@ -58,7 +60,7 @@ export class Settings
 					gametdb: {
 						enabled: true,
 						excluded_apps: [],
-						language: "EN",
+						language: null,
 						resolvers: {
 							dolphin: {
 								enabled: true
@@ -66,7 +68,7 @@ export class Settings
 							cemu: {
 								enabled: true
 							},
-							ryujinx: {
+							ryujinx_serial: {
 								enabled: true
 							},
 							rpcs3: {
@@ -79,13 +81,13 @@ export class Settings
 						enabled: true,
 						excluded_apps: [],
 						resolvers: {
-							junk: {
+							gog_junk: {
 								enabled: true
 							},
-							nsl: {
+							gog_nsl: {
 								enabled: true
 							},
-							heroic: {
+							gog_heroic: {
 								enabled: true
 							}
 						}
@@ -95,7 +97,7 @@ export class Settings
 						enabled: true,
 						fuzziness: 5,
 						overrides: {},
-						language: "english",
+						language: null,
 						excluded_apps: [],
 						resolvers: {}
 					},
@@ -129,6 +131,7 @@ export class Settings
 				notes: true,
 				test_results: true,
 				excluded_apps: [],
+				providers_overrides: {},
 				providers: {
 					// Id-based
 					pcsx2: {
@@ -193,6 +196,7 @@ export class Settings
 				app_details: true,
 				overlay_menu: true,
 				excluded_apps: [],
+				providers_overrides: {},
 				providers: {
 					ra: {
 						enabled: true,
@@ -209,21 +213,20 @@ export class Settings
 					rpcs3: {
 						enabled: true,
 						user_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/home/00000001',
-						language: 'EN',
+						language: null,
 						trophy_categories: true,
 						psn_npsso: '',
 						excluded_apps: [],
 						resolvers: {
-							rpcs3: {
-								enabled: true,
-								hdd_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/'
+							rpcs3_npwr: {
+								enabled: true
 							}
 						}
 					},
 					xenia: {
 						enabled: true,
 						user_path: '',
-						language: 'EN',
+						language: null,
 						gamerscore: true,
 						description_locked: null,
 						excluded_apps: [],
@@ -235,6 +238,22 @@ export class Settings
 					}
 				}
 			}
+		},
+		resolvers: {
+			ra: {},
+			pcsx2: {},
+			rpcs3: {},
+			rpcs3_npwr: {
+				hdd_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/'
+			},
+			xenia: {},
+			dolphin: {},
+			cemu: {},
+			ryujinx_titleid: {},
+			ryujinx_serial: {},
+			gog_nsl: {},
+			gog_junk: {},
+			gog_heroic: {}
 		}
 	}
 
@@ -244,90 +263,25 @@ export class Settings
 				data: {},
 				data_providers: {},
 				providers: {
-					gog: {
-						resolvers: {
-							junk: {},
-							nsl: {},
-							heroic: {}
-						}
-					},
-					steam: {
-						resolvers: {}
-					},
-					rawg: {
-						resolvers: {}
-					},
-					gametdb: {
-						resolvers: {
-							dolphin: {
-								game_id6s: {}
-							},
-							cemu: {
-								game_codes: {}
-							},
-							ryujinx: {
-								title_ids: {},
-								ryujinx_prod_keys: undefined
-							},
-							rpcs3: {
-								title_ids: {}
-							}
-						}
-					},
-					lizardbyte: {
-						resolvers: {}
-					},
-					ra: {
-						resolvers: {}
-					},
-					titledb: {
-						resolvers: {
-							ryujinx: {
-								title_ids: {},
-								ryujinx_prod_keys: undefined
-							}
-						}
-					}
+					gog: {},
+					steam: {},
+					rawg: {},
+					gametdb: {},
+					lizardbyte: {},
+					ra: {},
+					titledb: {}
 				}
 			},
 			compatdata: {
 				data: {},
 				data_providers: {},
 				providers: {
-					emudeck: {
-						resolvers: {}
-					},
-					pcsx2: {
-						resolvers: {
-							pcsx2: {
-								title_ids: {}
-							}
-						}
-					},
-					rpcs3: {
-						resolvers: {
-							rpcs3: {
-								title_ids: {}
-							}
-						}
-					},
-					xenia: {
-						resolvers: {
-							xenia: {
-								title_ids: {}
-							}
-						}
-					},
-					dolphin: {
-						resolvers: {
-							dolphin: {
-								game_id6s: {}
-							}
-						}
-					},
-					cemu: {
-						resolvers: {}
-					}
+					emudeck: {},
+					pcsx2: {},
+					rpcs3: {},
+					xenia: {},
+					dolphin: {},
+					cemu: {}
 				}
 			},
 			achievements: {
@@ -335,34 +289,51 @@ export class Settings
 				data_providers: {},
 				providers: {
 					ra: {
-						game_info: {},
-						resolvers: {
-							ra: {
-								hashes: {}
-							}
-						}
+						game_info: {}
 					},
 					rpcs3: {
-						game_trophies: {},
-						resolvers: {
-							rpcs3: {
-								npwr_ids: {}
-							}
-						}
+						game_trophies: {}
 					},
 					xenia: {
-						game_achievements: {},
-						resolvers: {
-							xenia: {
-								title_ids: {}
-							}
-						}
+						game_achievements: {}
 					}
 				}
 			}
 		},
 		resolvers: {
-
+			gog_junk: {},
+			gog_nsl: {},
+			gog_heroic: {},
+			dolphin: {
+				game_id6s: {}
+			},
+			cemu: {
+				game_codes: {}
+			},
+			ryujinx_titleid: {
+				title_ids: {},
+				ryujinx_prod_keys: undefined
+			},
+			// Not used, uses ryujinx_titleid above instead
+			ryujinx_serial: {
+				title_ids: {},
+				ryujinx_prod_keys: undefined
+			},
+			rpcs3: {
+				title_ids: {}
+			},
+			rpcs3_npwr: {
+				npwr_ids: {}
+			},
+			pcsx2: {
+				title_ids: {}
+			},
+			xenia: {
+				title_ids: {}
+			},
+			ra: {
+				hashes: {}
+			}
 		}
 	}
 

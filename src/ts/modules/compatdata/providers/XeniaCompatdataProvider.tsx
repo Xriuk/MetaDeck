@@ -3,8 +3,6 @@ import {fetchNoCors} from "@decky/api";
 import {t} from "../../../useTranslations";
 import Logger from "../../../logger";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
-import type { ResolverConfig, ResolverCache } from "../../Resolver";
-import { XeniaResolver, type XeniaResolverCaches, type XeniaResolverConfigs } from "../../resolvers/XeniaResolver";
 import { CompatdataProvider } from "../CompatdataProvider";
 import { FaXbox } from "react-icons/fa";
 import { toasterToast } from "../../../util";
@@ -15,34 +13,23 @@ type XeniaCompatData = {
 	id: string;
 };
 
-export interface XeniaCompatdataProviderConfig extends ProviderConfig<XeniaResolverConfigs, ResolverConfig>
-{
+export interface XeniaCompatdataProviderConfig extends ProviderConfig<'xenia'>{
 	
 }
 
-export interface XeniaCCompatdataProviderCache extends ProviderCache<XeniaResolverCaches, ResolverCache>
-{
+export interface XeniaCCompatdataProviderCache extends ProviderCache{
 	
 }
 
-export class XeniaCompatdataProvider extends CompatdataProvider<any>
-{
-	resolvers: XeniaResolver[] = [
-		new XeniaResolver(this)
-	];
+export class XeniaCompatdataProvider extends CompatdataProvider<any>{
+	identifier = "xenia" as const;
+	title = t("providerCompatdataXenia");
 
-	static identifier: string = "xenia";
-	static title: string = t("providerCompatdataXenia");
-	identifier: string = XeniaCompatdataProvider.identifier;
-	title: string = XeniaCompatdataProvider.title;
-
-	logger = new Logger(XeniaCompatdataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private compatData: Record<string, XeniaCompatData> = {}; // Formatted id: compat
 
 	override async mount(): Promise<void>{
-		await super.mount();
-		
 		// Retrieve compat page source
 		let response = await fetchNoCors("https://github.com/xenia-canary/game-compatibility/releases/download/game-compatibility/compatibility_data.json");
 		if(!response.ok){

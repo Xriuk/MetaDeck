@@ -5,7 +5,7 @@ import {truncate} from "lodash-es";
 import {
 	GOGMetadataProvider,
 	GOGMetadataProviderCache,
-	GOGMetadataProviderConfig, GOGMetadataProviderResolverCaches, GOGMetadataProviderResolverConfigs
+	GOGMetadataProviderConfig
 } from "./providers/GOGMetadataProvider";
 import {Mounts} from "../../System";
 import {
@@ -42,9 +42,9 @@ import { LizardByteGameDBMetadataProvider, LizardByteGameDBMetadataProviderCache
 import { FaRegFileLines } from "react-icons/fa6";
 import { RetroAchievementsMetadataProvider, type RetroAchievementsMetadataProviderCache, type RetroAchievementsMetadataProviderConfig } from "./providers/RetroAchievementsMetadataProvider";
 import { TitleDbMetadataProvider, type TitleDbMetadataProviderCache, type TitleDbMetadataProviderConfig } from "./providers/TitleDbMetadataProvider";
+import type { ProviderIdentifier } from "../Provider";
 
-export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs, MetadataProviderConfigTypes>
-{
+export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs>{
 	type_override: boolean,
 	descriptions: boolean,
 	release_date: boolean,
@@ -57,13 +57,11 @@ export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs, Me
 	install_date: boolean
 }
 
-export interface MetadataCache extends ModuleCache<MetadataProviderCaches, MetadataProviderCacheTypes, MetadataData>
-{
+export interface MetadataCache extends ModuleCache<MetadataProviderCaches, MetadataData>{
 
 }
 
-export interface MetadataProviderConfigs
-{
+export interface MetadataProviderConfigs{
 	gog: GOGMetadataProviderConfig;
 	steam: SteamMetadataProviderConfig;
 	rawg: RAWGMetadataProviderConfig;
@@ -73,8 +71,7 @@ export interface MetadataProviderConfigs
 	titledb: TitleDbMetadataProviderConfig;
 }
 
-export interface MetadataProviderCaches
-{
+export interface MetadataProviderCaches{
 	gog: GOGMetadataProviderCache;
 	steam: SteamMetadataProviderCache;
 	rawg: RAWGMetadataProviderCache;
@@ -84,52 +81,11 @@ export interface MetadataProviderCaches
 	titledb: TitleDbMetadataProviderCache;
 }
 
-export interface MetadataProviderResolverConfigs
-{
-	gog: GOGMetadataProviderResolverConfigs;
-	steam: {};
-	rawg: {};
-	gametdb: GameTDBMetadataProviderConfig['resolvers'],
-	lizardbyte: {};
-	ra: {};
-	titledb: {};
-}
+export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
+	identifier = "metadata" as const;
+	title = t("moduleMetadata");
 
-export interface MetadataProviderResolverCaches
-{
-	gog: GOGMetadataProviderResolverCaches;
-	steam: {};
-	rawg: {};
-	gametdb: GameTDBMetadataProviderCache['resolvers'];
-	lizardbyte: {};
-	ra: {};
-	titledb: {};
-}
-
-export type MetadataProviderConfigTypes = MetadataProviderConfigs[keyof MetadataProviderConfigs]
-
-export type MetadataProviderCacheTypes = MetadataProviderCaches[keyof MetadataProviderCaches]
-
-export class MetadataModule extends Module<
-	   MetadataModule,
-	   MetadataProvider<any>,
-	   MetadataConfig,
-	   MetadataProviderConfigs,
-	   MetadataProviderConfigTypes,
-	   MetadataProviderResolverConfigs,
-	   MetadataCache,
-	   MetadataProviderCaches,
-	   MetadataProviderCacheTypes,
-	   MetadataProviderResolverCaches,
-	   MetadataData
->
-{
-	static identifier: string = "metadata";
-	static title: string = t("moduleMetadata");
-	identifier: string = MetadataModule.identifier;
-	title: string = MetadataModule.title;
-
-	logger: Logger = new Logger(MetadataModule.identifier)
+	logger = new Logger(this.identifier);
 
 	providers: MetadataProvider<any>[] = [
 		new TitleDbMetadataProvider(this),
@@ -141,8 +97,7 @@ export class MetadataModule extends Module<
 		new RetroAchievementsMetadataProvider(this)
 	];
 
-	public override async removeCache(appId: number)
-	{
+	override async removeCache(appId: number){
 		await super.removeCache(appId);
 		
 		let appData = appDetailsStore.GetAppData(appId);
@@ -874,6 +829,143 @@ export class MetadataModule extends Module<
 			overview.size_on_disk = this.data[overview.appid]?.install_size?.toString() ?? "0";
 		if (this.installDate)
 			overview.rt_purchased_time = this.data[overview.appid]?.install_date;
+	}
+	
+	// We need to retrieve the best matching metadata by preferring this criteria:
+	// - a non empty description (100 points)
+	// - most populated fields within developers, publishers, release_date, store_categories
+	private getEntryScore(entry: MetadataData): number{
+		const fields: Partial<Record<keyof MetadataData, number>> = {
+			"developers": 100,
+			"publishers": 100,
+			"release_date": 1,
+			"store_categories": 5
+		};
+		const emptyDescription = t("noDescription");
+		const max = 10000 + 100 + 100 + 1 + 5;
+
+		let total = 0;
+		if(entry.description && entry.description !== emptyDescription)
+			total += 10000;
+		for(let field in fields){
+			let value = (entry as any)[field];
+			if(value != null && !(Array.isArray(value) || value.length))
+				total += (fields as any)[field] * (Array.isArray(value) ? value.length : 1);			
+		}
+
+		if(total >= max)
+			return Number.MAX_VALUE;
+		else
+			return total;
+	}
+
+	override async fetchDataAsync(appId: number): Promise<MetadataData | undefined> {
+		if(this.excludedApps.includes(appId))
+			return undefined;
+
+		try{
+			if (!this.hasData(appId)){
+				// Prevent saving multiple times inside providers
+				await this.state.settings.runInDisabledSaveState(async () => {
+					// Check if we have a saved provider
+					if(this.dataProviders[appId] || this.providerOverrides[appId]){
+						let providerId = this.dataProviders[appId] ?? this.providerOverrides[appId];
+						const provider = this.providers.find(p => p.identifier === providerId);
+						if(provider?.enabled && await provider.test(appId)){
+							const data = await provider.provide(appId);
+							if(data){
+								// DEV: merge with below
+								await this.provideAdditional(appId, data);
+								this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
+
+								this.data[appId] = data;
+								this.dataProviders[appId] = provider.identifier;
+							}
+							else if(!this.providerOverrides[appId])
+								delete this.dataProviders[appId];
+							else
+								return undefined;
+						}
+						else if(!this.providerOverrides[appId])
+							delete this.dataProviders[appId];
+						else
+							return undefined;
+					}
+
+					// Retrieve a new provider
+					if(!this.hasData(appId)){
+						let results: Partial<Record<ProviderIdentifier<MetadataModule>, MetadataData>> = {};
+						for (const provider of this.providers){
+							if(!provider.enabled || !await provider.test(appId))
+								continue;
+							
+							const data = await provider.provide(appId);
+							if(!data)
+								continue;
+							
+							// If we have a "perfect" entry we return it rightaway,
+							// it will be processed below
+							let score = this.getEntryScore(data);
+							if(score === Number.MAX_VALUE){
+								results = { [provider.identifier]: data };
+								
+								break;
+							}
+							
+							results[provider.identifier as ProviderIdentifier<MetadataModule>] = data;
+						}
+
+						// If we didn't find a "perfect" entry we try matching the best,
+						// or if we have a single entry we use that
+						if(!this.hasData(appId)){
+							let entries = Object.entries(results).sort((a, b) => this.getEntryScore(a[1]) -  this.getEntryScore(b[1]));
+
+							let obj: {
+								provider: string;
+								score: number | 'max';
+								entry: MetadataData
+							}[] = entries.map(e => ({
+								provider: e[0],
+								score: this.getEntryScore(e[1]),
+								entry: e[1]
+							}));
+							this.logger.debug(`Resulting ${this.identifier} for ${appId}: `, obj);
+							
+							const [provider, data] = entries[entries.length-1] as [ProviderIdentifier<MetadataModule>, MetadataData];
+
+							await this.provideAdditional(appId, data);
+							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider);
+
+							this.data[appId] = data;
+							this.dataProviders[appId] = provider;
+						}
+					}
+					
+					// Provide default data, if any
+					if(!this.hasData(appId)){
+						let defaultData = await this.provideDefault(appId);
+						if(defaultData){
+							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, defaultData, 'default');
+
+							this.data[appId] = defaultData;
+						}
+						else
+							this.logger.debug(appId, "no provider/default");
+					}
+				});
+
+				await this.saveCache();
+			}
+			else
+				this.logger.debug(`Loading cached ${this.identifier} for ${appId}: `, this.data[appId], this.dataProviders[appId]);
+
+			void this.apply(appId);
+
+			return this.data[appId];
+		}
+		catch (e: any){
+			this.handleError(e);
+		}
 	}
 
 	override async provideDefault(appId: number): Promise<MetadataData | undefined>

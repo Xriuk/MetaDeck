@@ -8,23 +8,21 @@ import {
 	Toggle,
 	useParams
 } from "@decky/ui";
-import {useMetaDeckState} from "../MetaDeckState";
+import {useMetaDeckState, type Modules} from "../MetaDeckState";
 import {t} from "../useTranslations";
 import { ExcludeAppComponent } from "./ExcludeAppComponent";
-import type { Resolver } from "./Resolver";
 
 export const ProviderSettingsComponent: FC = () => {
 	const state = useMetaDeckState();
-	const {module} = useParams<{ module: string }>();
+	const {module} = useParams<{ module: keyof Modules }>();
 	const pages: SidebarNavigationPage[] = [];
 
-	for (let provider of state.modules[module].providers)
-	{
+	for (let provider of state.modules[module].providers){
 		const [enabled, setEnabled] = useState(provider.enabled);
 		const [excluded, setExcluded] = useState(provider.excludedAppsSelf);
 		let resolvers: Record<string, boolean> = {};
-		for(let resolver in provider.config.resolvers){
-			resolvers[resolver] = provider.config.resolvers[resolver].enabled;
+		for(let resolver of provider.resolvers){
+			resolvers[resolver.identifier] = resolver.isEnabled(provider);
 		}
 		const [enabledResolvers, setEnabledResolvers] = useState(resolvers);
 
@@ -77,7 +75,7 @@ export const ProviderSettingsComponent: FC = () => {
 								description={t("settingsProviderResolversDesc")}>
 							</Field>
 							{
-								provider.resolvers.map((r: Resolver<any, any, any, any, any, any, any, any, any, any, any, any>) =>
+								provider.resolvers.map(r =>
 							
 								<Field
 									label={r.identifier}
@@ -96,7 +94,7 @@ export const ProviderSettingsComponent: FC = () => {
 												else
 													await r.dismount();
 											}
-											r.enabled = checked;
+											r.setEnabled(provider, checked);
 										}}/>
 								</Field>
 								)

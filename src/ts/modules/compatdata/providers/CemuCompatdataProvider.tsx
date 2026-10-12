@@ -10,29 +10,23 @@ import { GameTDBMetadataProvider } from "../../metadata/providers/GameTDBMetadat
 import { FuzzySearchCompatdataProvider, type FuzzySearchCompatdataProviderCache, type FuzzySearchCompatdataProviderConfig } from "./FuzzySearchCompatdataProvider";
 import { MdOutlineTablet } from "react-icons/md";
 
-export interface CemuCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig
-{
+export interface CemuCompatdataProviderConfig extends FuzzySearchCompatdataProviderConfig{
 	
 }
 
-export interface CemuCompatdataProviderCache extends FuzzySearchCompatdataProviderCache
-{
+export interface CemuCompatdataProviderCache extends FuzzySearchCompatdataProviderCache{
 
 }
 
 // No resolvers because Cemu Wiki has no Game IDs...
-export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider
-{
-	static identifier: string = "cemu";
-	static title: string = t("providerCompatdataCemu");
-	identifier: string = CemuCompatdataProvider.identifier;
-	title: string = CemuCompatdataProvider.title;
+export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider<"cemu">{
+	identifier = "cemu" as const;
+	title = t("providerCompatdataCemu");
 
-	logger = new Logger(CemuCompatdataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private _gameTDBProvider?: GameTDBMetadataProvider;
-	get gameTDBProvider(): GameTDBMetadataProvider
-	{
+	get gameTDBProvider(): GameTDBMetadataProvider{
 		if(!this._gameTDBProvider){
 			this._gameTDBProvider = this.state.modules.metadata.providers.find(p => p instanceof GameTDBMetadataProvider);
 			if(!this._gameTDBProvider)
@@ -42,8 +36,7 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider
 		return this._gameTDBProvider;
 	}
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 

@@ -5,38 +5,30 @@ import Logger from "../../logger";
 import { t } from "../../useTranslations";
 import { toasterToast } from "../../util";
 
-export interface RyujinxSerialResolverConfig extends RyujinxTitleIdResolverConfig
-{
+export interface RyujinxSerialResolverConfig extends RyujinxTitleIdResolverConfig{
 	
 }
 
-export interface RyujinxSerialResolverCache extends RyujinxTitleIdResolverCache
-{
+export interface RyujinxSerialResolverCache extends RyujinxTitleIdResolverCache{
 	
-}
-
-export interface RyujinxSerialResolverConfigs
-{
-	ryujinx: RyujinxSerialResolverConfig;
-}
-
-export interface RyujinxSerialResolverCaches
-{
-	ryujinx: RyujinxSerialResolverCache;
 }
 
 // Returns serial (eg: AAAAA)
-export class RyujinxSerialResolver extends RyujinxTitleIdResolver
-{
-	static identifier: keyof RyujinxSerialResolverConfigs = "ryujinx";
-	identifier: keyof RyujinxSerialResolverConfigs = RyujinxSerialResolver.identifier;
+// Shares cache with RyujinxTitleIdResolver but not settings
+export class RyujinxSerialResolver extends RyujinxTitleIdResolver{
+	identifier = "ryujinx_serial" as const;
 
-	protected logger = new Logger(RyujinxSerialResolver.identifier);
+	protected logger = new Logger(this.identifier);
 
 	private serialTitleIdsCache: {
 		serial: string;
 		titleid: string; // Wild format, including multiple ids so we only search for strings containing the id - the first 4 chars which are always the same (0100)
 	}[] = [];
+
+	// Shares cache
+	override get cache(){
+		return this.state.settings.cache.resolvers["ryujinx_titleid"];
+	}
 
 	override async mount(): Promise<void> {
 		await super.mount();

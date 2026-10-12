@@ -1,41 +1,32 @@
 import {ID, MetadataData} from "../../../../Interfaces";
 import {ResolverCache, ResolverConfig} from "../../../Resolver";
-import {t} from "../../../../useTranslations";
 import {GOGMetadataProviderResolver} from "./GOGMetadataProviderResolver";
 import {getExe, getLaunchCommand, isEpicGame, isGOGGame, isJunkStoreGame} from "../../../../shortcuts";
 import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesDBResult";
 import {getAppDetails} from "../../../../util";
-import {GOGMetadataProviderResolverConfigs} from "../../providers/GOGMetadataProvider";
 import {callable} from "@decky/api";
 import { FaStore } from "react-icons/fa";
 
-export interface GOGMetadataProviderJunkStoreResolverConfig extends ResolverConfig
-{
+export interface GOGMetadataProviderJunkStoreResolverConfig extends ResolverConfig{
 
 }
 
-export interface GOGMetadataProviderJunkStoreResolverCache extends ResolverCache
-{
+export interface GOGMetadataProviderJunkStoreResolverCache extends ResolverCache{
 
 }
 
-export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderResolver
-{
-	static identifier: keyof GOGMetadataProviderResolverConfigs = "junk";
-	static title: string = t("providerMetadataGOG");
-	identifier: keyof GOGMetadataProviderResolverConfigs = GOGMetadataProviderJunkStoreResolver.identifier;
-	title: string = GOGMetadataProviderJunkStoreResolver.title;
+export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderResolver<"gog_junk">{
+	identifier = "gog_junk" as const;
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
+
 		return isJunkStoreGame(getLaunchCommand(details));
 	}
 
-	async resolve(appId: number): Promise<ID | undefined>
-	{
+	async resolve(appId: number): Promise<ID | undefined>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
@@ -56,8 +47,7 @@ export class GOGMetadataProviderJunkStoreResolver extends GOGMetadataProviderRes
 	private directory_size: (path: string) => Promise<number> = callable("directory_size");
 	private file_date: (path: string) => Promise<number> = callable("file_date");
 
-	override async apply(appId: number, data: MetadataData): Promise<void>
-	{
+	override async apply(appId: number, data: MetadataData): Promise<void>{
 		if(data.install_size && data.install_date)
 			return;
 

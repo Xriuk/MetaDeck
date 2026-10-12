@@ -6,7 +6,7 @@ import {Mounts} from "../../System";
 import Logger from "../../logger";
 import {routePatch} from "../../RoutePatches";
 import {format, t} from "../../useTranslations";
-import {Modules, useMetaDeckState} from "../../MetaDeckState";
+import {useMetaDeckState} from "../../MetaDeckState";
 import {
 	EmuDeckCompatdataProvider,
 	EmuDeckCompatdataProviderCache,
@@ -21,20 +21,17 @@ import { DolphinCompatdataProvider, type DolphinCompatdataProviderCache, type Do
 import { FaCheckCircle } from "react-icons/fa";
 import type { CemuCompatdataProviderCache, CemuCompatdataProviderConfig } from "./providers/CemuCompatdataProvider";
 
-export interface CompatdataConfig extends ModuleConfig<CompatdataProviderConfigs, CompatdataProviderConfigTypes>
-{
+export interface CompatdataConfig extends ModuleConfig<CompatdataProviderConfigs>{
 	verified: boolean;
 	notes: boolean;
 	test_results: boolean;
 }
 
-export interface CompatdataCache extends ModuleCache<CompatdataProviderCaches, CompatdataProviderCacheTypes, CompatdataData>
-{
+export interface CompatdataCache extends ModuleCache<CompatdataProviderCaches, CompatdataData>{
 
 }
 
-export interface CompatdataProviderConfigs
-{
+export interface CompatdataProviderConfigs{
 	emudeck: EmuDeckCompatdataProviderConfig;
 	pcsx2: PCSX2CompatdataProviderConfig;
 	rpcs3: RPCS3CompatdataProviderConfig;
@@ -43,8 +40,7 @@ export interface CompatdataProviderConfigs
 	cemu: CemuCompatdataProviderConfig;
 }
 
-export interface CompatdataProviderCaches
-{
+export interface CompatdataProviderCaches{
 	emudeck: EmuDeckCompatdataProviderCache;
 	pcsx2: PCSX2CompatdataProviderCache;
 	rpcs3: RPCS3CompatdataProviderCache;
@@ -53,50 +49,12 @@ export interface CompatdataProviderCaches
 	cemu: CemuCompatdataProviderCache;
 }
 
-export interface CompatdataProviderResolverConfigs
-{
-	emudeck: {};
-	pcsx2: PCSX2CompatdataProviderConfig['resolvers'];
-	rpcs3: RPCS3CompatdataProviderConfig['resolvers'];
-	xenia: XeniaCompatdataProviderConfig['resolvers'];
-	dolphin: DolphinCompatdataProviderConfig['resolvers'];
-	cemu: CemuCompatdataProviderConfig['resolvers'];
-}
 
-export interface CompatdataProviderResolverCaches
-{
-	emudeck: {};
-	pcsx2: PCSX2CompatdataProviderCache['resolvers'];
-	rpcs3: RPCS3CompatdataProviderCache['resolvers'];
-	xenia: XeniaCCompatdataProviderCache['resolvers'];
-	dolphin: DolphinCompatdataProviderCache['resolvers'];
-	cemu: CemuCompatdataProviderCache['resolvers'];
-}
+export class CompatdataModule extends Module<"compatdata", CompatdataProvider<any>>{
+	identifier = "compatdata" as const;
+	title = t("moduleCompatdata");
 
-export type CompatdataProviderConfigTypes = CompatdataProviderConfigs[keyof CompatdataProviderConfigs];
-
-export type CompatdataProviderCacheTypes = CompatdataProviderCaches[keyof CompatdataProviderCaches];
-
-
-export class CompatdataModule extends Module<
-	   CompatdataModule,
-	   CompatdataProvider<any>,
-	   CompatdataConfig,
-	   CompatdataProviderConfigs,
-	   CompatdataProviderConfigTypes,
-	   CompatdataProviderResolverConfigs,
-	   CompatdataCache,
-	   CompatdataProviderCaches,
-	   CompatdataProviderCacheTypes,
-	   CompatdataProviderResolverCaches,
-	   CompatdataData
->
-{
-	static identifier: string = "compatdata";
-	static title: string = t("moduleCompatdata");
-	identifier: string = CompatdataModule.identifier;
-	title: string = CompatdataModule.title;
-	logger: Logger = new Logger(CompatdataModule.identifier)
+	logger = new Logger(this.identifier);
 
 	providers: CompatdataProvider<any>[] = [
 		new PCSX2CompatdataProvider(this),
@@ -106,8 +64,8 @@ export class CompatdataModule extends Module<
 		new EmuDeckCompatdataProvider(this)
 	];
 
-	dependencies: (keyof Modules)[] = [
-		"metadata"
+	dependencies = [
+		"metadata" as const
 	];
 
 	override get enabled(){

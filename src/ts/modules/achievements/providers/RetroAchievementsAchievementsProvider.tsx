@@ -2,9 +2,7 @@ import type { AchievementsData, ID } from "../../../Interfaces"
 import { t } from "../../../useTranslations"
 import { fetchNoCorsLegacyTimeout, getAppDetails, toasterToast } from "../../../util"
 import type { ProviderCache, ProviderConfig } from "../../Provider"
-import type { AchievementsProviderConfigs } from "../AchievementsModule"
 import { AchievementsProvider } from "../AchievementsProvider"
-import { RetroAchievementsResolver, type RetroAchievementsResolverCaches, type RetroAchievementsResolverConfigs, type RetroAchievementsResolverCache, type RetroAchievementsResolverConfig } from "../../resolvers/RetroAchievementsResolver"
 import Logger from "../../../logger"
 import { DialogControlsSection, Field, sleep, TextField, Toggle } from "@decky/ui"
 import { GetGameInfoAndUserProgressResponse } from "@retroachievements/api";
@@ -15,69 +13,61 @@ import { Markdown } from "../../../markdown"
 import React from "react"
 import { version } from "@decky/pkg"
 
-export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<RetroAchievementsResolverConfigs, RetroAchievementsResolverConfig>
-{
+export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<'ra'>{
 	username: string;
 	api_key: string;
 	points: boolean;
 }
 
-export interface RetroAchievementsAchievementsProviderCache extends ProviderCache<RetroAchievementsResolverCaches, RetroAchievementsResolverCache>
-{
+export interface RetroAchievementsAchievementsProviderCache extends ProviderCache{
 	// Cache lasts max 5 mins, to allow achievements and metadata to retrieve the same result
 	game_info: Record<ID, GetGameInfoAndUserProgressResponse & {
 		retrieved: number; // Date.getTime()
 	}>;
 }
 
-export class RetroAchievementsAchievementsProvider extends AchievementsProvider<any>{
-	static identifier: keyof AchievementsProviderConfigs = "ra";
-	static title: string = t("providerAchievementsRA");
-	identifier: keyof AchievementsProviderConfigs = RetroAchievementsAchievementsProvider.identifier;
-	title: string = RetroAchievementsAchievementsProvider.title;
+export class RetroAchievementsAchievementsProvider extends AchievementsProvider<"ra">{
+	identifier = "ra" as const;
+	title = t("providerAchievementsRA");
 
-	logger: Logger = new Logger(RetroAchievementsAchievementsProvider.identifier);
-
-	resolvers: RetroAchievementsResolver[] = [
-		new RetroAchievementsResolver(this)
-	];
+	logger = new Logger(this.identifier);
 
 	get username(): string
 	{
-		return (this.config as RetroAchievementsAchievementsProviderConfig).username;
+		return this.config.username;
 	}
 
 	set username(data: string)
 	{
-		(this.config as RetroAchievementsAchievementsProviderConfig).username = data;
-		void this.module.saveConfig();
+		this.config.username = data;
+		void this.saveConfig();
 	}
 
 	get apiKey(): string
 	{
-		return (this.config as RetroAchievementsAchievementsProviderConfig).api_key;
+		return this.config.api_key;
 	}
 
 	set apiKey(data: string)
 	{
-		(this.config as RetroAchievementsAchievementsProviderConfig).api_key = data;
-		void this.module.saveConfig();
+		this.config.api_key = data;
+		void this.saveConfig();
 	}
 
 	get points(): boolean
 	{
-		return (this.config as RetroAchievementsAchievementsProviderConfig).points;
+		return this.config.points;
 	}
 
 	set points(data: boolean)
 	{
-		(this.config as RetroAchievementsAchievementsProviderConfig).points = data;
-		void this.module.saveConfig();
+		this.config.points = data;
+		void this.saveConfig();
 	}
 
 	get gameInfo(): RetroAchievementsAchievementsProviderCache['game_info']
 	{
-		return (this.cache as RetroAchievementsAchievementsProviderCache).game_info;
+		return this.cache.game_info;
 	}
 
 	override test(appId: number, external = false): Promise<boolean> {

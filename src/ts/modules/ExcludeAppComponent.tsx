@@ -11,10 +11,10 @@ import { Module } from "./Module";
 
 interface ExcludeAppProps
 {
-	// Source of parent apps Undefined (root) > Module (State) > Provider (Module)
+	// Source of parent apps: Undefined (root) > Module (State) > Provider (Module)
 	source?: undefined |
-		Module<any, any, any, any, any, any, any, any, any, any, any> |
-		Provider<any, any, any, any, any, any, any, any, any, any, any, any>,
+		Module<any, any> |
+		Provider<any, any>,
 	value: number[],
 	disabled?: boolean,
 	onChange: (overrides: number[]) => void
@@ -61,7 +61,7 @@ export const ExcludeAppComponent = ({
 		else if(source instanceof Module)
 			appsSource = overviews;
 		else{
-			appsSource = (source.module as Module<any, any, any, any, any, any, any, any, any, any, any>)
+			appsSource = (source.module as Module<any, any>)
 				.overviews;
 		}
 

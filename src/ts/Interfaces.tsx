@@ -9,11 +9,12 @@ import { Markdown } from "./markdown";
 import { format, t } from "./useTranslations";
 import React from "react";
 
-export interface MetadataData
-{
+export interface EntryData{
 	title: string;
 	id: ID;
+}
 
+export interface MetadataData extends EntryData{
 	description: string;
 	snippet?: string; // Will default to description if not provided
 
@@ -28,11 +29,7 @@ export interface MetadataData
 	store_categories: (StoreCategory | CustomStoreCategory)[];
 }
 
-export interface CompatdataData
-{
-	title: string;
-	id: ID;
-
+export interface CompatdataData extends EntryData{
 	deck_compat_category?: SteamDeckCompatCategory;
 	machine_compat_category?: SteamDeckCompatCategory; // Will default to deck_compat_category if not provided
 	frame_compat_category?: SteamDeckCompatCategory;
@@ -45,11 +42,7 @@ export interface CompatdataData
 	frame_test_results?: SteamAppDetails['vecSteamFrameCompatTestResults'];
 }
 
-export interface AchievementsData
-{
-	title: string;
-	id: ID;
-
+export interface AchievementsData extends EntryData{
 	achievements: SteamAppAchievement[];
 }
 
@@ -59,27 +52,23 @@ export type ID = number | string;
 
 export type IDDictionary = Record<number, ID>;
 
-export interface Developer
-{
+export interface Developer{
 	name: string,
 	url: string
 }
 
-export interface Publisher
-{
+export interface Publisher{
 	name: string,
 	url: string
 }
 
-export enum YesNo
-{
+export enum YesNo{
 	NO = "No",
 	YES = "Yes",
 	PARTIAL = "Partial"
 }
 
-export enum SteamDeckCompatCategory
-{
+export enum SteamDeckCompatCategory{
 	UNKNOWN,
 	UNSUPPORTED,
 	PLAYABLE,
@@ -94,8 +83,7 @@ export enum SteamTestResult{
 	Verified
 }
 
-export enum StoreCategory
-{
+export enum StoreCategory{
 	MultiPlayer = 1,
 	SinglePlayer = 2,
 	CoOp = 9,
@@ -145,8 +133,7 @@ export enum StoreCategory
 	ContrastControls = 82
 }
 
-export enum CustomStoreCategory
-{
+export enum CustomStoreCategory{
 	NonSteam = 10000,
 	EmuDeck = 10001,
 	Epic = 10002,
@@ -159,8 +146,7 @@ export enum CustomStoreCategory
 	Flatpak = 10009
 }
 
-export interface VerifiedDBResults
-{
+export interface VerifiedDBResults{
 	"Row": number,
 	"Timestamp": string,
 	"Console": string,
@@ -299,7 +285,7 @@ export const customStoreTitles: Record<CustomStoreCategory, keyof (typeof langua
 	[CustomStoreCategory.Flatpak]: "storeCategoriesFlatpak"
 }
 
-export function inheritSettings(provider: Provider<any, any, any, any, any, any, any, any, any, any, any, any>){
+export function inheritSettings(provider: Provider<any, any>){
 	return () => {
 		const settings = provider.settingsComponent({});
 		if(!settings)

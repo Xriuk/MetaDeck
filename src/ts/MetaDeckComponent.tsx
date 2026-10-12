@@ -1,4 +1,4 @@
-import {useMetaDeckState} from "./MetaDeckState";
+import {useMetaDeckState, type Modules} from "./MetaDeckState";
 import {FC, useEffect, useState, type CSSProperties} from "react";
 import {useTranslations} from "./useTranslations";
 import {ButtonItem, PanelSection, PanelSectionRow, Navigation, Field, ProgressBar} from "@decky/ui";
@@ -105,7 +105,7 @@ const LoadingProgressBar: FC = () =>
 	</>;
 };
 
-let activeModule: string | null = null;
+let activeModule: keyof Modules | null = null;
 const ModulesList: FC = () => {
 	const t = useTranslations();
 	const { modules } = useMetaDeckState();
@@ -128,28 +128,30 @@ const ModulesList: FC = () => {
 		}
 		{
 			!active ?
-				Object.values(modules).filter(m => m.isValid).map(m => {
-					let apps = m.apps;
-					let hasData = apps.filter(a => m.hasData(a));
+				(Object.values(modules) as Modules[keyof Modules][])
+					.filter(m => m.isValid)
+					.map(m => {
+						let apps = m.apps;
+						let hasData = apps.filter(a => m.hasData(a));
 
-					return <PanelSectionRow key={m.identifier}>
-						<Field
-							label={m.title}
-							description={`${hasData.length}/${apps.length}`}
-							childrenLayout="below"
-							onActivate={() => {
-								if(hasData.length){
-									setActive(m.identifier);
-									activeModule = m.identifier;
-								}
-							}}>
-							<ProgressBar
-								focusable={false}
-								nProgress={(hasData.length / apps.length * 100)}
-							/>
-						</Field>
-					</PanelSectionRow>;
-				}) :
+						return <PanelSectionRow key={m.identifier}>
+							<Field
+								label={m.title}
+								description={`${hasData.length}/${apps.length}`}
+								childrenLayout="below"
+								onActivate={() => {
+									if(hasData.length){
+										setActive(m.identifier);
+										activeModule = m.identifier;
+									}
+								}}>
+								<ProgressBar
+									focusable={false}
+									nProgress={(hasData.length / apps.length * 100)}
+								/>
+							</Field>
+						</PanelSectionRow>;
+					}) :
 				modules[active].apps.filter(a => modules[active].hasData(a)).map(a => {
 					let data = modules[active].fetchData(a);
 					let provider = modules[active].dataProviders[a];
@@ -160,7 +162,7 @@ const ModulesList: FC = () => {
 								label={appStore.GetAppOverviewByAppID(a).display_name}
 								description={(
 									(provider ? provider + " - " : "") +
-									truncate(modules[active].progressDescription(data), {
+									truncate(modules[active].progressDescription(data as any), {
 										'length': 100,
 										'omission': "..."
 									})

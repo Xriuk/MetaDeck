@@ -2,51 +2,34 @@ import { call } from "@decky/api";
 import type { ID } from "../../Interfaces";
 import { getLaunchCommand, isRPCS3Game, romRegex } from "../../shortcuts";
 import { getAppDetails, toasterToast } from "../../util";
-import type { ResolverCache, ResolverConfig } from "../Resolver";
-import { GlobalResolver } from "./GlobalResolver";
+import { Resolver, type ResolverCache, type ResolverConfig } from "../Resolver";
 import { rpcs3IdRegex, rpcs3RomPathRegex } from "./MultiId/MultiIdRPCS3Resolver";
 import { t } from "../../useTranslations";
 import { SiPlaystation3 } from "react-icons/si";
 
-export interface RPCS3NPWRResolverConfig extends ResolverConfig
-{
+export interface RPCS3NPWRResolverConfig extends ResolverConfig{
 	// Like /home/deck/Emulation/storage/rpcs3/dev_hdd0/
 	hdd_path: string;
 }
 
-export interface RPCS3NPWRResolverCache extends ResolverCache
-{
+export interface RPCS3NPWRResolverCache extends ResolverCache{
 	npwr_ids: Record<number, string | null>;
 }
 
-export interface RPCS3NPWRResolverConfigs
-{
-	rpcs3: RPCS3NPWRResolverConfig;
-}
+export class RPCS3NPWRResolver extends Resolver<"rpcs3_npwr">{
+	identifier = "rpcs3_npwr" as const;
 
-export interface RPCS3NPWRResolverCaches
-{
-	rpcs3: RPCS3NPWRResolverCache;
-}
-
-export class RPCS3NPWRResolver extends GlobalResolver<RPCS3NPWRResolver>{
-	static identifier: keyof RPCS3NPWRResolverConfigs = "rpcs3";
-	identifier: keyof RPCS3NPWRResolverConfigs = RPCS3NPWRResolver.identifier;
-
-	get hddPath(): string
-	{
-		return (this.config as RPCS3NPWRResolverConfig).hdd_path;
+	get hddPath(): string{
+		return this.config.hdd_path;
 	}
 
-	set hddPath(data: string)
-	{
-		(this.config as RPCS3NPWRResolverConfig).hdd_path = data;
-		void this.module.saveConfig();
+	set hddPath(data: string){
+		this.config.hdd_path = data;
+		void this.saveConfig();
 	}
 
-	get NPWRIds(): Record<number, string | null>
-	{
-		return (this.cache as RPCS3NPWRResolverCache).npwr_ids;
+	get NPWRIds(): Record<number, string | null>{
+		return this.cache.npwr_ids;
 	}
 
 	override async mount(): Promise<void> {
@@ -54,7 +37,7 @@ export class RPCS3NPWRResolver extends GlobalResolver<RPCS3NPWRResolver>{
 			return;
 
 		try{
-			if(!await call<[], boolean>("rpcs3_check_hdd_path"))
+			if(!await call<[string], boolean>("rpcs3_check_hdd_path", this.hddPath))
 				throw new Error("");
 		}
 		catch{

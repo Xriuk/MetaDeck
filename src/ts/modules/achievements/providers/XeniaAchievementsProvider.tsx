@@ -1,19 +1,34 @@
 import { call, callable, FileSelectionType, openFilePicker } from "@decky/api";
 import type { AchievementsData } from "../../../Interfaces";
 import Logger from "../../../logger";
-import { t } from "../../../useTranslations";
+import { t, getLanguageTitle, type Language, getCurrentLanguage } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
-import { XeniaResolver, type XeniaResolverCache, type XeniaResolverCaches, type XeniaResolverConfig, type XeniaResolverConfigs } from "../../resolvers/XeniaResolver";
-import type { AchievementsProviderConfigs } from "../AchievementsModule";
 import { AchievementsProvider } from "../AchievementsProvider";
 import { FaXbox } from "react-icons/fa";
 import { getLaunchCommand, romRegex } from "../../../shortcuts";
-import { getAppDetails, getLanguageTitle, grayScaleIcon, toasterToast } from "../../../util";
+import { getAppDetails, grayScaleIcon, toasterToast } from "../../../util";
 import { RAWGMetadataProvider } from "../../metadata/providers/RAWGMetadataProvider";
 import { DialogControlsSection, Field, TextField, DialogButton, Toggle, Dropdown } from "@decky/ui";
 import React, { useState } from "react";
 import { Markdown } from "../../../markdown";
 import { useMetaDeckState } from "../../../MetaDeckState";
+
+const langMap: Partial<Record<Language, number>> = {
+	'en': 1, // US
+	'ja': 2,
+	'de': 3,
+	'fr': 4,
+	'es': 5,
+
+	'it': 6,
+	'ko': 7,
+	'zhTw': 8,
+	'pt': 9,
+	'zhCn': 10,
+	
+	'pl': 11,
+	'ru': 12
+};
 
 type XeniaAchievement = {
 	id: number;
@@ -45,38 +60,30 @@ type XeniaGameAchievementsStats = XeniaGameAchievements & {
 	progress?: Record<number, XeniaAchievement>;
 };
 
-export interface XeniaAchievementsProviderConfig extends ProviderConfig<XeniaResolverConfigs, XeniaResolverConfig>
-{
+export interface XeniaAchievementsProviderConfig extends ProviderConfig<'xenia'>{
 	// Like /home/deck/Emulation/roms/xbox360/content/<A010000011AA1111>/FFFE07D1/00010000/<A010000011AA1111>
 	user_path: string;
+	// https://github.com/xenia-project/xenia/blob/95a5c3ee250f80c3b9d139658649d9ffb6db3eec/src/xenia/xbox.h#L327-L346
 	// https://github.com/XboxChef/XeXtractor/blob/5fb6d8b17e5d38a6100590ce43962fb0df07770b/XDBF.cs#L126
-	language: number;
+	language: number | null; // null will try to guess or fallback to english
 	gamerscore: boolean;
 	description_locked: boolean | null; // null: show locked/unlocked, true: show locked, false: show unlocked
 }
 
-export interface XeniaAchievementsProviderCache extends ProviderCache<XeniaResolverCaches, XeniaResolverCache>
-{
+export interface XeniaAchievementsProviderCache extends ProviderCache{
 	game_achievements: Record<number, XeniaGameAchievements | null>;
 }
 
-export class XeniaAchievementsProvider extends AchievementsProvider<any>{
-	static identifier: keyof AchievementsProviderConfigs = "xenia";
-	static title: string = t("providerCompatdataXenia");
-	identifier: keyof AchievementsProviderConfigs = XeniaAchievementsProvider.identifier;
-	title: string = XeniaAchievementsProvider.title;
+export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
+	identifier = "xenia" as const;
+	title = t("providerCompatdataXenia");
 
-	logger: Logger = new Logger(XeniaAchievementsProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private xenia_get_all_achievements_game = callable<[string, string, number], string>("xenia_get_all_achievements_game");
 
-	resolvers: XeniaResolver[] = [
-		new XeniaResolver(this)
-	];
-
 	private _rawgProvider?: RAWGMetadataProvider;
-	get rawgProvider(): RAWGMetadataProvider
-	{
+	get rawgProvider(): RAWGMetadataProvider{
 		if(!this._rawgProvider){
 			this._rawgProvider = this.state.modules.metadata.providers.find(p => p instanceof RAWGMetadataProvider);
 			if(!this._rawgProvider)
@@ -88,55 +95,55 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 
 	get userPath(): string
 	{
-		return (this.config as XeniaAchievementsProviderConfig).user_path;
+		return this.config.user_path;
 	}
 
 	set userPath(data: string)
 	{
-		(this.config as XeniaAchievementsProviderConfig).user_path = data;
-		void this.module.saveConfig();
+		this.config.user_path = data;
+		void this.saveConfig();
 	}
 
-	get language(): number
-	{
-		return (this.config as XeniaAchievementsProviderConfig).language;
+	// Retrieve selected language, try guessing, or default to english
+	get language(): number{
+		return this.config.language
+			?? langMap[getCurrentLanguage()]
+			?? langMap['en']!;
 	}
 
 	set language(data: number)
 	{
-		(this.config as XeniaAchievementsProviderConfig).language = data;
-		void this.module.saveConfig();
+		this.config.language = data;
+		void this.saveConfig();
 	}
 
 	get gamerscore(): boolean
 	{
-		return (this.config as XeniaAchievementsProviderConfig).gamerscore;
+		return this.config.gamerscore;
 	}
 
 	set gamerscore(data: boolean)
 	{
-		(this.config as XeniaAchievementsProviderConfig).gamerscore = data;
-		void this.module.saveConfig();
+		this.config.gamerscore = data;
+		void this.saveConfig();
 	}
 
 	get descriptionLocked(): boolean | null
 	{
-		return (this.config as XeniaAchievementsProviderConfig).description_locked;
+		return this.config.description_locked;
 	}
 
 	set descriptionLocked(data: boolean | null)
 	{
-		(this.config as XeniaAchievementsProviderConfig).description_locked = data;
-		void this.module.saveConfig();
+		this.config.description_locked = data;
+		void this.saveConfig();
 	}
 
 	get gameAchievements(): Record<number, XeniaGameAchievements | null>{
-		return (this.cache as XeniaAchievementsProviderCache).game_achievements;
+		return this.cache.game_achievements;
 	}
 
 	override async mount(): Promise<void> {
-		await super.mount();
-
 		if(this.userPath){
 			try{
 				if(!await call<[string], boolean>("xenia_check_user_path", this.userPath))
@@ -391,22 +398,9 @@ export class XeniaAchievementsProvider extends AchievementsProvider<any>{
 						label={t("language")}
 						childrenContainerWidth={'fixed'}>
 						<Dropdown
-							rgOptions={[
-								{ data: 1, label: getLanguageTitle('en') }, // US
-								{ data: 2, label: getLanguageTitle('ja') },
-								{ data: 3, label: getLanguageTitle('de') },
-								{ data: 4, label: getLanguageTitle('fr') },
-								{ data: 5, label: getLanguageTitle('es') },
-
-								{ data: 6, label: getLanguageTitle('it') },
-								{ data: 7, label: getLanguageTitle('ko') },
-								{ data: 10, label: getLanguageTitle('zhCn') },
-								{ data: 8, label: getLanguageTitle('zhTw') },
-								{ data: 9, label: getLanguageTitle('pt') },
-								
-								{ data: 11, label: getLanguageTitle('pl') },
-								{ data: 12, label: getLanguageTitle('ru') }
-							]}
+							rgOptions={Object.entries(langMap)
+								.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
+								.sort((a, b) => a.label.localeCompare(b.label))}
 							selectedOption={language}
 							disabled={loadingData.loading}
 							onChange={(newVal) => {

@@ -1,24 +1,25 @@
 import {ID} from "../../../Interfaces";
 import { fetchNoCorsLegacyTimeout } from "../../../util";
-import type { ResolverCache } from "../../Resolver";
+import type { ResolverCache, ResolverConfig } from "../../Resolver";
 import { MultiIdResolver, separator } from "./MultiIdResolver";
 
-export interface MultiIdSerialStationResolverCache extends ResolverCache
-{
+export interface MultiIdSerialStationResolverConfig extends ResolverConfig{
+	
+}
+
+export interface MultiIdSerialStationResolverCache extends ResolverCache{
 	title_ids: Record<number, string | null>;
 }
 
 // Retrieves multiple title id for a single PlayStation game
-export abstract class MultiIdSerialStationResolver extends MultiIdResolver
-{
+export abstract class MultiIdSerialStationResolver<Identifier extends "pcsx2" | "rpcs3"> extends MultiIdResolver<Identifier>{
 	get titleIds(): Record<number, string | null>{
-		return (this.cache as MultiIdSerialStationResolverCache).title_ids;
+		return this.cache.title_ids;
 	}
 
 	protected abstract retrieveTitleId(appId: number): Promise<string | undefined>;
 
-	async resolve(appId: number): Promise<ID | undefined>
-	{
+	async resolve(appId: number): Promise<ID | undefined>{
 		let titleId: string | null | undefined = this.titleIds[appId];
 		if(titleId !== undefined)
 			return titleId ?? undefined;
@@ -66,7 +67,7 @@ export abstract class MultiIdSerialStationResolver extends MultiIdResolver
 			}
 		}
 
-		this.titleIds[appId] = [...titleIds].join(separator);
+		this.titleIds[appId] = Array.from(titleIds).join(separator);
 
 		return this.titleIds[appId];
 	}

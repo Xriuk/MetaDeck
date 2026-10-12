@@ -1,53 +1,86 @@
 // https://blog.hloth.dev/moreofme/#reverse-engineering-steams-secret-apis
 
-import { DialogControlsSection, Field, SliderField, TextField } from "@decky/ui";
+import { DialogControlsSection, Dropdown, Field, SliderField } from "@decky/ui";
 import { useState } from "react";
-import { StoreCategory, type ID, type MetadataData } from "../../../Interfaces";
+import { StoreCategory, type MetadataData } from "../../../Interfaces";
 import Logger from "../../../logger";
-import { t } from "../../../useTranslations";
+import { getCurrentLanguage, getLanguageTitle, t, type Language } from "../../../useTranslations";
 import React from "react";
 import { useMetaDeckState } from "../../../MetaDeckState";
-import { IdOverrideComponent, type OverrideEntry } from "../../IdOverrideComponent";
-import type { MetadataProviderConfigs } from "../MetadataModule";
+import { IdOverrideComponent } from "../../IdOverrideComponent";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
 import type { AppDetailsResponse } from "type-steamapi";
 import { FaSteam } from "react-icons/fa";
 import { fetchNoCorsLegacyTimeout } from "../../../util";
 
-export interface SteamMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
-{
-	// english, italian, french, ...
-	language: string;
+const langMap: Partial<Record<Language, string>> = {
+	'ar': 'arabic',
+	'bg': 'bulgarian',
+	'zhCn': 'schinese',
+	'zhTw': 'tchinese',
+	'cs': 'czech',
+
+	'da': 'danish',
+	'nl': 'dutch',
+	'en': 'english', // US
+	'fi': 'finnish',
+	'fr': 'french',
+
+	'de': 'german',
+	'el': 'greek',
+	'hu': 'hungarian',
+	'id': 'indonesian',
+	'it': 'italian',
+
+	'ja': 'japanese',
+	'ko': 'koreana',
+	'ms': 'malese',
+	'no': 'norwegian',
+	'pl': 'polish',
+
+	'pt': 'portuguese',
+	'ptBr': 'brazilian',
+	'ro': 'romanian',
+	'ru': 'russian',
+	'es': 'spanish',
+
+	'es419': 'latam',
+	'sv': 'swedish',
+	'th': 'thai',
+	'tr': 'turkish',
+	'uk': 'ukrainian',
+
+	'vi': 'vietnamese'
+};
+
+export interface SteamMetadataProviderConfig extends FuzzySearchMetadataProviderConfig{
+	// https://partner.steamgames.com/doc/store/localization/languages (API language code)
+	language: string | null; // null will try to guess or fallback to english
 }
 
-export interface SteamMetadataProviderCache extends FuzzySearchMetadataProviderCache
-{
+export interface SteamMetadataProviderCache extends FuzzySearchMetadataProviderCache{
 	
 }
 
-export class SteamMetadataProvider extends FuzzySearchMetadataProvider
-{
+export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
+	identifier = "steam" as const;
+	title = t("providerMetadataSteam");
 
-	static identifier: keyof MetadataProviderConfigs = "steam";
-	static title: string = t("providerMetadataSteam");
-	identifier: keyof MetadataProviderConfigs = SteamMetadataProvider.identifier;
-	title: string = SteamMetadataProvider.title;
+	logger: Logger = new Logger(this.identifier);
 
-	logger: Logger = new Logger(SteamMetadataProvider.identifier)
-
-	get language(): string
-	{
-		return this.module.config.providers.steam.language;
+	// Retrieve selected language, try guessing, or default to english
+	get language(): string{
+		return this.config.language
+			?? langMap[getCurrentLanguage()]
+			?? langMap['en']!;
 	}
 
-	set language(language: string)
-	{
-		this.module.config.providers.steam.language = language;
-		void this.module.saveConfig();
+	set language(language: string){
+		this.config.language = language;
+		void this.saveConfig();
 	}
 
-	protected async search(title: string): Promise<MetadataData[]>
-	{
+	protected async search(title: string): Promise<MetadataData[]>{
 		// Basic fetchNoCors is buggy AF and the encoded JSON doesn't play well
 		// (it throws when we have titles containing HTTP not encoded chars),
 		// so we use legacy here...
@@ -68,8 +101,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 					include_release: true
 				}
 			}))));
-		if (response.ok)
-		{
+		if (response.ok){
 			let games: {
 				response?: {
 					store_items?: {
@@ -135,19 +167,18 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 				<DialogControlsSection>
 					<Field
 						label={t("language")}
-						description={
-							<>
-								<TextField
-									value={language}
-									disabled={loadingData.loading}
-									onChange={(event) => {
-										setLanguage(event.target.value);
-										this.language = event.target.value;
-									}}/>
-								<br/>
-								<span>{t("languageExtendedDescription")}</span>
-							</>
-						} />
+						childrenContainerWidth={'fixed'}>
+						<Dropdown
+							rgOptions={Object.entries(langMap)
+								.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
+								.sort((a, b) => a.label.localeCompare(b.label))}
+							selectedOption={language}
+							disabled={loadingData.loading}
+							onChange={(newVal) => {
+								setLanguage(newVal.data);
+								this.language = newVal.data;
+							}} />
+					</Field>
 					<Field
 						label={t("fuzziness")}
 						description={
@@ -171,7 +202,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 
 				<DialogControlsSection>
 					<IdOverrideComponent
-						provider={this}
+						source={this}
 						value={overrides}
 						disabled={loadingData.loading}
 						onChange={async (value) => {
@@ -180,19 +211,8 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 							this.overrides = value;
 							await this.onOverridesChange(oldValue, value);
 						}}
-						resultsForApp={async (appId) => {
-							const ret: Record<ID, OverrideEntry<ID>> = {}
-							for (const [id, value] of Object.entries(await this.throttle(() => this.getAllMetadataForGame(appId)) ?? []))
-							{
-								ret[id] = {
-									label: appStore.GetAppOverviewByAppID(appId).display_name,
-									title: value.title,
-									id: id,
-									appId: appId
-								}
-							}
-							return ret;
-						}} />
+						resultsForApp={(appId) => this.throttle(() => this.getAllMetadataForGame(appId))}
+						defaultResults={(results, appId) => this.pickDefaultEntry(results, appId)} />
 				</DialogControlsSection>
 			</>
 		)
@@ -203,8 +223,9 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider
 		if(!external && this.excludedApps.includes(appId))
 			return undefined;
 
-		const response = await fetchNoCorsLegacyTimeout(
-			"https://store.steampowered.com/api/appdetails?appids={0}&l={1}"
+		// Currency code is required otherwise some entries are not returned successfully for some languages...
+		let response = await fetchNoCorsLegacyTimeout(
+			"https://store.steampowered.com/api/appdetails?appids={0}&l={1}&cc=EUR"
 				.replace("{0}", appId.toString())
 				.replace("{1}", this.language));
 		if (!response.ok)

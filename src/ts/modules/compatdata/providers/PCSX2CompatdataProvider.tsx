@@ -4,10 +4,8 @@ import {t} from "../../../useTranslations";
 import { removeAfterAndIncluding, removeBeforeAndIncluding } from "../../GamesDBResult";
 import Logger from "../../../logger";
 import type { ProviderCache, ProviderConfig } from "../../Provider";
-import type { ResolverCache, ResolverConfig } from "../../Resolver";
-import { separator, type MultiIdResolver, type MultiIdResolverCaches, type MultiIdResolverConfigs } from "../../resolvers/MultiId/MultiIdResolver";
+import { separator } from "../../resolvers/MultiId/MultiIdResolver";
 import { CompatdataProvider } from "../CompatdataProvider";
-import { MultiIdPCSX2Resolver } from "../../resolvers/MultiId/MultiIdPCSX2Resolver";
 import { SiPlaystation2 } from "react-icons/si";
 import { toasterToast } from "../../../util";
 
@@ -18,35 +16,24 @@ type PCSX2CompatData = {
 	status: "Perfect" | "Playable" | "Ingame" | "Menus" | "Intros" | "Nothing";
 };
 
-export interface PCSX2CompatdataProviderConfig extends ProviderConfig<Pick<MultiIdResolverConfigs, 'pcsx2'>, ResolverConfig>
+export interface PCSX2CompatdataProviderConfig extends ProviderConfig<"pcsx2">
 {
 	
 }
 
-export interface PCSX2CompatdataProviderCache extends ProviderCache<Pick<MultiIdResolverCaches, 'pcsx2'>, ResolverCache>
-{
+export interface PCSX2CompatdataProviderCache extends ProviderCache{
 
 }
 
-export class PCSX2CompatdataProvider extends CompatdataProvider<any>
-{
-	resolvers: MultiIdResolver[] = [
-		new MultiIdPCSX2Resolver(this)
-	];
-	
-	static identifier: string = "pcsx2";
-	static title: string = t("providerCompatdataPCSX2");
-	identifier: string = PCSX2CompatdataProvider.identifier;
-	title: string = PCSX2CompatdataProvider.title;
+export class PCSX2CompatdataProvider extends CompatdataProvider<"pcsx2">{
+	identifier = "pcsx2" as const;
+	title = t("providerCompatdataPCSX2");
 
-	logger = new Logger(PCSX2CompatdataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private compatData: Record<string, PCSX2CompatData> = {}; // Formatted serial: compat
 
-	override async mount(): Promise<void>
-	{
-		await super.mount();
-		
+	override async mount(): Promise<void>{
 		// Retrieve compat page source
 		let init = false;
 		try{

@@ -1,39 +1,32 @@
 import {ID, MetadataData} from "../../../../Interfaces";
 import {ResolverCache, ResolverConfig} from "../../../Resolver";
-import {t} from "../../../../useTranslations";
 import {GOGMetadataProviderResolver, separator} from "./GOGMetadataProviderResolver";
 import {getLaunchCommand, isEpicGame, isGOGGame, isHeroicGame} from "../../../../shortcuts";
 import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesDBResult";
 import {getAppDetails} from "../../../../util";
-import {GOGMetadataProviderResolverConfigs} from "../../providers/GOGMetadataProvider";
 import {callable} from "@decky/api";
 import { SiHeroicgameslauncher } from "react-icons/si";
 
-export interface GOGMetadataProviderHeroicResolverConfig extends ResolverConfig
-{
+export interface GOGMetadataProviderHeroicResolverConfig extends ResolverConfig{
+
 }
 
-export interface GOGMetadataProviderHeroicResolverCache extends ResolverCache
-{
+export interface GOGMetadataProviderHeroicResolverCache extends ResolverCache{
+
 }
 
-export class GOGMetadataProviderHeroicResolver extends GOGMetadataProviderResolver
-{
-	static identifier: keyof GOGMetadataProviderResolverConfigs = "heroic";
-	static title: string = t("providerMetadataGOG");
-	identifier: keyof GOGMetadataProviderResolverConfigs = GOGMetadataProviderHeroicResolver.identifier;
-	title: string = GOGMetadataProviderHeroicResolver.title;
+export class GOGMetadataProviderHeroicResolver extends GOGMetadataProviderResolver<"gog_heroic">{
+	identifier = "gog_heroic" as const;
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (details == null)
 			return false;
+
 		return isHeroicGame(getLaunchCommand(details));
 	}
 
-	async resolve(appId: number): Promise<ID | undefined>
-	{
+	async resolve(appId: number): Promise<ID | undefined>{
 		const details = await getAppDetails(appId);
 		if (details == null)
 			return undefined;
@@ -62,8 +55,7 @@ export class GOGMetadataProviderHeroicResolver extends GOGMetadataProviderResolv
 		'install_path': string
 	}> = callable("heroic_egs_data");
 
-	override async apply(appId: number, data: MetadataData): Promise<void>
-	{
+	override async apply(appId: number, data: MetadataData): Promise<void>{
 		if(data.install_size && data.install_date)
 			return;
 

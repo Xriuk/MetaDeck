@@ -1,33 +1,28 @@
-import {ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isRPCS3Game, romRegex} from "../../../shortcuts";
 import {getAppDetails} from "../../../util";
-import { type MultiIdResolverConfigs } from "./MultiIdResolver";
 import { call } from "@decky/api";
-import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache } from "./MultiIdSerialStation";
+import { MultiIdSerialStationResolver, type MultiIdSerialStationResolverCache, type MultiIdSerialStationResolverConfig } from "./MultiIdSerialStationResolver";
 import { SiPlaystation3 } from "react-icons/si";
 
 export const rpcs3IdRegex = '\\/dev_hdd0\\/game\\/([A-Z0-9]+)\\/';
 export const rpcs3RomPathRegex = '(\\/home\\/deck\\/.+\\/PS3_GAME)\\/USRDIR\\/EBOOT\\.BIN';
 
-export interface MultiIdRPCS3ResolverConfig extends ResolverConfig
-{
+export interface MultiIdRPCS3ResolverConfig extends MultiIdSerialStationResolverConfig{
 	
 }
 
-export interface MultiIdRPCS3ResolverCache extends MultiIdSerialStationResolverCache
-{
+export interface MultiIdRPCS3ResolverCache extends MultiIdSerialStationResolverCache{
 	
 }
 
-export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver
-{
-	identifier: keyof MultiIdResolverConfigs = "rpcs3";
+export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver<"rpcs3">{
+	identifier = "rpcs3" as const;
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
+
 		return isRPCS3Game(getLaunchCommand(details));
 	}
 

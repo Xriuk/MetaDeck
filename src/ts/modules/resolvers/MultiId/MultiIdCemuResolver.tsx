@@ -1,31 +1,28 @@
 import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isCemuGame, romRegex} from "../../../shortcuts";
 import {getAppDetails, toasterToast} from "../../../util";
-import { MultiIdResolver, separator, type MultiIdResolverConfigs } from "./MultiIdResolver";
+import { MultiIdResolver, separator } from "./MultiIdResolver";
 import { call, fetchNoCors } from "@decky/api";
 import type { ID } from "../../../Interfaces";
 import { t } from "../../../useTranslations";
 import { MdOutlineTablet } from "react-icons/md";
 
-export interface MultiIdCemuResolverConfig extends ResolverConfig
-{
+export interface MultiIdCemuResolverConfig extends ResolverConfig{
 	
 }
 
-export interface MultiIdCemuResolverCache extends ResolverCache
-{
+export interface MultiIdCemuResolverCache extends ResolverCache{
 	// Last 4 chars of serial
 	game_codes: Record<number, string | null>;
 }
 
-export class MultiIdCemuResolver extends MultiIdResolver
-{
-	identifier: keyof MultiIdResolverConfigs = "cemu";
+export class MultiIdCemuResolver extends MultiIdResolver<"cemu">{
+	identifier = "cemu" as const;
 
 	private titlesCache: Record<string, string> = {}; // ID6: Title
 
 	get gameCodes(): Record<number, string | null>{
-		return (this.cache as MultiIdCemuResolverCache).game_codes;
+		return this.cache.game_codes;
 	}
 
 	override async mount(): Promise<void> {
@@ -49,8 +46,7 @@ export class MultiIdCemuResolver extends MultiIdResolver
 		}
 	}
 
-	async test(appId: number): Promise<boolean>
-	{
+	async test(appId: number): Promise<boolean>{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;

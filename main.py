@@ -1046,14 +1046,14 @@ class Plugin:
 		result = {}
 
 		try:
-			url = "https://github.com/blawar/titledb/blob/master/" + language + ".json"
+			url = "https://raw.githubusercontent.com/blawar/titledb/refs/heads/master/" + language + ".json"
 			ssl_backup = ssl._create_default_https_context
 			ssl._create_default_https_context = get_ssl_context
 			temp_filename = urllib.request.urlretrieve(url)[0]
 			ssl._create_default_https_context = ssl_backup
 
-			with open(temp_filename, "r", encoding='utf-8') as f:
-				data = json.load(CleanedTextStream(f))
+			with open(temp_filename, "r", encoding="utf-8") as f:
+				data = json.load(f)
 				for entry in data:
 					if not "id" in data[entry]:
 						continue

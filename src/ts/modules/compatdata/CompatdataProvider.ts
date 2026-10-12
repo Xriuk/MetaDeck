@@ -1,40 +1,7 @@
-import {Provider} from "../Provider";
-import {CompatdataData} from "../../Interfaces";
-import {
-	CompatdataCache,
-	CompatdataConfig,
-	CompatdataModule, CompatdataProviderCaches, CompatdataProviderCacheTypes,
-	CompatdataProviderConfigs,
-	CompatdataProviderConfigTypes, CompatdataProviderResolverCaches, CompatdataProviderResolverConfigs
-} from "./CompatdataModule";
-import {Resolver} from "../Resolver";
+import {Provider, type ProviderIdentifier} from "../Provider";
+import type { CompatdataModule } from "./CompatdataModule";
 
-export abstract class CompatdataProvider<Res extends Resolver<
-	   CompatdataModule,
-	   CompatdataProvider<Res>,
-	   Res,
-	   CompatdataConfig,
-	   CompatdataProviderConfigs,
-	   CompatdataProviderConfigTypes,
-	   CompatdataProviderResolverConfigs,
-	   CompatdataCache,
-	   CompatdataProviderCaches,
-	   CompatdataProviderCacheTypes,
-	   CompatdataProviderResolverCaches,
-	   CompatdataData
->> extends Provider<
-	   CompatdataModule,
-	   CompatdataProvider<Res>,
-	   Res,
-	   CompatdataConfig,
-	   CompatdataProviderConfigs,
-	   CompatdataProviderConfigTypes,
-	   CompatdataProviderResolverConfigs,
-	   CompatdataCache,
-	   CompatdataProviderCaches,
-	   CompatdataProviderCacheTypes,
-	   CompatdataProviderResolverCaches,
-	   CompatdataData
->
-{
+export abstract class CompatdataProvider<Identifier extends ProviderIdentifier<CompatdataModule>>
+	extends Provider<CompatdataModule, Identifier, "compatdata">{
+	
 }

@@ -1,49 +1,35 @@
-import {ResolverCache, ResolverConfig} from "../Resolver";
+import {Resolver, ResolverCache, ResolverConfig} from "../Resolver";
 import {getLaunchCommand, isRyujinxGame, romRegex} from "../../shortcuts";
 import {getAppDetails, toasterToast} from "../../util";
 import { call } from "@decky/api";
 import type { ID } from "../../Interfaces";
-import { GlobalResolver } from "./GlobalResolver";
 import { t } from "../../useTranslations";
 import { BsNintendoSwitch } from "react-icons/bs";
 
-export interface RyujinxTitleIdResolverConfig extends ResolverConfig
-{
+export interface RyujinxTitleIdResolverConfig extends ResolverConfig{
 	
 }
 
-export interface RyujinxTitleIdResolverCache extends ResolverCache
-{
+export interface RyujinxTitleIdResolverCache extends ResolverCache{
 	title_ids: Record<number, string | null>;
 	ryujinx_prod_keys: boolean | undefined;
 }
 
-export interface RyujinxTitleIdResolverConfigs
-{
-	ryujinx: RyujinxTitleIdResolverConfig;
-}
-
-export interface RyujinxTitleIdResolverCaches
-{
-	ryujinx: RyujinxTitleIdResolverCache;
-}
-
 // Returns actual title ids (eg: 01007EF00011E000)
-export class RyujinxTitleIdResolver extends GlobalResolver<RyujinxTitleIdResolver>
-{
-	identifier: keyof RyujinxTitleIdResolverConfigs = "ryujinx";
+export class RyujinxTitleIdResolver extends Resolver<"ryujinx_titleid" | "ryujinx_serial">{
+	identifier: "ryujinx_titleid" | "ryujinx_serial" = "ryujinx_titleid" as const;
 
 	get titleIds(): Record<number, string | null>{
-		return (this.cache as RyujinxTitleIdResolverCache).title_ids;
+		return this.cache.title_ids;
 	}
 
 	get ryujinxProdKeys(): boolean | undefined{
-		return (this.cache as RyujinxTitleIdResolverCache).ryujinx_prod_keys;
+		return this.cache.ryujinx_prod_keys;
 	}
 
 	set ryujinxProdKeys(value: boolean | undefined){
-		(this.cache as RyujinxTitleIdResolverCache).ryujinx_prod_keys = value;
-		void this.module.saveCache();
+		this.cache.ryujinx_prod_keys = value;
+		void this.saveCache();
 	}
 
 	override async mount(): Promise<void> {

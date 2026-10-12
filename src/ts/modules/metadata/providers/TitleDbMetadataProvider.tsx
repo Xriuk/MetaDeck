@@ -1,10 +1,7 @@
 import { call, fetchNoCors } from "@decky/api";
 import Logger from "../../../logger";
-import { t } from "../../../useTranslations";
+import { getCurrentLanguage, getLanguageTitle, isValidLanguage, t, type Language } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
-import type { ResolverConfig, ResolverCache } from "../../Resolver";
-import { RyujinxTitleIdResolverConfigs, RyujinxTitleIdResolverCaches, RyujinxTitleIdResolver } from "../../resolvers/RyujinxTitleIdResolver";
-import type { MetadataProviderConfigs } from "../MetadataModule";
 import { MetadataProvider } from "../MetadataProvider";
 import { BsNintendoSwitch } from "react-icons/bs";
 import { useMetaDeckState } from "../../../MetaDeckState";
@@ -26,45 +23,76 @@ type TitleDbEntry = {
 	size?: number | null;
 }
 
-export interface TitleDbMetadataProviderConfig extends ProviderConfig<RyujinxTitleIdResolverConfigs, ResolverConfig>
-{
+export interface TitleDbMetadataProviderConfig extends ProviderConfig<'ryujinx_titleid'>{
 	// COUNTRY.language: US.en, IT.it, RO.en, only some available
-	language: string
+	language: string | null; // null will try to guess or fallback to english
 }
 
-export interface TitleDbMetadataProviderCache extends ProviderCache<RyujinxTitleIdResolverCaches, ResolverCache>
-{
+export interface TitleDbMetadataProviderCache extends ProviderCache{
 	
 }
 
-export class TitleDbMetadataProvider extends MetadataProvider<any>{
-	resolvers: RyujinxTitleIdResolver[] = [
-		new RyujinxTitleIdResolver(this)
-	];
+export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
+	identifier = "titledb" as const;
+	title = t("providerMetadataTitleDb");
 
-	static identifier: keyof MetadataProviderConfigs = "titledb";
-	static title: string = t("providerMetadataTitleDb");
-	identifier: keyof MetadataProviderConfigs = TitleDbMetadataProvider.identifier;
-	title: string = TitleDbMetadataProvider.title;
-
-	logger: Logger = new Logger(TitleDbMetadataProvider.identifier);
+	logger = new Logger(this.identifier);
 
 	private languages: string[] = [];
 
-	get language(): string
-	{
-		return this.module.config.providers.titledb.language;
+	get language(): string{
+		return this.config.language
+			?? this.getDefaultLanguage();
 	}
 
-	set language(language: string)
-	{
-		this.module.config.providers.titledb.language = language;
-		void this.module.saveConfig();
+	set language(language: string){
+		this.config.language = language;
+		void this.saveConfig();
+	}
+
+	private getDefaultLanguage(){
+		let lang = getCurrentLanguage();
+		
+		// Try matching a simple country/language code (IT.it, FR.fr, DE.de, ...)
+		let language = lang.toUpperCase() + "." + lang.toLowerCase();
+		if(this.languages.indexOf(language) !== -1)
+			return language;
+
+		// Try matching specific cases 
+		if(lang === "es419")
+			lang = "es"; // Will match the first non Spain-Spanish below
+		else if(lang === "ptBr"){
+			if(this.languages.indexOf("BR.pt") !== -1)
+				return "BR.pt";
+		}
+		else if(lang === "zhCn"){
+			if(this.languages.indexOf("CN.zh") !== -1)
+				return "CN.zh";
+		}
+		else if(lang === "zhTw")
+			lang = "zh" as any; // Will match the first non China-Chinese below
+
+		// Try matching just the language (except english)
+		if(lang !== "en"){
+			language = this.languages.find(l => l.endsWith("." + lang))!;
+			if(language)
+				return language;
+		}
+
+		if(this.languages.indexOf("US.en") !== -1)
+			return "US.en";
+		else if(this.languages.indexOf("GB.en") !== -1)
+			return "GB.en";
+		else{
+			language = this.languages.find(l => l.endsWith(".en"))!;
+			if(language)
+				return language;
+			else
+				return this.languages[0];
+		}
 	}
 
 	override async mount(): Promise<void> {
-		await super.mount();
-
 		// Retrieve available languages
 		const response = await fetchNoCors("https://raw.githubusercontent.com/blawar/titledb/refs/heads/master/languages.json");
 		if(!response.ok){
@@ -92,8 +120,15 @@ export class TitleDbMetadataProvider extends MetadataProvider<any>{
 		await call<[string], void>('titledb_get_language', language);
 	}
 
+	override test(appId: number, external?: boolean): Promise<boolean> {
+		if(!this.languages.length)
+			return Promise.resolve(false);
+		else
+			return super.test(appId, external);
+	}
+
 	async provide(appId: number): Promise<MetadataData | undefined> {
-		if(this.excludedApps.includes(appId))
+		if(this.excludedApps.includes(appId) || !this.languages.length)
 			return undefined;
 
 		const resolved = await this.resolve(appId, true);
@@ -144,9 +179,29 @@ export class TitleDbMetadataProvider extends MetadataProvider<any>{
 					label={t("language")}
 					childrenContainerWidth={'fixed'}>
 					<Dropdown
-						rgOptions={this.languages.map(l => ({
-							data: l, label: l
-						}))}
+						rgOptions={this.languages
+							.map(l => {
+								let [country, lang]: [string, Language] = l.split('.') as any;
+								let language;
+								if(lang === "es" && country !== "ES")
+									language = "es419";
+								else if(lang === "pt" && country !== "PT")
+									language = "ptBr";
+								else if ((lang as any) === "zh"){
+									if(country === "CN")
+										language = "zhCn";
+									else
+										language = "zhTw";
+								}
+								else
+									language = lang;
+
+								return {
+									data: l, label: (isValidLanguage(language) ? getLanguageTitle(language) : language) +
+										(this.languages.filter(l => l.startsWith(country + ".") || l.endsWith("." + language)).length > 1 ? ` (${country})` : "")
+								};
+							})
+							.sort((a, b) => a.label.localeCompare(b.label))}
 						selectedOption={language}
 						disabled={loadingData.loading}
 						onChange={(newVal) => {
