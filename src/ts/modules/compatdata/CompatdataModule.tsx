@@ -5,7 +5,7 @@ import {ReactNode, useState} from "react";
 import {Mounts} from "../../System";
 import Logger from "../../logger";
 import {routePatch} from "../../RoutePatches";
-import {format, t} from "../../useTranslations";
+import {t} from "../../useTranslations";
 import {useMetaDeckState} from "../../MetaDeckState";
 import {
 	EmuDeckCompatdataProvider,
@@ -19,7 +19,11 @@ import { RPCS3CompatdataProvider, type RPCS3CompatdataProviderCache, type RPCS3C
 import { XeniaCompatdataProvider, type XeniaCCompatdataProviderCache, type XeniaCompatdataProviderConfig } from "./providers/XeniaCompatdataProvider";
 import { DolphinCompatdataProvider, type DolphinCompatdataProviderCache, type DolphinCompatdataProviderConfig } from "./providers/DolphinCompatdataProvider";
 import { FaCheckCircle } from "react-icons/fa";
-import type { CemuCompatdataProviderCache, CemuCompatdataProviderConfig } from "./providers/CemuCompatdataProvider";
+import { CemuCompatdataProvider, type CemuCompatdataProviderCache, type CemuCompatdataProviderConfig } from "./providers/CemuCompatdataProvider";
+
+//const SteamDeckIcon = IconsModule && Object.entries(IconsModule)?.find(icon => icon[0] === "SteamPal")?.[1] as FC<SVGAttributes<SVGElement>>;
+//const SteamMachineIcon = IconsModule && Object.entries(IconsModule)?.find(icon => icon[0] === "SteamMachineIcon")?.[1] as FC<SVGAttributes<SVGElement>>;
+//const SteamFrameIcon = IconsModule && Object.entries(IconsModule)?.find(icon => icon[0] === "SteamFrameIcon")?.[1] as FC<SVGAttributes<SVGElement>>;
 
 export interface CompatdataConfig extends ModuleConfig<CompatdataProviderConfigs>{
 	verified: boolean;
@@ -61,6 +65,7 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 		new RPCS3CompatdataProvider(this),
 		new XeniaCompatdataProvider(this),
 		new DolphinCompatdataProvider(this),
+		new CemuCompatdataProvider(this),
 		new EmuDeckCompatdataProvider(this)
 	];
 
@@ -68,33 +73,27 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 		"metadata" as const
 	];
 
-	override get enabled(){
-		return false;
-	}
-
-	addMounts(mounts: Mounts): void
-	{
+	addMounts(mounts: Mounts): void{
 		const module = this;
 
 		mounts.addPatchMount({
-			patch(): Patch
-			{
+			patch(): Patch{
 				return afterPatch(
-					   appStore.allApps[0].__proto__,
-					   "BIsModOrShortcut",
+					appStore.allApps[0].__proto__,
+					"BIsModOrShortcut",
 
-					   function (_, ret) {
-						   if (!module.isValid)
-							   return ret;
+					function (_, ret) {
+						if (!module.isValid)
+							return ret;
 
-						   // @ts-ignore
-						   const overview: SteamAppOverview = this
-						   if (overview.app_type == SteamAppTypeShortcut && !module.excludedApps.includes(overview.appid))
-							   void module.applyOverview(overview);
+						// @ts-ignore
+						const overview: SteamAppOverview = this;
+						if (overview.app_type == SteamAppTypeShortcut && !module.excludedApps.includes(overview.appid))
+							void module.applyOverview(overview);
 
-						   return ret
-					   }
-				)
+						return ret;
+					}
+				);
 			}
 		});
 
@@ -102,14 +101,16 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 			afterPatch(props.children.props, "renderFunc", (_, ret) => {
 				if (!module.isValid)
 					return ret;
+
 				const overview: SteamAppOverview = ret.props.children.props.overview;
 				const details: SteamAppDetails = ret.props.children.props.details;
 
 				if (overview.app_type == SteamAppTypeShortcut && !module.excludedApps.includes(overview.appid))
-					void this.applyApp(overview, details)
+					void module.applyApp(overview, details)
 
 				return ret;
-			})
+			});
+
 			return props;
 		}));
 
@@ -118,12 +119,13 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 				if (!module.isValid)
 					return ret;
 
-				for (const appId of this.apps){
-					void this.apply(appId);
+				for (const appId of module.apps){
+					void module.apply(appId);
 				}
 
 				return ret;
-			})
+			});
+
 			return props;
 		}));
 	}
@@ -145,8 +147,7 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 		};
 	}
 
-	progressDescription(data?: CompatdataData): string
-	{
+	progressDescription(data?: CompatdataData): string{
 		const compat = (cat: SteamDeckCompatCategory) => ({
 			[SteamDeckCompatCategory.UNKNOWN]: t("unknown"),
 			[SteamDeckCompatCategory.UNSUPPORTED]: t("unsupported"),
@@ -160,6 +161,22 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 			`Machine: ${compat(categories.machine_compat_category)}\n` +
 			`Frame: ${compat(categories.frame_compat_category)}\n` +
 			`OS: ${compat(categories.os_compat_category)}`;
+	}
+
+	isEmpty(data: CompatdataData): boolean {
+		return (data.deck_compat_category == null || data.deck_compat_category === SteamDeckCompatCategory.UNKNOWN) &&
+			(data.machine_compat_category == null || data.machine_compat_category === SteamDeckCompatCategory.UNKNOWN) &&
+			(data.frame_compat_category == null || data.frame_compat_category === SteamDeckCompatCategory.UNKNOWN) &&
+			(data.os_compat_category == null || data.os_compat_category === SteamDeckCompatCategory.UNKNOWN) &&
+			
+			!data.deck_test_results?.length &&
+			!data.machine_test_results?.length &&
+			!data.os_test_results?.length &&
+			!data.frame_test_results?.length;
+	}
+	
+	protected override cacheData(appId: number, data: CompatdataData | null): void {
+		this.data[appId] = data;
 	}
 
 	get verified(): boolean
@@ -219,7 +236,9 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 					<Field
 						label={t("compatdataSettingsNotes")}
 						description={!verified ?
-							format(t("settingsDependencyNotMet"), t("compatdataSettingsNotes"), t("compatdataSettingsVerified")) :
+							t("settingsDependencyNotMet")
+								.replace("{setting1}", t("compatdataSettingsNotes"))
+								.replace("{setting2}", t("compatdataSettingsVerified")) :
 							t("compatdataSettingsNotesDesc")}>
 						<Toggle
 							value={notes}
@@ -232,7 +251,9 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 					<Field
 						label={t("compatdataSettingsTestResults")}
 						description={!verified ?
-							format(t("settingsDependencyNotMet"), t("compatdataSettingsTestResults"), t("compatdataSettingsVerified")) :
+							t("settingsDependencyNotMet")
+								.replace("{setting1}", t("compatdataSettingsTestResults"))
+								.replace("{setting2}", t("compatdataSettingsVerified")) :
 							t("compatdataSettingsTestResultsDesc")}>
 						<Toggle
 							value={testResults}
@@ -246,14 +267,13 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 		)
 	};
 
-	applyOverview(overview: SteamAppOverview): Promise<void>
-	{
+	applyOverview(overview: SteamAppOverview): Promise<void>{
 		if (!this.verified || this.excludedApps.includes(overview.appid))
 			return Promise.resolve();
 
-		const categories = this.computeCompatCategories(this.data[overview.appid]);
+		const categories = this.computeCompatCategories(this.getCachedData(overview.appid));
 
-		// 32 bit (uint): ... | Steam Frame (2) | Steam Machine (2) | Steam OS (2) | ??? (2) | Deck (2)
+		// 32 bit (uint): ... | Steam Frame (2) | Steam Machine (2) | Steam OS (2) | ??? (2) | Steam Deck (2)
 		overview.steam_hw_compat_category_packed =
 			(categories.frame_compat_category << 8) |
 			(categories.machine_compat_category << 6) |
@@ -263,12 +283,11 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 		return Promise.resolve();
 	}
 
-	applyDetails(details: SteamAppDetails): Promise<void>
-	{
+	applyDetails(details: SteamAppDetails): Promise<void>{
 		if(!this.verified || this.excludedApps.includes(details.unAppID))
 			return Promise.resolve();
 
-		const compatdata = this.data[details.unAppID];
+		const compatdata = this.getCachedData(details.unAppID);
 		if(!compatdata)
 			return Promise.resolve();
 

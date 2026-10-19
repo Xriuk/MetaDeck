@@ -3,8 +3,7 @@ import {ReactMarkdown, ReactMarkdownOptions} from "react-markdown/lib/react-mark
 import remarkGfm from "remark-gfm";
 import {Focusable, Navigation} from "@decky/ui";
 
-interface MarkdownProps extends ReactMarkdownOptions
-{
+interface MarkdownProps extends ReactMarkdownOptions{
 	onDismiss?: () => void;
 }
 

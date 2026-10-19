@@ -9,7 +9,7 @@ import { toasterToast } from "../../../util";
 
 type XeniaCompatData = {
 	title: string;
-	status: "Playable" | "Gameplay" | "Loads" | "Unplayable";
+	state: "Playable" | "Gameplay" | "Loads" | "Unplayable";
 	id: string;
 };
 
@@ -57,8 +57,8 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>{
 			id: titleId,
 
 			deck_compat_category:
-				this.compatData[titleId].status === "Playable" ? SteamDeckCompatCategory.VERIFIED :
-				this.compatData[titleId].status === "Gameplay" ? SteamDeckCompatCategory.PLAYABLE :
+				this.compatData[titleId].state === "Playable" ? SteamDeckCompatCategory.VERIFIED :
+				this.compatData[titleId].state === "Gameplay" ? SteamDeckCompatCategory.PLAYABLE :
 				SteamDeckCompatCategory.UNSUPPORTED,
 
 			deck_test_results: [],

@@ -12,6 +12,7 @@ import { DialogControlsSection, Field, TextField, DialogButton, Toggle, Dropdown
 import React, { useState } from "react";
 import { Markdown } from "../../../markdown";
 import { useMetaDeckState } from "../../../MetaDeckState";
+import { cloneDeep } from "lodash-es";
 
 const langMap: Partial<Record<Language, number>> = {
 	'en': 1, // US
@@ -71,7 +72,7 @@ export interface XeniaAchievementsProviderConfig extends ProviderConfig<'xenia'>
 }
 
 export interface XeniaAchievementsProviderCache extends ProviderCache{
-	game_achievements: Record<number, XeniaGameAchievements | null>;
+	game_achievements: Record<number, XeniaGameAchievements | null>; // Cached without icons, or from RAWG, without grayscale
 }
 
 export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
@@ -161,7 +162,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		if(!this.userPath || this.excludedApps.includes(appId))
 			return undefined;
 
-		if(this.gameAchievements[appId] === undefined)
+		if(this.gameAchievements[appId] === null)
 			return undefined;
 
 		const titleId = await this.resolve(appId);
@@ -175,21 +176,21 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			this.gameAchievements[appId] = null;
 			return undefined;
 		}
+		
+		const launchCommand = getLaunchCommand(details);
+		const rom = launchCommand.match(romRegex)?.[0];
+		if(!rom){
+			this.gameAchievements[appId] = null;
+			return undefined;
+		}
 
 		// Retrieve from cache first, since trophies data does not change
 		let achievements: XeniaGameAchievementsStats;
 		let achievementsFromUser = true; // True if retrieved achievements from user along with the progress
 		let progressRetrieved = false; // True if we retrieved progress
 		if(this.gameAchievements[appId])
-			achievements = { ...this.gameAchievements[appId] };
+			achievements = cloneDeep(this.gameAchievements[appId]);
 		else {
-			const launchCommand = getLaunchCommand(details);
-			const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
-			if(!rom){
-				this.gameAchievements[appId] = null;
-				return undefined;
-			}
-
 			achievements = { } as any;
 
 			// Retrieve progress, and maybe achievements
@@ -221,13 +222,13 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 				// If we have achievements we'll need to match them with local ones, but we need english titles
 				if(rawgAchievements?.length){
 					let achievementsNames: Record<string, number> = {}; // English name: achievement id
-					if(this.language === 1){ // en
+					if(this.language === langMap['en']){
 						for(let achievement of achievements.achievements){
 							achievementsNames[achievement.name] = achievement.id;
 						}
 					}
 					else{
-						result = await this.xenia_get_all_achievements_game(rom, titleId.toString(), this.language) ?? null;
+						result = await this.xenia_get_all_achievements_game(rom, titleId.toString(), langMap['en']!) ?? null;
 						if(result){
 							let englishAchievements = (JSON.parse(result ?? '{}') as XeniaGameAchievements).achievements;
 							for(let achievement of englishAchievements){
@@ -237,6 +238,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 					}
 
 					if(Object.keys(achievementsNames).length){
+						this.logger.debug("Matching RAWG achievements with names", rawgAchievements, achievementsNames);
 						achievements.rarity = {};
 						for(let achievement of rawgAchievements){
 							let achievementId = achievementsNames[achievement.name];
@@ -247,6 +249,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 							achievements.achievements.find(a => a.id === achievementId)!.icon = achievement.image;
 						}
+						this.logger.debug("Achievements not matched:", achievements.achievements.filter(a => !a.icon));
 					}
 				}
 			}
@@ -269,27 +272,8 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 				}
 			}
 
-			// Retrieve achievements icons if needed and create grayscale versions for locked
-			for(let achievement of achievements.achievements){
-				if(!achievement.icon){
-					// Retrieve icon from user profile GPD first
-					if(achievementsFromUser)
-						achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath, titleId.toString(), achievement.icon_id) ?? '';
-					
-					// If not found retrieve from game ROM
-					if(!achievement.icon && rom)
-						achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_game", rom, titleId.toString(), achievement.icon_id) ?? '';
-				}
-				
-				// Create a locked grayscale version
-				if(achievement.icon)
-					achievement.locked_icon = await grayScaleIcon(achievement.icon);
-				else
-					achievement.locked_icon = '';
-			}
-
 			if(achievements.achievements.length){
-				this.gameAchievements[appId] = { ...achievements };
+				this.gameAchievements[appId] = cloneDeep(achievements);
 				delete (this.gameAchievements[appId] as any).progress;
 			}
 			else
@@ -298,6 +282,25 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 		if(!achievements.achievements.length)
 			return undefined;
+
+		// Retrieve achievements icons if needed and create grayscale versions for locked
+		for(let achievement of achievements.achievements){
+			if(!achievement.icon){
+				// Retrieve icon from user profile GPD first
+				if(achievementsFromUser)
+					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath, titleId.toString(), achievement.icon_id) ?? '';
+				
+				// If not found retrieve from game ROM
+				if(!achievement.icon && rom)
+					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_game", rom, titleId.toString(), achievement.icon_id) ?? '';
+			}
+			
+			// Create a locked grayscale version
+			if(achievement.icon)
+				achievement.locked_icon = await grayScaleIcon(achievement.icon);
+			else
+				achievement.locked_icon = '';
+		}
 
 		// Retrieve progress if using cached data
 		if(!progressRetrieved && achievementsFromUser){

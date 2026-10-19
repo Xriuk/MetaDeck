@@ -38,11 +38,11 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<"rpcs3">{
 			return undefined;
 
 		// RPCS3 groups the title id for different regions
-		const titleId = (await this.resolve(appId))?.toString().split(separator)[0];
+		const titleId = (await this.resolve(appId))?.toString()
+			.split(separator)?.[0];
+		this.logger.debug("Title id", appId, titleId);
 		if(!titleId)
 			return undefined;
-
-		this.logger.debug("Title id", appId, titleId);
 
 		const response = await fetchNoCorsLegacyTimeout("https://rpcs3.net/compatibility?" + new URLSearchParams({
 			api: 'v1',
@@ -99,31 +99,25 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<"rpcs3">{
 			test_result: SteamTestResult.Playable
 		});
 		machineAndFrame.forEach(([results, cat]) => {
-			results.push(
-				{
-					test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
-					test_result: SteamTestResult.Playable
-				}
-			);
+			results.push({
+				test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
+				test_result: SteamTestResult.Playable
+			});
 		});
 		deckMachineAndFrame.forEach(([results, cat]) => {
-			results.push(
-				{
-					test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
-					test_result: SteamTestResult.Verified
-				}
-			);
+			results.push({
+				test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+				test_result: SteamTestResult.Verified
+			});
 		});
 
 		// Default configuration works fine for playable games (we cannot assume for the Frame here)
 		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
 			deckAndMachine.forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
-						test_result: SteamTestResult.Verified
-					}
-				);
+				results.push({
+					test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
+					test_result: SteamTestResult.Verified
+				});
 			});
 		}
 
@@ -135,12 +129,10 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<"rpcs3">{
 					[result.deck_test_results!, "SteamDeckVerified"],
 					[result.os_test_results!, "SteamOS"]
 				] as const).forEach(([results, cat]) => {
-					results.push(
-						{
-							test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
-							test_result: SteamTestResult.Playable
-						}
-					);
+					results.push({
+						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
+						test_result: SteamTestResult.Playable
+					});
 				});
 			}
 			if(metadata.some(m => m.controls?.some(c => c.type === "eye" && c.required))){
@@ -148,12 +140,10 @@ export class RPCS3CompatdataProvider extends CompatdataProvider<"rpcs3">{
 					[result.deck_test_results!, "SteamDeckVerified"],
 					[result.os_test_results!, "SteamOS"]
 				] as const).forEach(([results, cat]) => {
-					results.push(
-						{
-							test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalWebcam`,
-							test_result: SteamTestResult.Playable
-						}
-					);
+					results.push({
+						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalWebcam`,
+						test_result: SteamTestResult.Playable
+					});
 				});
 			}
 		}

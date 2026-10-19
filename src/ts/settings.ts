@@ -1,7 +1,7 @@
 import {MetaDeckState} from "./MetaDeckState";
 import Logger from "./logger";
 import {systemClock} from "./System";
-import {callable} from "@decky/api";
+import {call} from "@decky/api";
 import {ModuleCaches, ModuleConfigs} from "./modules/Module";
 import {merge} from "lodash-es";
 import { Mutex } from "async-mutex";
@@ -23,10 +23,7 @@ export class Settings
 	private readonly state: MetaDeckState;
 	private readonly logger: Logger;
 
-	private read_config = callable<[], ConfigData>("read_config")
-	private write_config = callable<[ConfigData], void>("write_config")
-	private read_cache = callable<[], CacheData>("read_cache")
-	private write_cache = callable<[CacheData], void>("write_cache")
+	private readonly packet_size: number = 4000; // chars
 
 	static readonly defaultConfig: ConfigData = {
 		excluded_apps: [],
@@ -422,13 +419,25 @@ export class Settings
 	}
 
 
-	private async readConfig(): Promise<void>
-	{
+	private async readConfig(): Promise<void>{
 		const release = await this.configMutex.acquire();
 		try{
 			this.logger.debug("Reading config...");
 			const start = systemClock.getTimeMs();
-			this.configData = merge({}, Settings.defaultConfig, await this.read_config() ?? {});
+
+			let buffer = "";
+			try{
+				const length = await call<[number], number>("start_read_config", this.packet_size);
+				for (let i = 0; i < length; i++){
+					buffer += await call<[number], string>("read_config", i);
+				}
+				this.logger.debug("Config buffer", buffer);
+			}
+			catch(e){
+				this.logger.error("Error while reading config", e);
+			}
+
+			this.configData = merge({}, Settings.defaultConfig, JSON.parse(buffer || "{}"));
 			const end = systemClock.getTimeMs();
 			this.logger.debug("Read config in " + (end - start) + "ms", this.configData);
 
@@ -439,8 +448,7 @@ export class Settings
 		}
 	}
 
-	public async writeConfig(): Promise<void>
-	{
+	public async writeConfig(): Promise<void>{
 		const release = await this.configMutex.acquire();
 		try{
 			if(!this.configRead || !this.configAllowSaving)
@@ -448,7 +456,15 @@ export class Settings
 
 			this.logger.debug("Writing config...");
 			const start = systemClock.getTimeMs();
-			await this.write_config(this.configData);
+
+			const buffer = JSON.stringify(this.configData);
+			const chunks = Math.ceil(buffer.length / this.packet_size);
+			await call<[number], void>("start_write_config", chunks);
+			for (let i = 0; i < chunks; i++){
+				const data = buffer.slice(i * this.packet_size, (i + 1) * this.packet_size);
+				await call<[number, string], void>("write_config", i, data);
+			}
+
 			const end = systemClock.getTimeMs();
 			this.logger.debug("Wrote config in " + (end - start) + "ms", this.configData);
 		}
@@ -458,13 +474,25 @@ export class Settings
 	}
 
 
-	private async readCache(): Promise<void>
-	{
+	private async readCache(): Promise<void>{
 		const release = await this.cacheMutex.acquire();
 		try{
 			this.logger.debug("Reading cache...");
 			const start = systemClock.getTimeMs();
-			this.cacheData = merge({}, Settings.defaultCache, await this.read_cache() ?? {});
+
+			let buffer = "";
+			try{
+				const length = await call<[number], number>("start_read_cache", this.packet_size);
+				for (let i = 0; i < length; i++){
+					buffer += await call<[number], string>("read_cache", i);
+				}
+				this.logger.debug("Cache buffer", buffer);
+			}
+			catch(e){
+				this.logger.error("Error while reading cache", e);
+			}
+
+			this.cacheData = merge({}, Settings.defaultCache, JSON.parse(buffer || "{}"));
 			const end = systemClock.getTimeMs();
 			this.logger.debug("Read cache in " + (end - start) + "ms", this.cacheData);
 
@@ -475,8 +503,7 @@ export class Settings
 		}
 	}
 
-	public async writeCache(): Promise<void>
-	{
+	public async writeCache(): Promise<void>{
 		const release = await this.cacheMutex.acquire();
 		try{
 			if(!this.cacheRead || !this.cacheAllowSaving)
@@ -484,7 +511,15 @@ export class Settings
 
 			this.logger.debug("Writing cache...");
 			const start = systemClock.getTimeMs();
-			await this.write_cache(this.cacheData);
+
+			const buffer = JSON.stringify(this.cacheData);
+			const chunks = Math.ceil(buffer.length / this.packet_size);
+			await call<[number], void>("start_write_cache", chunks);
+			for (let i = 0; i < chunks; i++){
+				const data = buffer.slice(i * this.packet_size, (i + 1) * this.packet_size);
+				await call<[number, string], void>("write_cache", i, data);
+			}
+
 			const end = systemClock.getTimeMs();
 			this.logger.debug("Wrote cache in " + (end - start) + "ms", this.cacheData);
 		}

@@ -6,6 +6,7 @@ import throttledQueue from "throttled-queue";
 import {ModuleResolver, type Resolver, type ResolverIdentifier} from "./Resolver";
 import {ID, type IDDictionary} from "../Interfaces";
 import type { SteamAppOverview } from "../SteamTypes";
+import { Settings } from "../settings";
 
 export interface ProviderResolverConfig{
 	enabled: boolean;
@@ -116,13 +117,14 @@ export abstract class Provider<
 	}
 
 	get resolvers(): IsAny<Identifier> extends true ? Resolver<any>[] : Resolvers[Cast<keyof ProvConfig['resolvers'], ResolverIdentifier>][]{
-		return Object.keys(this.config.resolvers)
-			.map(r => (this.state.resolvers as any)[r] as Resolver<any>)
-			.filter(r => !!r) as any; // Need to filter because we might have old resolvers in config
+		// Exclude previous resolvers which might still be in config...
+		const modules = Settings.defaultConfig.modules;
+		const providers = modules[this.module.identifier as keyof typeof modules].providers;
+		return Object.keys((providers[this.identifier as keyof typeof providers] as ProviderConfig).resolvers)
+			.map(r => (this.state.resolvers as any)[r] as Resolver<any>) as any;
 	}
 
-	async test(appId: number, external = false): Promise<boolean>
-	{
+	async test(appId: number, external = false): Promise<boolean>{
 		if(!external && this.excludedApps.includes(appId))
 			return false;
 
@@ -180,13 +182,11 @@ export abstract class Provider<
 		await this.saveCache();
 	}
 
-	saveConfig(): Promise<void>
-	{
+	saveConfig(): Promise<void>{
 		return this.module.saveConfig();
 	}
 
-	saveCache(): Promise<void>
-	{
+	saveCache(): Promise<void>{
 		return this.module.saveCache();
 	}
 

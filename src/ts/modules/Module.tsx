@@ -7,7 +7,7 @@ import Logger from "../logger";
 import {CompatdataCache, CompatdataConfig} from "./compatdata/CompatdataModule";
 import {SteamAppDetails, SteamAppOverview} from "../SteamTypes";
 import {getAppDetails, stateTransaction} from "../util";
-import {format, t} from "../useTranslations";
+import {t} from "../useTranslations";
 import PromisePool from "es6-promise-pool";
 import { SteamAppTypeShortcut } from "../Interfaces";
 import type { AchievementsCache, AchievementsConfig } from "./achievements/AchievementsModule";
@@ -24,7 +24,7 @@ export interface ModuleConfig<ProvConfigs extends Record<keyof ProvConfigs, Prov
 }
 
 export interface ModuleCache<ProvCaches extends Record<keyof ProvCaches, ProviderCache>, Data>{
-	data: Record<number, Data>;
+	data: Record<number, Data | null>;
 	data_providers: Record<number, keyof ProvCaches>;
 	providers: ProvCaches;
 }
@@ -88,14 +88,16 @@ export abstract class Module<
 		throw error
 	}
 
-	get data(): Record<number, Data>{
+	get data(): Record<number, Data | null>{
 		return this.cache.data as any;
 	}
 
-	set data(data: Record<number, Data>){
+	set data(data: Record<number, Data | null>){
 		this.cache.data = data as any;
 		void this.saveCache();
 	}
+
+	notCachedData: Record<number, Data | null> = {}; // Heavy data which should not be saved to cache
 
 	get dataProviders(){
 		return this.cache.data_providers;
@@ -157,8 +159,7 @@ export abstract class Module<
 		return !this.unmetDependency && this.enabled;
 	}
 
-	get overviews(): SteamAppOverview[]
-	{
+	get overviews(): SteamAppOverview[]{
 		return this.state.overviews
 			.filter(a => !this.excludedAppsSelf.includes(a.appid));
 	}
@@ -168,8 +169,7 @@ export abstract class Module<
 		return this.overviews.map(overview => overview.appid);
 	}
 
-	async apply(appId: number): Promise<void>
-	{
+	async apply(appId: number): Promise<void>{
 		if(this.excludedApps.includes(appId))
 			return;
 
@@ -182,15 +182,13 @@ export abstract class Module<
 		if(this.excludedApps.includes(overview.appid))
 			return;
 
-		try
-		{
-			if (overview.app_type == SteamAppTypeShortcut)
-			{
+		try{
+			if (overview.app_type == SteamAppTypeShortcut){
 				await this.applyOverview(overview);
 				await stateTransaction(async () => {
 					if(details)
 						await this.applyDetails(details)
-				})
+				});
 			}
 		}
 		catch (e: any){
@@ -214,11 +212,13 @@ export abstract class Module<
 		});
 
 		await this.saveCache();
+
+		delete this.notCachedData[appId];
 	}
 
 	async clearCache(): Promise<void>{
 		await this.state.settings.runInDisabledSaveState(async () => {
-			for (let appId of Object.keys(this.data)){
+			for (let appId of this.state.apps){
 				await this.removeCache(+appId);
 			}
 			this.data = {};
@@ -228,6 +228,8 @@ export abstract class Module<
 		});
 
 		await this.saveCache();
+
+		this.notCachedData = {};
 	}
 
 	saveConfig(): Promise<void>{
@@ -240,14 +242,33 @@ export abstract class Module<
 
 	abstract addMounts(mounts: Mounts): void;
 
-	abstract progressDescription(data?: Data): string
+	abstract progressDescription(data?: Data): string;
+
+	abstract isEmpty(data: Data): boolean;
 
 	get missingDescription(): string{
-		return format(t("noData"), this.title)
+		return t("noData").replace("{data}", this.title);
 	}
 
 	public hasData(appId: number): boolean{
-		return !!this.data[appId];
+		return this.getCachedData(appId) != null;
+	}
+
+	public hasCachedData(appId: number): boolean{
+		return this.getCachedData(appId) !== undefined;
+	}
+
+	protected cacheData(appId: number, data: Data | null){
+		if(!data || JSON.stringify(data).length < 5000)
+			this.data[appId] = data;
+		else
+			this.notCachedData[appId] = data;
+	}
+
+	protected getCachedData(appId: number){
+		return this.data[appId]
+			?? this.notCachedData[appId]
+			?? undefined;
 	}
 
 	public fetchData(appId: number): Data | undefined{
@@ -255,10 +276,14 @@ export abstract class Module<
 			return undefined;
 
 		try{
-			this.logger.debug(`Fetching ${this.identifier} for ${appId}`, this.data[appId], this.dataProviders[appId]);
-			if (!this.data[appId])
+			this.logger.debug(`Fetching ${this.identifier} for ${appId} ${(appStore.GetAppOverviewByAppID(appId)?.display_name ?? 'unknown')}`,
+				this.getCachedData(appId),
+				this.dataProviders[appId]);
+
+			if (!this.hasCachedData(appId))
 				void this.fetchDataAsync(appId);
-			return this.data[appId];
+
+			return this.getCachedData(appId);
 		}
 		catch (e: any){
 			this.handleError(e);
@@ -270,7 +295,7 @@ export abstract class Module<
 			return undefined;
 
 		try{
-			if (!this.hasData(appId)){
+			if (!this.hasCachedData(appId)){				
 				// Prevent saving multiple times inside providers
 				await this.state.settings.runInDisabledSaveState(async () => {
 					// Check if we have a saved provider
@@ -279,12 +304,12 @@ export abstract class Module<
 						const provider = this.providers.find(p => p.identifier === providerId);
 						if(provider?.enabled && await provider.test(appId)){
 							const data = await provider.provide(appId);
-							if(data){
+							if(data && !this.isEmpty(data)){
 								// DEV: merge with below
 								await this.provideAdditional(appId, data);
 								this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
 
-								this.data[appId] = data;
+								this.cacheData(appId, data);
 								this.dataProviders[appId] = provider.identifier;
 							}
 							else if(!this.providerOverrides[appId])
@@ -299,45 +324,49 @@ export abstract class Module<
 					}
 
 					// Retrieve a new provider
-					if(!this.hasData(appId)){
+					if(!this.hasCachedData(appId)){
 						for (const provider of this.providers){
 							if(!provider.enabled || !await provider.test(appId))
 								continue;
 							
 							const data = await provider.provide(appId);
-							if(!data)
+							if(!data || this.isEmpty(data))
 								continue;
 							
 							await this.provideAdditional(appId, data);
 							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
 
-							this.data[appId] = data;
+							this.cacheData(appId, data);
 							this.dataProviders[appId] = provider.identifier;
 							break;
 						}
 					}
 					
-					// Provide default data, if any
-					if(!this.hasData(appId)){
+					// Provide default data, if any,
+					// or still cache undefined to avoid querying continuously
+					if(!this.hasCachedData(appId)){
 						let defaultData = await this.provideDefault(appId);
-						if(defaultData){
+						if(defaultData && !this.isEmpty(defaultData)){
 							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, defaultData, 'default');
 
-							this.data[appId] = defaultData;
+							this.cacheData(appId, defaultData);
 						}
-						else
-							this.logger.debug(appId, "no provider/default");
+						else{
+							this.logger.debug(`Caching no provider/default ${this.identifier} for ${appId}`);
+
+							this.cacheData(appId, null);
+						}
 					}
 				});
 
 				await this.saveCache();
 			}
 			else
-				this.logger.debug(`Loading cached ${this.identifier} for ${appId}: `, this.data[appId], this.dataProviders[appId]);
+				this.logger.debug(`Loading cached ${this.identifier} for ${appId}: `, this.getCachedData(appId), this.dataProviders[appId]);
 
 			void this.apply(appId);
 
-			return this.data[appId];
+			return this.getCachedData(appId);
 		}
 		catch (e: any){
 			this.handleError(e);
@@ -368,8 +397,7 @@ export abstract class Module<
 
 	}
 
-	private async refreshDataForApp(appId: number): Promise<void>
-	{
+	private async refreshDataForApp(appId: number): Promise<void>{
 		if(this.excludedApps.includes(appId))
 			return undefined;
 
@@ -390,8 +418,7 @@ export abstract class Module<
 	icon?: ReactNode;
 	settingsComponent: FC = () => undefined;
 
-	async mount(): Promise<void>
-	{
+	async mount(): Promise<void>{
 		let backupLoading = this.state.loadingData.loading;
 		let backupModule = this.state.loadingData.module;
 		let backupGame = this.state.loadingData.currentModule?.game!;
@@ -432,36 +459,31 @@ export abstract class Module<
 		}
 	}
 
-	async dismount(): Promise<void>
-	{
-		try
-		{
-			for (const provider of this.providers)
-			{
+	async dismount(): Promise<void>{
+		try{
+			for (const provider of this.providers){
 				await provider.dismount();
 			}
-		} catch (e: any)
-		{
+		}
+		catch (e: any){
 			this.handleError(e);
 		}
 
 	}
 
-	protected async provideDefault(_appId: number): Promise<Data | undefined>
-	{
+	// Should not return empty data
+	protected async provideDefault(_appId: number): Promise<Data | undefined>{
 		return undefined
 	}
 
 	// DEV: find a way to remove/merge(?)
-	async provideAdditional(appId: number, data: Data): Promise<void>
-	{
+	async provideAdditional(appId: number, data: Data): Promise<void>{
 		if(this.excludedApps.includes(appId))
 			return undefined;
 
 		for (const provider of this.providers)
 		{
-			if (provider.enabled && await provider.test(appId))
-			{
+			if (provider.enabled && await provider.test(appId)){
 				await provider.apply(appId, data);
 				return;
 			}

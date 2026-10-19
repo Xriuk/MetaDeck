@@ -43,27 +43,16 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 		void this.saveConfig();
 	}
 
-	// DEV: maybe make abstract and avoid double-search?
-	override async test(appId: number): Promise<boolean>
-	{
+	override async test(appId: number): Promise<boolean>{
 		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-
-		const results = await this.getAllCompatdataForGame(appId);
-		if (!results.length)
-			return false;
-
-		const games = await this.pickDefaultEntry(results, appId);
-		return games.length > 0;
+		// We return true to not double search, as we'll do it inside provide
+		return true;
 	}
 
-	provide(appId: number): Promise<CompatdataData | undefined>
-	{
-		if(this.excludedApps.includes(appId))
+	provide(appId: number): Promise<CompatdataData | undefined>{
+		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return Promise.resolve(undefined);
 
 		return this.throttle(() => this.getCompatdataForGame(appId));
@@ -89,30 +78,30 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 	}
 
 	protected async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>{
-		if(this.excludedApps.includes(appId))
+		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return undefined;
 
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
 
-		this.logger.debug(`Fetching compatdata for game ${appId}`);
+		this.logger.debug("Searching", appId);
 
 		const results = await this.getAllCompatdataForGame(appId);
 		if (!results.length)
 			return undefined;
 
-		this.logger.debug("Results", results);
+		this.logger.debug("Results", appId, results);
 
 		const data_id = this.overrides[appId];
-		this.logger.debug("data_id", data_id);
+		this.logger.debug("Override", appId, data_id);
 
 		let games: CompatdataData[];
 		if (data_id === undefined)		{
 			games = await this.pickDefaultEntry(results, appId);
 
-			this.logger.debug(games[0]?.title ?? "", results.map(value => value.title));
-			this.logger.debug("Games: ", games);
+			this.logger.debug("Results titles", appId, games[0]?.title ?? "", results.map(value => value.title));
+			this.logger.debug("Matching results", appId, games);
 		}
 		else
 			games = results.filter(value => value.id === data_id);
@@ -120,7 +109,7 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 		const game = games.reverse().pop();
 		if (game)
 			await this.enrichCompatdataForGame(appId, game);
-		this.logger.debug(game);
+		this.logger.debug("Final result", appId, game);
 
 		return game;
 	}

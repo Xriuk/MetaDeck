@@ -305,14 +305,15 @@ export class MetaDeckState implements AsyncMountable
 		this._settings = new Settings(this);
 		this._eventBus = eventBus;
 		this._mounts = mounts;
+		const module = this;
 		this.mounts.addMount({
-			mount()
-			{
+			mount(){
 				window.MetaDeck = self.state;
+				return module.settings.readSettings();
 			},
-			dismount()
-			{
+			dismount(){
 				delete window.MetaDeck;
+				return Promise.resolve();
 			}
 		});
 		this._modules = {
@@ -339,8 +340,7 @@ export class MetaDeckState implements AsyncMountable
 			gog_heroic: new GOGMetadataProviderHeroicResolver(this)
 		};
 		this.mounts.addMount(this);
-		for (let key of Object.keys(this.modules))
-		{
+		for (let key of Object.keys(this.modules)){
 			this.loadingData.modules[key as keyof Modules] = new ModuleLoadingDataImpl(this, this.modules[key as keyof Modules].identifier);
 		}
 	}
@@ -438,15 +438,13 @@ export class MetaDeckState implements AsyncMountable
 	async refresh(): Promise<void>
 	{
 		toasterToast(t("refreshingData"));
-
-		await this.settings.readSettings();
+		
 		this.loadingData.loading = true;
-		this.loadingData.total = Object.values(this.modules).filter((mod) => mod.isValid).length;
+		this.loadingData.total = (Object.values(this.modules) as Module<any, any, any>[]).filter(mod => mod.isValid).length;
 		this.loadingData.processed = 0;
 		this.notifyUpdate();
 		await this.settings.runInDisabledSaveState(async () => {
-			for (let module of Object.values(this.modules).filter((mod) => mod.isValid))
-			{
+			for (let module of (Object.values(this.modules) as Module<any, any, any>[]).filter((mod) => mod.isValid)){
 				this.loadingData.module = module.identifier;
 				if(this.loadingData.currentModule){
 					this.loadingData.currentModule.total = module.apps.length;
@@ -477,8 +475,11 @@ export class MetaDeckState implements AsyncMountable
 		this.loadingData.processed = 0;
 		this.notifyUpdate();
 		await this.settings.runInDisabledSaveState(async () => {
-			for (let module of Object.values(this.modules)){
+			for (let module of (Object.values(this.modules) as Module<any, any>[])){
 				await module.clearCache();
+			}
+			for (let resolver of (Object.values(this.resolvers) as Resolver<any>[])){
+				await resolver.clearCache();
 			}
 		});
 		await this.state.settings.writeSettings();

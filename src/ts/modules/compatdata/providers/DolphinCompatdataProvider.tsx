@@ -43,6 +43,7 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 		const details = await getAppDetails(appId);
 		if(!details)
 			return false;
+		
 		if(!isDolphinGame(getLaunchCommand(details)))
 			return false;
 
@@ -71,7 +72,7 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 		if(game.deck_compat_category !== undefined)
 			return;
 
-		let response = await this.getTitleData(game.title, undefined, appId, true);
+		let response = await this.getTitleData(game.title, undefined, appId, false);
 		if(!response)
 			game.deck_compat_category = SteamDeckCompatCategory.UNKNOWN;
 		else
@@ -97,14 +98,17 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 		// Handle redirects
 		let text = await response.text();
 		if(text.startsWith("#REDIRECT ")){
+			let oldTitle = (id ?? title);
 			title = removeBeforeAndIncluding(text, "#REDIRECT [[");
 			title = title.substring(0, title.length-2); // Remove ending ]]
+			
+			this.logger.debug("Redirect", appId, oldTitle, title);
 		}
 		if(!title)
 			return undefined;
 
 		// Retrieve the wiki rating page
-		response = await fetchNoCorsLegacyTimeout('https://wiki.dolphin-emu.org/index.php' + new URLSearchParams({
+		response = await fetchNoCorsLegacyTimeout('https://wiki.dolphin-emu.org/index.php?' + new URLSearchParams({
 			action: 'raw',
 			title: `Template:Ratings/${title}`
 		}).toString());
@@ -162,23 +166,19 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 			test_result: SteamTestResult.Playable
 		});
 		machineAndFrame.forEach(([results, cat]) => {
-			results.push(
-				{
-					test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
-					test_result: SteamTestResult.Playable
-				}
-			);
+			results.push({
+				test_loc_token: `#${cat}_TestResult_ControllerGlyphsDoNotMatchDevice`,
+				test_result: SteamTestResult.Playable
+			});
 		});
 
 		// Default configuration works fine for playable games (we cannot assume for the Frame here)
 		if(result.deck_compat_category === SteamDeckCompatCategory.VERIFIED){
 			deckAndMachine.forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
-						test_result: SteamTestResult.Verified
-					}
-				);
+				results.push({
+					test_loc_token: `#${cat}_TestResult_DefaultConfigurationIsPerformant`,
+					test_result: SteamTestResult.Verified
+				});
 			});
 		}
 
@@ -212,12 +212,10 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 					[result.deck_test_results!, "SteamDeckVerified"],
 					[result.os_test_results!, "SteamOS"]
 				] as const).forEach(([results, cat]) => {
-					results.push(
-						{
-							test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
-							test_result: SteamTestResult.Playable
-						}
-					);
+					results.push({
+						test_loc_token: `#${cat}_TestResult_NotFullyFunctionalWithoutExternalUSBGuitar`,
+						test_result: SteamTestResult.Playable
+					});
 				});
 			}
 		}
@@ -226,22 +224,18 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 		// otherwise it may require tweaks
 		if((id && isGameCubeId6(id)) || metadata?.some(m => m.controls?.some(c => c.type === "gamecube" || c.type === "classiccontroller"))){
 			deckMachineAndFrame.forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
-						test_result: SteamTestResult.Verified
-					}
-				);
+				results.push({
+					test_loc_token: `#${cat}_TestResult_DefaultControllerConfigFullyFunctional`,
+					test_result: SteamTestResult.Verified
+				});
 			});
 		}
 		else{
 			deckMachineOSAndFrame.forEach(([results, cat]) => {
-				results.push(
-					{
-						test_loc_token: `#${cat}_TestResult_DefaultControllerConfigNotFullyFunctional`,
-						test_result: SteamTestResult.Playable
-					}
-				);
+				results.push({
+					test_loc_token: `#${cat}_TestResult_DefaultControllerConfigNotFullyFunctional`,
+					test_result: SteamTestResult.Playable
+				});
 			});
 		}
 

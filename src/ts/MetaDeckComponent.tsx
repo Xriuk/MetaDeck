@@ -1,5 +1,5 @@
 import {useMetaDeckState, type Modules} from "./MetaDeckState";
-import {FC, useEffect, useState, type CSSProperties} from "react";
+import {FC, useEffect, useState, type CSSProperties, type ReactElement} from "react";
 import {useTranslations} from "./useTranslations";
 import {ButtonItem, PanelSection, PanelSectionRow, Navigation, Field, ProgressBar} from "@decky/ui";
 import {FaArrowLeft, FaCog, FaSync, FaTrash} from "react-icons/fa";
@@ -74,9 +74,10 @@ const LoadingProgressBar: FC = () =>
 	const t = useTranslations();
 	const { loadingData } = useMetaDeckState();
 	const [css, setCss] = useState<CSSProperties>();
-	useEffect(() =>
-	{
-		const def: CSSProperties = { };
+	useEffect(() => {
+		const def: CSSProperties = {
+			whiteSpace: "pre-wrap"
+		};
 		if (loadingData.currentModule?.error) 
 			def.color = "red";
 		setCss(def);
@@ -152,31 +153,53 @@ const ModulesList: FC = () => {
 							</Field>
 						</PanelSectionRow>;
 					}) :
-				modules[active].apps.filter(a => modules[active].hasData(a)).map(a => {
-					let data = modules[active].fetchData(a);
-					let provider = modules[active].dataProviders[a];
+				(modules[active].providers
+					.map(p => {
+						let apps = p.apps;
+						let hasDataModule = apps.filter(a => modules[active].hasData(a));
+						let hasDataProvider = apps.filter(a => modules[active].dataProviders[a] === p.identifier);
 
-					if(data){
-						return <PanelSectionRow key={a}>
+						return <PanelSectionRow key={p.identifier}>
 							<Field
-								label={appStore.GetAppOverviewByAppID(a).display_name}
-								description={(
-									(provider ? provider + " - " : "") +
-									truncate(modules[active].progressDescription(data as any), {
-										'length': 100,
-										'omission': "..."
-									})
-								)}
-								onActivate={() => {
-									Navigation.CloseSideMenus();
-									Navigation.Navigate(`/metadeck/${modules[active].identifier}`);
-								}}>
+								label={p.title}
+								description={`${hasDataProvider.length}/${hasDataModule.length}`}
+								disabled={!p.enabled}
+								childrenLayout="below"
+								focusable={true}>
+								<ProgressBar
+									focusable={false}
+									nProgress={(hasDataProvider.length / hasDataModule.length * 100)}
+								/>
 							</Field>
 						</PanelSectionRow>;
-					}
-					else
-						return undefined;
-				})
+					}) as (ReactElement | undefined)[])
+					.concat(modules[active].apps
+						.filter(a => modules[active].hasData(a))
+						.map(a => {
+							let data = modules[active].fetchData(a);
+							let provider = modules[active].dataProviders[a];
+
+							if(data){
+								return <PanelSectionRow key={a}>
+									<Field
+										label={appStore.GetAppOverviewByAppID(a).display_name}
+										description={<div style={{whiteSpace: "pre-wrap"}}>{(
+											(provider ? provider + " - " : "") +
+											truncate(modules[active].progressDescription(data as any), {
+												'length': 100,
+												'omission': "..."
+											})
+										)}</div>}
+										onActivate={() => {
+											Navigation.CloseSideMenus();
+											Navigation.Navigate(`/metadeck/${modules[active].identifier}`);
+										}}>
+									</Field>
+								</PanelSectionRow>;
+							}
+							else
+								return undefined;
+						}))
 		}
 	</>
 };

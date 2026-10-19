@@ -71,7 +71,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	}
 
 	override test(appId: number, external = false): Promise<boolean> {
-		if(!this.username || !this.apiKey || this.excludedApps.includes(appId))
+		if(!this.username || !this.apiKey)
 			return Promise.resolve(false);
 
 		return super.test(appId, external);
@@ -160,9 +160,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								}}/>
 						} />
 					<Field description={
-						<Markdown>
-							{t("raApiKeyInstructionsMD")}
-						</Markdown>
+						<Markdown>{t("raApiKeyInstructionsMD")}</Markdown>
 					} />
 				</DialogControlsSection>
 

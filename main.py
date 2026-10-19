@@ -1,9 +1,9 @@
 import json
 import os
-import decky
-import pycdlib
+import decky # type: ignore
+import pycdlib # type: ignore
 import subprocess
-import xmltodict
+import xmltodict # type: ignore
 import urllib.request
 import zipfile
 import sqlite3
@@ -21,7 +21,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional, Tuple
-from helpers import get_ssl_context
+from helpers import get_ssl_context # type: ignore
 
 logging.basicConfig(
 	filename="/tmp/metadeck.log",
@@ -64,37 +64,99 @@ class CleanedTextStream:
         return chunk.replace('\u2028', '\n').replace('\u2029', '\n')
 
 class Plugin:
-	egs_nsl: Dict[str, Dict[str, any]] | None = None
-	gog_nsl: Dict[int, Dict[str, any]] | None = None
+	egs_nsl: Dict[str, Dict[str, any]] | None = None # type: ignore
+	gog_nsl: Dict[int, Dict[str, any]] | None = None # type: ignore
 
-	egs_her: Dict[str, Dict[str, any]] | None = None
-	gog_her: Dict[int, Dict[str, any]] | None = None
+	egs_her: Dict[str, Dict[str, any]] | None = None # type: ignore
+	gog_her: Dict[int, Dict[str, any]] | None = None # type: ignore
 
 	gametdb = {} # url: { id: { game } }
 
 	titledb = {} # language: { id: { game } }
 
-	async def read_config(self) -> dict:
-		with open(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json"), "r") as f:
-			try:
-				return json.load(f)
-			except:
-				return {}
+	config_buffer: str = ""
+	config_chunks: int = 0
+	config_packet_size: int = 1000
 
-	async def write_config(self, data: dict) -> None:
-		with open(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json"), "w") as f:
-			json.dump(data, f, indent="\t")
+	async def start_read_config(self, packet_size = 1000) -> int:
+		Plugin.config_buffer = ""
+		Plugin.config_chunks = 0
+		Plugin.config_packet_size = packet_size
 
-	async def read_cache(self) -> dict:
-		with open(os.path.join(decky.DECKY_PLUGIN_RUNTIME_DIR, "cache.json"), "r") as f:
-			try:
-				return json.load(f)
-			except:
-				return {}
+		path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
+		if not os.path.isfile(path):
+			return 0
 
-	async def write_cache(self, data: dict) -> None:
-		with open(os.path.join(decky.DECKY_PLUGIN_RUNTIME_DIR, "cache.json"), "w") as f:
-			json.dump(data, f, indent="\t")
+		with open(path, "r") as f:
+			config = json.load(f)
+			Plugin.config_buffer = json.dumps(config)
+			Plugin.config_chunks = math.ceil(len(Plugin.config_buffer) / float(Plugin.config_packet_size))
+			return Plugin.config_chunks
+
+	async def read_config(self, chunk) -> str:
+		if chunk < Plugin.config_chunks - 1:
+			return Plugin.config_buffer[chunk * Plugin.config_packet_size : (chunk + 1) * Plugin.config_packet_size]
+		else:
+			Plugin.config_chunks = 0
+			config = Plugin.config_buffer[chunk * Plugin.config_packet_size :]
+			Plugin.config_buffer = ""
+			return config
+
+	async def start_write_config(self, chunks) -> None:
+		Plugin.config_buffer = ""
+		Plugin.config_chunks = chunks
+
+	async def write_config(self, chunk, data) -> None:
+		Plugin.config_buffer += data
+		if chunk >= Plugin.config_chunks - 1:
+			Plugin.config_chunks = 0
+			config = json.loads(Plugin.config_buffer)
+			Plugin.config_buffer = ""
+			with open(os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json"), "w") as f:
+				json.dump(config, f, indent="\t")
+
+
+	cache_buffer: str = ""
+	cache_chunks: int = 0
+	cache_packet_size: int = 1000
+
+	async def start_read_cache(self, packet_size = 1000) -> int:
+		Plugin.cache_buffer = ""
+		Plugin.cache_chunks = 0
+		Plugin.cache_packet_size = packet_size
+
+		path = os.path.join(decky.DECKY_PLUGIN_RUNTIME_DIR, "cache.json")
+		if not os.path.isfile(path):
+			return 0
+
+		with open(path, "r") as f:
+			cache = json.load(f)
+			Plugin.cache_buffer = json.dumps(cache)
+			Plugin.cache_chunks = math.ceil(len(Plugin.cache_buffer) / float(Plugin.cache_packet_size))
+			return Plugin.cache_chunks
+
+	async def read_cache(self, chunk) -> str:
+		if chunk < Plugin.cache_chunks - 1:
+			return Plugin.cache_buffer[chunk * Plugin.cache_packet_size : (chunk + 1) * Plugin.cache_packet_size]
+		else:
+			Plugin.cache_chunks = 0
+			cache = Plugin.cache_buffer[chunk * Plugin.cache_packet_size :]
+			Plugin.cache_buffer = ""
+			return cache
+
+	async def start_write_cache(self, chunks) -> None:
+		Plugin.cache_buffer = ""
+		Plugin.cache_chunks = chunks
+
+	async def write_cache(self, chunk, data) -> None:
+		Plugin.cache_buffer += data
+		if chunk >= Plugin.cache_chunks - 1:
+			Plugin.cache_chunks = 0
+			cache = json.loads(Plugin.cache_buffer)
+			Plugin.cache_buffer = ""
+			with open(os.path.join(decky.DECKY_PLUGIN_RUNTIME_DIR, "cache.json"), "w") as f:
+				json.dump(cache, f, indent="\t")
+
 
 	async def read_file(self, path: str) -> str:
 		with open(path, "r") as f:
@@ -139,52 +201,50 @@ class Plugin:
 		if Plugin.gog_her is not None and id in Plugin.gog_her:
 			return Plugin.gog_her[id]
 
+
 	async def rpcs3_get_titleid(self, rom_path: str) -> str | None:
-		try:
-			path = rom_path + "/PARAM.SFO"
-			if not os.path.isfile(path):
+		path = rom_path + "/PARAM.SFO"
+		if not os.path.isfile(path):
+			return None
+
+		with open(path, 'rb') as file:
+			sfo_bytes = file.read()
+			if sfo_bytes[0:4] != SFO_MAGIC:
 				return None
 
-			with open(path, 'rb') as file:
-				sfo_bytes = file.read()
-				if sfo_bytes[0:4] != SFO_MAGIC:
-					return None
+			key_table_start, data_table_start, tables_entries = struct.unpack_from("<III", sfo_bytes, 8)
 
-				key_table_start, data_table_start, tables_entries = struct.unpack_from("<III", sfo_bytes, 8)
-
-				# Loop through keys to find TITLE_ID
-				title_id_index = -1
-				index = 0
-				start = key_table_start
-				while title_id_index == -1 and index < tables_entries:
-					end = start
-					while end < len(sfo_bytes) and sfo_bytes[end] != b'\x00':
-						end += 1
-					key = sfo_bytes[start:end].decode('utf-8')
-					if key == "TITLE_ID":
-						title_id_index = index
-					index += 1
-					start = end + 1
-
-				if title_id_index == -1:
-					return None
-
-
-				# Retrieve the data offset inside index
-				title_id_index_table_offset = 20 + (title_id_index * 16)
-				_, data_fmt, _, _, data_offset = struct.unpack_from("<HHIII", sfo_bytes, 8)
-				if data_fmt != b'\x04\x02': # Assert for utf-8
-					return None
-
-				# Find the entry inside data to retrieve the value
-				title_id_data_table_offset = data_table_start + data_offset
-				end = title_id_data_table_offset
-				while end < len(sfo_bytes) and sfo_bytes[end] != b'\x00':
+			# Loop through keys to find TITLE_ID
+			title_id_index = -1
+			index = 0
+			start = key_table_start
+			while index < tables_entries:
+				end = start
+				while end < len(sfo_bytes) and sfo_bytes[end] != 0:
 					end += 1
-				return sfo_bytes[start:end].decode('utf-8')
+				key = sfo_bytes[start:end].decode('utf-8', errors="ignore")
+				if key == "TITLE_ID":
+					title_id_index = index
+					break
+				index += 1
+				start = end + 1
 
-		except e:
-			raise Exception(traceback.format_exc())
+			if title_id_index == -1:
+				return None
+
+			# Retrieve the data offset inside index
+			title_id_index_table_offset = 20 + (title_id_index * 16)
+			_, data_fmt, _, _, data_offset = struct.unpack_from("<HHIII", sfo_bytes, title_id_index_table_offset)
+			if data_fmt != 516: # Assert for utf-8 b'\x04\x02'
+				return None
+
+			# Find the entry inside data to retrieve the value
+			title_id_data_table_offset = data_table_start + data_offset
+			start = title_id_data_table_offset
+			end = start
+			while end < len(sfo_bytes) and sfo_bytes[end] != 0:
+				end += 1
+			return sfo_bytes[start:end].decode('utf-8', errors="ignore")
 
 	async def rpcs3_check_user_path(self, user_path: str) -> bool:
 		return os.path.isdir(user_path)
@@ -247,7 +307,7 @@ class Plugin:
 
 		return file_directory
 
-	async def rpcs3_get_trophy_dir_path(self, rom_path: str) -> str:
+	async def rpcs3_get_trophy_dir_path(self, rom_path: str) -> str | None:
 		if rom_path is None or rom_path == "":
 			return None
 			
@@ -260,19 +320,19 @@ class Plugin:
 			return None
 		else:
 			return children[0]
-
+	
 	async def rpcs3_get_all_trophies_file(self, file_bytes: bytes):
 		result = {'trophies': []}
 
 		trophyconf = xmltodict.parse(file_bytes)['trophyconf']
 		if 'title-name' in trophyconf:
 			if not 'game' in result:
-				result['game'] = {}
-			result['game']['name'] = trophyconf['title-name']
+				result['game'] = {} # type: ignore
+			result['game']['name'] = trophyconf['title-name'] # type: ignore
 		if 'title-detail' in trophyconf:
 			if not 'game' in result:
-				result['game'] = {}
-			result['game']['detail'] = trophyconf['title-detail']
+				result['game'] = {} # type: ignore
+			result['game']['detail'] = trophyconf['title-detail'] # type: ignore
 		if 'trophy' in trophyconf:
 			for trophy in trophyconf['trophy']:
 				result['trophies'].append({
@@ -291,7 +351,7 @@ class Plugin:
 			result = {'trophies': []}
 			return json.dumps(result)
 
-		with open(path, 'r') as file:
+		with open(path, 'rb') as file:
 			return json.dumps(await Plugin.rpcs3_get_all_trophies_file(self, file.read()))
 	
 	async def rpcs3_get_all_trophies_game(self, trp_path: str, locale: str) -> str:
@@ -323,9 +383,9 @@ class Plugin:
 
 			if 'game' in lang_result and 'game' in result:
 				if 'name' in lang_result['game']:
-					result['game']['name'] = lang_result['game']['name']
+					result['game']['name'] = lang_result['game']['name'] # type: ignore
 				if 'detail' in lang_result['game']:
-					result['game']['detail'] = lang_result['game']['detail']
+					result['game']['detail'] = lang_result['game']['detail'] # type: ignore
 
 			if 'trophies' in lang_result and len(lang_result['trophies']) > 0:
 				for trophy in lang_result['trophies']:
@@ -389,7 +449,7 @@ class Plugin:
 		table_count = struct.unpack_from(">I", data, 8)[0]
 		max_tables = (len(data) - TROPUSR_HEADER_SIZE) // TROPUSR_TABLE_HEADER_SIZE
 		if table_count == 0 or table_count > max_tables:
-			raise ValueError("invalid table count " + table_count)
+			raise ValueError("invalid table count " + str(table_count))
 
 		table6_seen = False
 
@@ -437,9 +497,9 @@ class Plugin:
 				if entry_type != TROPHY_STATE_TABLE_TYPE or entry_contents_size != TROPHY_STATE_ENTRY_CONTENTS_SIZE:
 					raise ValueError("invalid trophy-state entry header: " + str(entry_index) + " -> " + str(entry_offset))
 
-				trophy_id = struct.unpack_from(">I", data, entry_offset + 16)[0]
-				if trophy_id > 0x7FFFFFFF or trophy_id in parsed_states:
-					msg = "trophy id is out of range" if trophy_id > 0x7FFFFFFF else "duplicate trophy id"
+				trp_id = struct.unpack_from(">I", data, entry_offset + 16)[0]
+				if trp_id > 0x7FFFFFFF or trp_id in parsed_states:
+					msg = "trophy id is out of range" if trp_id > 0x7FFFFFFF else "duplicate trophy id"
 					raise ValueError(msg)
 
 				trophy_state = struct.unpack_from(">I", data, entry_offset + 20)[0]
@@ -455,7 +515,7 @@ class Plugin:
 					dot_net_epoch = datetime(1, 1, 1, tzinfo=timezone.utc)
 					unlock_time_utc = dot_net_epoch + timedelta(microseconds=(timestamp2 * 10) // 10)
 
-				parsed_states[str(trophy_id).zfill(3)] = {
+				parsed_states[str(trp_id).zfill(3)] = {
 					'unlocked': (trophy_state != 0),
 					'unlock_time_utc': unlock_time_utc.timestamp() if not unlock_time_utc is None else None
 				}
@@ -499,7 +559,8 @@ class Plugin:
 			with open(rom_path, 'r+') as file:
 				mm = mmap.mmap(file.fileno(), 0, prot=mmap.PROT_READ)
 				match = re.search(b"BOOT2 = cdrom0:", mm)
-				return mm[match.end()+1:match.end()+12].decode('ascii').replace('_', '').replace('.', '')
+				if match is not None:
+					return mm[match.end()+1:match.end()+12].decode('ascii').replace('_', '').replace('.', '')
 		
 		return None
 
@@ -596,7 +657,7 @@ class Plugin:
 		return os.path.isfile(user_path + "/Account")
 
 	# https://github.com/Xriuk/Emuchievements/blob/f35826e78c095c843597a228859d2a1e5fa2dbc1/src/py/main.py#L453-L552
-	async def xenia_get_defaultxex(self, iso_path: str) -> bytes:
+	async def xenia_get_defaultxex(self, iso_path: str) -> bytes | None:
 		with open(iso_path, "rb") as f:
 			# https://github.com/xenia-manager/xenia-manager/blob/7704851bec096371e18d1394ed98f166469193db/source/XeniaManager.Core/Models/Files/Iso/IsoSectorReader.cs#L29
 			header_offset = None
@@ -634,7 +695,7 @@ class Plugin:
 				raise ValueError("Not a valid Xbox 360 GDFX ISO image.")
 
 			# Parse directory entries looking for default.xex
-			f.seek((base_sector + root_sector) * SECTOR_SIZE)
+			f.seek((base_sector + root_sector) * SECTOR_SIZE) # type: ignore
 			dir_data = f.read(root_size)
 			
 			pos = 0
@@ -650,7 +711,7 @@ class Plugin:
 				name = dir_data[pos+14 : pos+14+name_len].decode("ascii", errors="ignore")
 				
 				if name.lower() == "default.xex":
-					f.seek((base_sector + sector) * SECTOR_SIZE)
+					f.seek((base_sector + sector) * SECTOR_SIZE) # type: ignore
 					return f.read(size)
 				
 				# Entry size padded to 4-byte boundary
@@ -681,7 +742,7 @@ class Plugin:
 			
 		return None
 	
-	async def xenia_get_titleid(self, iso_path: str) -> str:
+	async def xenia_get_titleid(self, iso_path: str) -> str | None:
 		def titleid_filter(xex_bytes, key, value):
 			# 0x00040006 = Execution ID, 06 x 4 = 24 bytes
 			if key == 0x00040006:
@@ -701,7 +762,7 @@ class Plugin:
 	# 1 Metadata (check id = 1480672072 / XACH)
 	# 2 Image
 	# 3 String Tables (localization)
-	async def xenia_get_spaxdbf(self, iso_path: str, title_id: str) -> bytes:
+	async def xenia_get_spaxdbf(self, iso_path: str, title_id: str) -> bytes | None:
 		xex_bytes = await Plugin.xenia_get_defaultxex(self, iso_path)
 		if xex_bytes is None:
 			return None
@@ -769,7 +830,7 @@ class Plugin:
 		else:
 			return None
 
-	async def xenia_get_localization(self, xdbf_bytes: bytes, locale: str) -> Dict[int, str]:
+	async def xenia_get_localization(self, xdbf_bytes: bytes, locale: int) -> Dict[int, str] | None:
 		def xstr_predicate(xdbf_bytes, ns, id, offset, size):
 			if ns == 3 and id == locale:
 				return xdbf_bytes[offset:offset + size]
@@ -837,12 +898,6 @@ class Plugin:
 			else:
 				return None
 
-		def xstr_predicate(xdbf_bytes, ns, id, offset, size):
-			if ns == 3 and id == xbox360_locale:
-				return xdbf_bytes[offset:offset + size]
-			else:
-				return None
-
 		result = {'achievements': []}
 
 		xdbf_bytes = await Plugin.xenia_get_spaxdbf(self, iso_path, title_id)
@@ -857,8 +912,8 @@ class Plugin:
 		# Retrieve localization, default to english
 		localization_lang = await Plugin.xenia_get_localization(self, xdbf_bytes, locale)
 		localization_en = None
-		if locale.lower() != 'en':
-			localization_en = await Plugin.xenia_get_localization(self, xdbf_bytes, 'en')
+		if locale != 1:
+			localization_en = await Plugin.xenia_get_localization(self, xdbf_bytes, 1)
 		
 		if localization_lang is None and localization_en is None:
 			return json.dumps(result)
@@ -900,10 +955,10 @@ class Plugin:
 			return "data:image/png;base64," + encoded_string
 
 	async def xenia_get_achievement_icon_user(self, user_path: str, title_id: str, icon_id: int) -> str:		
-		return await Plugin.xenia_get_achievement_icon_xdbf(self, await Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id), icon_id)
+		return await Plugin.xenia_get_achievement_icon_xdbf(self, await Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id), icon_id) # type: ignore
 
 	async def xenia_get_achievement_icon_game(self, iso_path: str, title_id: str, icon_id: int) -> str:
-		return await Plugin.xenia_get_achievement_icon_xdbf(self,  await Plugin.xenia_get_spaxdbf(self, iso_path, title_id), icon_id)
+		return await Plugin.xenia_get_achievement_icon_xdbf(self,  await Plugin.xenia_get_spaxdbf(self, iso_path, title_id), icon_id) # type: ignore
 
 	# entry_namespace:
 	# 1 Achievement
@@ -913,7 +968,7 @@ class Plugin:
 	# 5 String
 	# 6 Achievement Security (created by GFWL for offline unlocked achievements?)
 	#   Avatar Award (360 only, this is only stored with in the PEC)
-	async def xenia_get_game_gpdxbdf(self, user_path: str, title_id: str) -> bytes:
+	async def xenia_get_game_gpdxbdf(self, user_path: str, title_id: str) -> bytes | None:
 		path = user_path + "/" + title_id + ".gpd"
 		if not os.path.isfile(path):
 			return None
@@ -977,7 +1032,8 @@ class Plugin:
 
 
 	async def gametdb_get_db(self, url: str) -> None:
-		if not url.startswith('https://www.gametdb.com/') or not url.endswith('.zip'):
+		# Support WaybackMachine
+		if 'https://www.gametdb.com/' not in url or not url.endswith('.zip'):
 			return
 
 		result = {}
@@ -1031,13 +1087,14 @@ class Plugin:
 					'controls': controls if len(controls) > 0 else None
 				}
 
-		Plugin.gametdb[url] = result
+		Plugin.gametdb[filename] = result
 
 	async def gametdb_get_entry(self, url: str, id: str) -> str | None:
-		if not url in Plugin.gametdb or not id in Plugin.gametdb[url]:
+		filename = url.split('/')[-1] # aaatdb.zip
+		if not filename in Plugin.gametdb or not id in Plugin.gametdb[filename]:
 			return None
 		else:
-			return json.dumps(Plugin.gametdb[url][id])
+			return json.dumps(Plugin.gametdb[filename][id])
 
 	async def titledb_get_language(self, language: str) -> None:
 		if language in Plugin.titledb:
@@ -1080,7 +1137,7 @@ class Plugin:
 		else:
 			return json.dumps(Plugin.titledb[language][id])
 
-	async def hash(self, path: str) -> str:
+	async def hash(self, path: str) -> str | None:
 		logger.debug(f"Hashing ROM: {path}")
 		try:
 			# Fix PyInstaller Library Issue as Per: https://github.com/xXJSONDeruloXx/Decky-Framegen/
@@ -1107,9 +1164,13 @@ class Plugin:
 			logger.error(f"Error hashing ROM {path}: {e}")
 			raise
 
-	def util_remove_c_drive_from_path(path):
+		return None
+
+	def util_remove_c_drive_from_path(self, path: str) -> str:
 		if path.startswith("C:/") or path.startswith("C:\\"):
 			return path[3:]
+		else:
+			return path
 
 	async def _main(self) -> None:
 		decky.logger.info("Starting MetaDeck")
@@ -1135,7 +1196,7 @@ class Plugin:
 						Plugin.egs_nsl[app_name] = {}
 						namespace: str = item_data["CatalogNamespace"]
 						install_path: str = (nsl_prefix / Path(
-							Plugin.util_remove_c_drive_from_path(item_data["InstallLocation"]).replace("\\", "/"))).as_posix()
+							Plugin.util_remove_c_drive_from_path(self, item_data["InstallLocation"]).replace("\\", "/"))).as_posix()
 						install_size: int = item_data["InstallSize"]
 						install_date: int = await Plugin.file_date(self, install_path)
 						Plugin.egs_nsl[app_name]["namespace"] = namespace
@@ -1155,7 +1216,7 @@ class Plugin:
 				path: str
 				for id, path in entries:
 					Plugin.gog_nsl[id] = {}
-					install_path = (nsl_prefix / Path(Plugin.util_remove_c_drive_from_path(path).replace("\\", "/"))).as_posix()
+					install_path = (nsl_prefix / Path(Plugin.util_remove_c_drive_from_path(self, path).replace("\\", "/"))).as_posix()
 					install_size = await Plugin.directory_size(self, install_path)
 					install_date = await Plugin.file_date(self, install_path)
 					Plugin.gog_nsl[id]["install_size"] = install_size
@@ -1220,9 +1281,6 @@ class Plugin:
 				Plugin.gog_her[id]["install_path"] = install_path
 
 	async def _unload(self) -> None:
-		"""
-		Unload function
-		"""
 		decky.logger.info("Stopping MetaDeck")
 
 	# await Plugin.commit(self)

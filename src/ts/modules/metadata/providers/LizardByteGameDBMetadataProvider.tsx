@@ -1,11 +1,10 @@
 import { StoreCategory, type MetadataData } from "../../../Interfaces";
 import Logger from "../../../logger";
-import { t } from "../../../useTranslations";
+import { getCurrentLanguage, t } from "../../../useTranslations";
 import { type FuzzySearchMetadataProviderConfig, type FuzzySearchMetadataProviderCache, FuzzySearchMetadataProvider } from "./FuzzySearchMetadataProvider";
-import { distanceWithLimit, fetchNoCorsLegacyTimeout, getAppDetails, removeWhitespacesAndPuctuation } from "../../../util";
+import { distanceWithLimit, fetchNoCorsLegacyTimeout, removeWhitespacesAndPuctuation } from "../../../util";
 import type { Company, Game, GameMode, InvolvedCompany, ExternalGame, ReleaseDate} from "igdb-api-types";
 import { SteamMetadataProvider } from "./SteamMetadataProvider";
-import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
 import { SiIgdb } from "react-icons/si";
 import { distance } from "fastest-levenshtein";
 
@@ -118,11 +117,12 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 
 			// Will enrich later
 			description: '',
+
 			store_categories: []
 		}));
 	}
 
-	protected override async enrichMetadataForGame(appId: number, game: MetadataData): Promise<void> {
+	protected override async enrichMetadataForGame(_appId: number, game: MetadataData): Promise<void> {
 		if(game.description)
 			return;
 		
@@ -136,9 +136,6 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 
 		if(gameR.release_dates?.length)
 			game.release_date = Math.floor(new Date(Math.min(...gameR.release_dates.map(d => (d as ReleaseDate).date!)) * 1000).getTime() / 1000);
-		
-		const details = (await getAppDetails(appId))!;
-		const cats = await getShortcutCategories(getLaunchCommand(details));
 
 		// If we have a steam id we query that first to get more accurate results
 		if(gameR.external_games?.some(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) && this.steamProvider.enabled){
@@ -146,7 +143,6 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 				parseInt((gameR.external_games?.find(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) as ExternalGame)?.uid ?? '0', 10), true);
 			if(steam){
 				steam.release_date = game.release_date;
-				steam.store_categories.push(...cats);
 
 				Object.assign(game, steam);
 
@@ -156,6 +152,8 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		}
 		
 		game.description = (gameR.summary ?? gameR.storyline) || t("noDescription");
+		game.matches_user_language = getCurrentLanguage() === "en";
+
 		game.rating = gameR.aggregated_rating;
 		if(gameR.involved_companies?.some(c => typeof c !== 'number' && typeof c.company !== 'number' && c.company?.name && c.developer)){
 			game.developers = gameR.involved_companies
@@ -182,6 +180,7 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		}
 
 		if(gameR.multiplayer_modes?.length){
+			game.store_categories ??= [];
 			for(let multiplayerMode of gameR.multiplayer_modes){
 				if(typeof multiplayerMode === 'number')
 					continue;

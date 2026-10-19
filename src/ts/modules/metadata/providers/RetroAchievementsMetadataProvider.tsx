@@ -16,7 +16,7 @@ export interface RetroAchievementsMetadataProviderCache extends ProviderCache{
 	
 }
 
-export class RetroAchievementsMetadataProvider extends MetadataProvider<any>{
+export class RetroAchievementsMetadataProvider extends MetadataProvider<"ra">{
 	identifier = "ra" as const;
 	title = t("providerAchievementsRA");
 
@@ -52,7 +52,9 @@ export class RetroAchievementsMetadataProvider extends MetadataProvider<any>{
 		return {
 			id: game.ID,
 			title: game.Title,
+
 			description: t("noDescription"),
+
 			release_date: game.Released ? Math.floor(Date.parse(game.Released) / 1000) : undefined,
 			developers: game.Developer ? [{ name: game.Developer, url: '' }] : undefined,
 			publishers: game.Publisher ? [{ name: game.Publisher, url: '' }] : undefined,

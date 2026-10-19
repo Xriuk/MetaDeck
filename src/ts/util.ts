@@ -127,10 +127,20 @@ export async function fetchNoCorsLegacyTimeout(url: string, method: string = 'GE
 		let response = await DeckyBackend.call<[string, string, any, number | null], { status: number; headers: { [key: string]: string }; body: string }>(
 			"utilities/http_request",
 			method, url, request, timeout);
-		return Response.json(JSON.parse(response.body), {
-			status: response.status ?? 500,
-			headers: response.headers
-		});
+			
+		// Check if we have JSON of plain text
+		if(response.headers?.['Content-Type'] === "application/json"){
+			return Response.json(JSON.parse(response.body), {
+				status: response.status ?? 500,
+				headers: response.headers
+			});
+		}
+		else{
+			return new Response(response.body, {
+				status: response.status ?? 500,
+				headers: response.headers
+			});
+		}
 	}
 	catch{
 		return new Response(null, {

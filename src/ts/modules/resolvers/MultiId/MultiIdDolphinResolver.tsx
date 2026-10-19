@@ -2,10 +2,11 @@ import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isDolphinGame, romRegex} from "../../../shortcuts";
 import {getAppDetails, toasterToast} from "../../../util";
 import { MultiIdResolver, separator } from "./MultiIdResolver";
-import { call, fetchNoCors } from "@decky/api";
+import { call } from "@decky/api";
 import type { ID } from "../../../Interfaces";
 import { t } from "../../../useTranslations";
 import { SiDolphin } from "react-icons/si";
+import { fetchGameTDBNoCors } from "../../metadata/providers/GameTDBMetadataProvider";
 
 export interface MultiIdDolphinResolverConfig extends ResolverConfig{
 	
@@ -25,7 +26,7 @@ export class MultiIdDolphinResolver extends MultiIdResolver<"dolphin">{
 	}
 
 	override async mount(): Promise<void> {
-		const response = await fetchNoCors("https://www.gametdb.com/wiitdb.txt?LANG=ORIG");
+		const response = await fetchGameTDBNoCors("https://www.gametdb.com/wiitdb.txt?LANG=ORIG");
 		if(!response.ok){
 			toasterToast(t("initError"), this);
 
@@ -63,7 +64,7 @@ export class MultiIdDolphinResolver extends MultiIdResolver<"dolphin">{
 			}
 
 			const launchCommand = getLaunchCommand(details);
-			const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
+			const rom = launchCommand.match(romRegex)?.[0];
 			if(!rom){
 				this.gameId6s[appId] = null;
 				return undefined;

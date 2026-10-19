@@ -16,6 +16,8 @@ import type { GOGMetadataProviderNSLResolverCache, GOGMetadataProviderNSLResolve
 import type { GOGMetadataProviderJunkStoreResolverCache, GOGMetadataProviderJunkStoreResolverConfig } from "./metadata/resolvers/GOG/GOGMetadataProviderJunkStoreResolver";
 import type { GOGMetadataProviderHeroicResolverConfig, GOGMetadataProviderHeroicResolverCache } from "./metadata/resolvers/GOG/GOGMetadataProviderHeroicResolver";
 import type { Provider } from "./Provider";
+import { merge } from "lodash-es";
+import { Settings } from "../settings";
 
 export interface ResolverConfig{
 	
@@ -65,8 +67,7 @@ export interface ResolverCaches{
 
 export type ResolverIdentifier = keyof ResolverConfigs & keyof ResolverCaches;
 
-export abstract class Resolver<Identifier extends ResolverIdentifier> implements AsyncMountable
-{
+export abstract class Resolver<Identifier extends ResolverIdentifier> implements AsyncMountable{
 	private readonly _state: MetaDeckState;
 	get state(): MetaDeckState
 	{
@@ -82,6 +83,9 @@ export abstract class Resolver<Identifier extends ResolverIdentifier> implements
 
 	get cache(){
 		return this.state.settings.cache.resolvers[this.identifier];
+	}
+	set cache(cache: ResolverCaches[Identifier]){
+		this.state.settings.cache.resolvers[this.identifier] = cache;
 	}
 
 	constructor(state: MetaDeckState){
@@ -105,13 +109,17 @@ export abstract class Resolver<Identifier extends ResolverIdentifier> implements
 		provider.config.resolvers[this.identifier].enabled = enabled;
 	}
 
-	saveConfig(): Promise<void>
-	{
+	async clearCache(): Promise<void>{
+		this.cache = merge({}, Settings.defaultCache.resolvers[this.identifier as keyof ResolverCaches]) as any;
+
+		await this.saveCache();
+	}
+
+	saveConfig(): Promise<void>{
 		return this.state.settings.writeConfig();
 	}
 
-	saveCache(): Promise<void>
-	{
+	saveCache(): Promise<void>{
 		return this.state.settings.writeCache();
 	}
 

@@ -2,7 +2,7 @@ import { FaClipboardCheck } from "react-icons/fa";
 import { SteamAppTypeShortcut, StoreCategory, type AchievementsData } from "../../Interfaces";
 import Logger from "../../logger";
 import type { Mounts } from "../../System";
-import { format, t } from "../../useTranslations";
+import { t } from "../../useTranslations";
 import { Module, type ModuleCache, type ModuleConfig } from "../Module";
 import type { AchievementsProvider } from "./AchievementsProvider";
 import { afterPatch, beforePatch, callOriginal, DialogControlsSection, Field, findModuleExport, replacePatch, Toggle, type Patch } from "@decky/ui";
@@ -51,10 +51,6 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 		new XeniaAchievementsProvider(this)
 	];
 
-	override get enabled(){
-		return false;
-	}
-
 	override async removeCache(appId: number): Promise<void> {
 		await super.removeCache(appId);
 
@@ -70,6 +66,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 				vecHighlight: [],
 				vecUnachieved: []
 			};
+
 			appDetailsCache.SetCachedDataForApp(appId, "achievements", 2, appData.details!.achievements);
 		});
 	}
@@ -93,8 +90,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 						if(!module.isValid || module.excludedApps.includes(args[0]))
 							return callOriginal;
 
-						module.logger.debug("LoadMyAchievements");
-						//console.log(args, appStore.GetAppOverviewByAppID(args[0]), appDetailsStore.GetAppDetails(args[0]));
+						module.logger.debug("LoadMyAchievements", args[0]);
 
 						if (appStore.GetAppOverviewByAppID(args[0])?.app_type === SteamAppTypeShortcut && !Achievements.m_mapGlobalAchievements.has(args[0])){
 							const data = module.fetchData(args[0]);
@@ -174,14 +170,37 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 
 		// Patching appDetailsStore.GetAchievements retrieves them only on app details,
 		// while patching appDetailsStore.GetAppData retrieves them also on overlay
+		const achievementsAppData = (appId: number, appData: AppData) => {
+			if(!appData.details || appData.details.achievements?.vecHighlight != null)
+				return;
+
+			appData.bLoadingAchievments = true;
+			const data = module.fetchData(appId);
+			let achieved = data?.achievements.filter(a => a.bAchieved);
+			const nAchieved = achieved?.length ?? 0;
+			const nTotal = data?.achievements.length ?? 0;
+			const vecHighlight = achieved?.filter(a => a.bHidden !== true) ?? [];
+			const vecAchievedHidden = data?.achievements.filter(a => a.bHidden) ?? [];
+			const vecUnachieved = data?.achievements?.filter(a => !a.bAchieved) ?? [];
+			stateTransaction(() => {
+				appData.details!.achievements = {
+					nAchieved,
+					nTotal,
+					vecAchievedHidden,
+					vecHighlight,
+					vecUnachieved
+				};
+
+				appDetailsCache.SetCachedDataForApp(appId, "achievements", 2, appData.details!.achievements);
+			});
+			appData.bLoadingAchievments = false;
+		}
 		mounts.addPatchMount({
-			patch(): Patch
-			{
+			patch(): Patch{
 				return beforePatch(
 					appDetailsStore.__proto__,
 					"GetAchievements",
-					args =>
-					{
+					args => {
 						if(!module.isValid || module.overlayMenu || module.excludedApps.includes(args[0]))
 							return;
 
@@ -190,35 +209,13 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 							return;
 
 						let appData = appDetailsStore.GetAppData(args[0]);
-						if(!appData.details)
-							return;
-
-						const data = module.fetchData(args[0]);
-						let achieved = data?.achievements.filter(a => a.bAchieved);
-						const nAchieved = achieved?.length ?? 0;
-						const nTotal = data?.achievements.length ?? 0;
-						const vecHighlight = achieved?.filter(a => a.bHidden !== true) ?? [];
-						const vecAchievedHidden = data?.achievements.filter(a => a.bHidden) ?? [];
-						const vecUnachieved = data?.achievements?.filter(a => !a.bAchieved) ?? [];
-						stateTransaction(() => {
-							appData.details!.achievements = {
-								nAchieved,
-								nTotal,
-								vecAchievedHidden,
-								vecHighlight,
-								vecUnachieved
-							};
-							appDetailsCache.SetCachedDataForApp(args[0], "achievements", 2, appData.details!.achievements);
-						});
-
-						return appData;
+						achievementsAppData(args[0], appData);
 					}
 				);
 			}
 		});
 		mounts.addPatchMount({
-			patch(): Patch
-			{
+			patch(): Patch{
 				return afterPatch(
 					appDetailsStore.__proto__,
 					"GetAppData",
@@ -231,48 +228,13 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 						if(overview.app_type != SteamAppTypeShortcut)
 							return appData;
 
-						const data = module.fetchData(args[0]);
-						let achieved = data?.achievements.filter(a => a.bAchieved);
-						const nAchieved = achieved?.length ?? 0;
-						const nTotal = data?.achievements.length ?? 0;
-						const vecHighlight = achieved?.filter(a => a.bHidden !== true) ?? [];
-						const vecAchievedHidden = data?.achievements.filter(a => a.bHidden) ?? [];
-						const vecUnachieved = data?.achievements?.filter(a => !a.bAchieved) ?? [];
-						stateTransaction(() => {
-							appData.details!.achievements = {
-								nAchieved,
-								nTotal,
-								vecAchievedHidden,
-								vecHighlight,
-								vecUnachieved
-							};
-							appDetailsCache.SetCachedDataForApp(args[0], "achievements", 2, appData.details!.achievements);
-						});
+						achievementsAppData(args[0], appData);
 
 						return appData;
 					}
 				);
 			}
 		});
-
-		// DEV: What is this?
-		// mountManager.addPatchMount({
-		// 	patch(): Patch
-		// 	{
-		// 		return beforePatch(
-		// 			Router,
-		// 			"BIsStreamingRemotePlayTogetherGame",
-		// 			_ =>
-		// 			{
-		// 				logger.debug('BIsStreamingRemotePlayTogetherGame');
-		// 				if (state.managers.some(m => m.isReady((Router.MainRunningApp as SteamAppOverview | undefined)?.appid ?? 0)))
-		// 				{
-		// 					setAchievements((Router.MainRunningApp as SteamAppOverview | undefined)?.appid ?? 0);
-		// 				}
-		// 			}
-		// 		);
-		// 	}
-		// });
 
 		// Achievements section on app details page
 		mounts.addPatchMount({
@@ -284,10 +246,9 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 				));
 				module.logger.debug("AppDetailsSections", AppDetailsSections);
 
-				return afterPatch(AppDetailsSections.prototype, 'GetSections', function(this: any, _: Record<string, unknown>[], ret: Set<string>)
-				{
+				return afterPatch(AppDetailsSections.prototype, 'GetSections', function(this: any, _: Record<string, unknown>[], ret: Set<string>){
 					const overview: SteamAppOverview = this?.props?.overview;
-					if (module.isValid && overview?.app_type === SteamAppTypeShortcut || (overview && module.excludedApps.includes(overview.appid))){
+					if (module.isValid && overview?.app_type === SteamAppTypeShortcut && !module.excludedApps.includes(overview.appid)){
 						if (module.appDetails)
 							ret.add("achievements");
 						else
@@ -337,7 +298,16 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 	}
 
 	progressDescription(data?: AchievementsData): string{
-		return format(t("foundAchievements"), data?.achievements?.length ?? 0);
+		return t("foundAchievements").replace("{num}", (data?.achievements?.length ?? 0).toString());
+	}
+
+	isEmpty(data: AchievementsData): boolean {
+		return !data.achievements?.length;
+	}
+	
+	protected override cacheData(appId: number, data: AchievementsData | null): void {
+		// Achievements are never cached since they are already cached inside providers to be merged with progress
+		this.notCachedData[appId] = data;
 	}
 
 	get category(): boolean

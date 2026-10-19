@@ -21,7 +21,7 @@ import {
 	Router,
 	Toggle
 } from "@decky/ui";
-import {format, t} from "../../useTranslations";
+import {t} from "../../useTranslations";
 import {getAppDetails, stateTransaction} from "../../util";
 import {ReactElement, ReactNode, useState} from "react";
 import {Markdown} from "../../markdown";
@@ -131,12 +131,12 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 			};
 
 			appDetailsCache.SetCachedDataForApp(appId, "descriptions", 1, appData.descriptionsData);
-			appDetailsCache.SetCachedDataForApp(appId, "associations", 1, appData.associationData);
+			appDetailsCache.SetCachedDataForApp(appId, "associations", 2, appData.associationData);
 		});
 	};
 
-	private bypassCounter = 0
-	bypassBypass = 0
+	private bypassCounter = 0;
+	bypassBypass = 0;
 
 	addMounts(mounts: Mounts): void
 	{
@@ -150,43 +150,43 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 					   appDetailsStore.__proto__,
 					   "GetDescriptions",
 					   (args) => {
-						   if (!module.isValid || module.excludedApps.includes(args[0]))
+						   	if (!module.isValid || module.excludedApps.includes(args[0]))
 							   return callOriginal;
 
-						   const overview = appStore.GetAppOverviewByAppID(args[0])
-						   if (overview.app_type == SteamAppTypeShortcut)
-						   {
-							   let appData = appDetailsStore.GetAppData(args[0]);
-							   if (appData)
-							   {
-									const data = module.fetchData(args[0]);
-									const desc = module.descriptions ? data?.description ?? t("noDescription") : "";
-									const snip = module.descriptions ? data?.snippet ?? data?.description ?? '' : "";
-									module.logger.debug(desc);
-									stateTransaction(() => {
-										if (module.config.markdown){
-											appData.descriptionsData = {
-												strFullDescription: <Markdown>
-													{module.config.title_header ? `# ${overview?.display_name}\n${desc}` : desc}
-												</Markdown>,
-												strSnippet: <Markdown>
-													{module.config.title_header ? `# ${overview?.display_name}\n${snip}` : snip}
-												</Markdown>
-											}
-										}
-										else{
-											appData.descriptionsData = {
-												strFullDescription: desc,
-												strSnippet: snip
-											}
-										}
-										appDetailsCache.SetCachedDataForApp(args[0], "descriptions", 1, appData.descriptionsData);
-									});
+							const overview = appStore.GetAppOverviewByAppID(args[0]);
+							if (overview.app_type == SteamAppTypeShortcut){
+								let appData = appDetailsStore.GetAppData(args[0]);
+								if (appData){
+										const data = module.fetchData(args[0]);
+										const desc = module.descriptions ? (data?.description ?? t("noDescription")) : "";
+										const snip = module.descriptions ? (data?.snippet ?? data?.description ?? '') : "";
+										module.logger.debug(desc);
 
-								   return appData.descriptionsData;
-							   }
-						   }
-						   return callOriginal;
+										stateTransaction(() => {
+											if (module.config.markdown){
+												appData.descriptionsData = {
+													strFullDescription: <Markdown>
+														{module.config.title_header ? `# ${overview?.display_name}\n${desc}` : desc}
+													</Markdown>,
+													strSnippet: <Markdown>
+														{module.config.title_header ? `# ${overview?.display_name}\n${snip}` : snip}
+													</Markdown>
+												};
+											}
+											else{
+												appData.descriptionsData = {
+													strFullDescription: desc,
+													strSnippet: snip
+												};
+											}
+
+											appDetailsCache.SetCachedDataForApp(args[0], "descriptions", 1, appData.descriptionsData);
+										});
+
+									return appData.descriptionsData;
+								}
+							}
+							return callOriginal;
 					   }
 				)
 			}
@@ -196,27 +196,27 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 			patch(): Patch
 			{
 				return afterPatch(
-					   // @ts-ignore
-					   appDetailsStore.__proto__,
-					   "GetDescriptions",
-					   (args, ret: NonNullable<AppData['descriptionsData']>): NonNullable<AppData['descriptionsData']> => {
-						   if (!module.isValid || module.excludedApps.includes(args[0]))
-							   return ret;
+					// @ts-ignore
+					appDetailsStore.__proto__,
+					"GetDescriptions",
+					(args, ret: NonNullable<AppData['descriptionsData']>): NonNullable<AppData['descriptionsData']> => {
+						if (!module.isValid || module.excludedApps.includes(args[0]))
+							return ret;
 
-						   const overview = appStore.GetAppOverviewByAppID(args[0])
-						   if (module.config.markdown){
-							   return {
-								   strFullDescription: <Markdown>
-									   {module.config.title_header ? `# ${overview.display_name}\n` + ret?.strFullDescription as string : ret?.strFullDescription as string}
-								   </Markdown>,
-								   strSnippet: <Markdown>
-									   {module.config.title_header ? `# ${overview.display_name}\n` + ret?.strSnippet as string : ret?.strSnippet as string}
-								   </Markdown>
-							   }
+						const overview = appStore.GetAppOverviewByAppID(args[0]);
+						if (module.config.markdown){
+							return {
+								strFullDescription: <Markdown>
+									{module.config.title_header ? `# ${overview.display_name}\n${ret?.strFullDescription}` : `${ret?.strFullDescription}`}
+								</Markdown>,
+								strSnippet: <Markdown>
+									{module.config.title_header ? `# ${overview.display_name}\n${ret?.strSnippet}` : `${ret?.strSnippet}`}
+								</Markdown>
 							}
-						   	else
-							   return ret;
-					   }
+						}
+						else
+							return ret;
+					}
 				)
 			}
 		});
@@ -272,7 +272,8 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 								   const data = module.fetchData(args[0])
 								   const devs = data?.developers ?? [];
 								   const pubs = data?.publishers ?? [];
-								   module.logger.debug(`associations for ${args[0]}`, devs, pubs)
+								   module.logger.debug(`associations for ${args[0]}`, devs, pubs);
+
 								   stateTransaction(() => {
 									   appData.associationData = {
 										   rgDevelopers: devs.map(value => ({
@@ -285,7 +286,8 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 										   })),
 										   rgFranchises: []
 									   }
-									   appDetailsCache.SetCachedDataForApp(args[0], "associations", 1, appData.associationData)
+									   
+									   appDetailsCache.SetCachedDataForApp(args[0], "associations", 2, appData.associationData)
 								   })
 							   }
 						   }
@@ -306,7 +308,7 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 						   if (!module.isValid)
 							   return ret;
 
-						   module.bypassCounter = 4
+						   module.bypassCounter = 4;
 					   }
 				)
 			}
@@ -316,34 +318,44 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 			patch(): Patch
 			{
 				return afterPatch(
-					   appStore.allApps[0].__proto__,
-					   "BIsModOrShortcut",
-					   function (_, ret) {
-						   if (!module.isValid || !module.typeOverride)
-							   return ret;
+					appStore.allApps[0].__proto__,
+					"BIsModOrShortcut",
+					function (_, ret) {
+						if (!module.isValid || !module.typeOverride)
+							return ret;
 
-						   if (ret === true)
-						   {
-							   if (module.bypassBypass > 0)
-							   {
-								   module.logger.debug("Bypassing", module.bypassBypass)
-								   if (module.bypassBypass > 0)
-									   module.bypassBypass--
-								   return false;
-							   }
-							   // @ts-ignore
-							   if (Router?.WindowStore?.GamepadUIMainWindowInstance?.m_history?.location?.pathname === '/library/home')
-							   {
-								   return false;
-							   }
-							   if (module.bypassCounter > 0)
-							   {
-								   module.bypassCounter--;
-							   }
-							   return module.bypassCounter === -1 || module.bypassCounter > 0
-						   }
-						   return ret;
-					   }
+						// @ts-ignore
+						const overview: SteamAppOverview = this;
+						if (ret === true){
+							if (module.bypassBypass > 0){
+								module.logger.debug("Bypassing", module.bypassBypass);
+								
+								if (module.bypassBypass > 0)
+									module.bypassBypass--;
+
+								if(!module.excludedApps.includes(overview.appid))
+									return false;
+								else
+									return ret;
+							}
+
+							// @ts-ignore
+							if (Router?.WindowStore?.GamepadUIMainWindowInstance?.m_history?.location?.pathname === '/library/home'){
+								if(!module.excludedApps.includes(overview.appid))
+									return false;
+								else
+									return ret;
+							}
+
+							if (module.bypassCounter > 0)
+								module.bypassCounter--;
+
+							if(!module.excludedApps.includes(overview.appid))
+								return module.bypassCounter === -1 || module.bypassCounter > 0;
+						}
+
+						return ret;
+					}
 				)
 			}
 		});
@@ -547,6 +559,25 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 		});
 	}
 
+	isEmpty(data: MetadataData): boolean {
+		return (!data.description || data.description === t("noDescription")) &&
+			!data.snippet &&
+
+			!data.developers?.length &&
+			!data.publishers?.length &&
+			!data.release_date &&
+
+			data.rating == null &&
+			data.install_size == null &&
+			!data.install_date &&
+
+			!data.store_categories?.length;
+	}
+	
+	protected override cacheData(appId: number, data: MetadataData | null): void {
+		this.data[appId] = data;
+	}
+
 	get typeOverride(): boolean
 	{
 		return this.config.type_override;
@@ -689,7 +720,9 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 					<Field
 						label={t("metadataSettingsDescriptions")}
 						description={!typeOverride ?
-							format(t("settingsDependencyNotMet"), t("metadataSettingsDescriptions"), t("metadataSettingsTypeOverride")) :
+							t("settingsDependencyNotMet")
+								.replace("{setting1}", t("metadataSettingsDescriptions"))
+								.replace("{setting2}", t("metadataSettingsTypeOverride")) :
 							t("metadataSettingsDescriptionsDesc")}>
 						<Toggle
 							value={descriptions}
@@ -702,7 +735,9 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 					<Field
 						label={t("metadataSettingsReleaseDate")}
 						description={!typeOverride ?
-							format(t("settingsDependencyNotMet"), t("metadataSettingsReleaseDate"), t("metadataSettingsTypeOverride")) :
+							t("settingsDependencyNotMet")
+								.replace("{setting1}", t("metadataSettingsReleaseDate"))
+								.replace("{setting2}", t("metadataSettingsTypeOverride")) :
 							t("metadataSettingsReleaseDateDesc")}>
 						<Toggle
 							value={releaseDate}
@@ -715,7 +750,9 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 					<Field
 						label={t("metadataSettingsAssociations")}
 						description={!typeOverride ?
-							format(t("settingsDependencyNotMet"), t("metadataSettingsAssociations"), t("metadataSettingsTypeOverride")) :
+							t("settingsDependencyNotMet")
+								.replace("{setting1}", t("metadataSettingsAssociations"))
+								.replace("{setting2}", t("metadataSettingsTypeOverride")) :
 							t("metadataSettingsAssociationsDesc")}>
 						<Toggle
 							value={associations}
@@ -789,7 +826,9 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 					<Field
 						label={t("metadataSettingsTitleHeader")}
 						description={!markdown ?
-							format(t("settingsDependencyNotMet"), t("metadataSettingsTitleHeader"), t("metadataSettingsMarkdown")) :
+							t("settingsDependencyNotMet")
+								.replace("{setting1}", t("metadataSettingsTitleHeader"))
+								.replace("{setting2}", t("metadataSettingsMarkdown")) :
 							t("metadataSettingsTitleHeaderDesc")}>
 						<Toggle
 							value={titleHeader}
@@ -809,51 +848,62 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 		if(this.excludedApps.includes(overview.appid))
 			return;
 
+		const data = this.getCachedData(overview.appid);
 		if (this.rating)
-			overview.metacritic_score = Math.round(this.data[overview.appid]?.rating ?? 0);
+			overview.metacritic_score = Math.round(data?.rating ?? 0);
 		if (this.categories){
-			this.data[overview.appid]?.store_categories?.forEach(category => {
+			data?.store_categories?.forEach(category => {
 				// Achievements are handled by their module
 				if(category !== StoreCategory.Achievements)
 					overview.m_setStoreCategories.add(category);
 			});
 
 			// If we have multiplayer we also assume single player
-			if(!this.data[overview.appid]?.store_categories.includes(StoreCategory.MultiPlayer) &&
-				this.data[overview.appid].store_categories.includes(StoreCategory.SinglePlayer)){
+			if(!data?.store_categories?.includes(StoreCategory.MultiPlayer) &&
+				data?.store_categories?.includes(StoreCategory.SinglePlayer)){
 
 				overview.m_setStoreCategories.add(StoreCategory.SinglePlayer);
 			}
 		}
 		if (this.installSize)
-			overview.size_on_disk = this.data[overview.appid]?.install_size?.toString() ?? "0";
+			overview.size_on_disk = data?.install_size?.toString() ?? "0";
 		if (this.installDate)
-			overview.rt_purchased_time = this.data[overview.appid]?.install_date;
+			overview.rt_purchased_time = data?.install_date;
 	}
 	
 	// We need to retrieve the best matching metadata by preferring this criteria:
-	// - a non empty description (100 points)
-	// - most populated fields within developers, publishers, release_date, store_categories
+	// - a non empty localized description
+	// - a non empty description
+	// - at least one developer/publisher (more than 1 do not count much)
+	// - most distinct store categories
+	// - a release date
+	// - most populated fields release_date, ...
 	private getEntryScore(entry: MetadataData): number{
-		const fields: Partial<Record<keyof MetadataData, number>> = {
-			"developers": 100,
-			"publishers": 100,
-			"release_date": 1,
-			"store_categories": 5
-		};
-		const emptyDescription = t("noDescription");
-		const max = 10000 + 100 + 100 + 1 + 5;
-
 		let total = 0;
-		if(entry.description && entry.description !== emptyDescription)
-			total += 10000;
-		for(let field in fields){
+
+		if(entry.description && entry.description !== t("noDescription"))
+			total += (entry.matches_user_language === true ? 20000 : 10000);
+
+		if(entry.developers?.length)
+			total += 1000;
+		if(entry.publishers?.length)
+			total += 1000;
+
+		total += new Set(entry.store_categories).size * 10;
+
+		if(entry.release_date)
+			total += 5;
+
+		for(let field of (["rating", "install_size", "install_date"] as (keyof MetadataData)[])){
 			let value = (entry as any)[field];
-			if(value != null && !(Array.isArray(value) || value.length))
-				total += (fields as any)[field] * (Array.isArray(value) ? value.length : 1);			
+			if(value != null)
+				total += 1;			
 		}
 
-		if(total >= max)
+		// If we have a perfect entry (localized description both developer and publisher,
+		// a release date and at least one store category),  we can't get better
+		// (and we don't want to lookup other providers)
+		if(total >= 20000 + 100 + 100 + 10 + 5)
 			return Number.MAX_VALUE;
 		else
 			return total;
@@ -864,7 +914,7 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 			return undefined;
 
 		try{
-			if (!this.hasData(appId)){
+			if (!this.hasCachedData(appId)){
 				// Prevent saving multiple times inside providers
 				await this.state.settings.runInDisabledSaveState(async () => {
 					// Check if we have a saved provider
@@ -873,12 +923,12 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 						const provider = this.providers.find(p => p.identifier === providerId);
 						if(provider?.enabled && await provider.test(appId)){
 							const data = await provider.provide(appId);
-							if(data){
+							if(data && !this.isEmpty(data)){
 								// DEV: merge with below
 								await this.provideAdditional(appId, data);
-								this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
+								this.logger.debug(`Caching metadata for ${appId}: `, data, provider.identifier);
 
-								this.data[appId] = data;
+								this.cacheData(appId, data);
 								this.dataProviders[appId] = provider.identifier;
 							}
 							else if(!this.providerOverrides[appId])
@@ -893,14 +943,14 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 					}
 
 					// Retrieve a new provider
-					if(!this.hasData(appId)){
+					if(!this.hasCachedData(appId)){
 						let results: Partial<Record<ProviderIdentifier<MetadataModule>, MetadataData>> = {};
 						for (const provider of this.providers){
 							if(!provider.enabled || !await provider.test(appId))
 								continue;
 							
 							const data = await provider.provide(appId);
-							if(!data)
+							if(!data || this.isEmpty(data))
 								continue;
 							
 							// If we have a "perfect" entry we return it rightaway,
@@ -917,51 +967,58 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 
 						// If we didn't find a "perfect" entry we try matching the best,
 						// or if we have a single entry we use that
-						if(!this.hasData(appId)){
+						if(Object.keys(results).length){
 							let entries = Object.entries(results).sort((a, b) => this.getEntryScore(a[1]) -  this.getEntryScore(b[1]));
 
 							let obj: {
 								provider: string;
 								score: number | 'max';
 								entry: MetadataData
-							}[] = entries.map(e => ({
-								provider: e[0],
-								score: this.getEntryScore(e[1]),
-								entry: e[1]
-							}));
-							this.logger.debug(`Resulting ${this.identifier} for ${appId}: `, obj);
+							}[] = entries.map(e => {
+								let score = this.getEntryScore(e[1]);
+								return {
+									provider: e[0],
+									score: score === Number.MAX_VALUE ? 'max' : score,
+									entry: e[1]
+								};
+							});
+							this.logger.debug(`Resulting metadata for ${appId}: `, obj);
 							
 							const [provider, data] = entries[entries.length-1] as [ProviderIdentifier<MetadataModule>, MetadataData];
 
 							await this.provideAdditional(appId, data);
-							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider);
+							this.logger.debug(`Caching metadata for ${appId}: `, data, provider);
 
-							this.data[appId] = data;
+							this.cacheData(appId, data);
 							this.dataProviders[appId] = provider;
 						}
 					}
 					
-					// Provide default data, if any
-					if(!this.hasData(appId)){
+					// Provide default data, if any,
+					// or still cache undefined to avoid querying continuously
+					if(!this.hasCachedData(appId)){
 						let defaultData = await this.provideDefault(appId);
-						if(defaultData){
-							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, defaultData, 'default');
+						if(defaultData && !this.isEmpty(defaultData)){
+							this.logger.debug(`Caching metadata for ${appId}: `, defaultData, 'default');
 
-							this.data[appId] = defaultData;
+							this.cacheData(appId, defaultData);
 						}
-						else
-							this.logger.debug(appId, "no provider/default");
+						else{
+							this.logger.debug(`Caching no provider/default metadata for ${appId}: `);
+
+							this.cacheData(appId, null);
+						}
 					}
 				});
 
 				await this.saveCache();
 			}
 			else
-				this.logger.debug(`Loading cached ${this.identifier} for ${appId}: `, this.data[appId], this.dataProviders[appId]);
+				this.logger.debug(`Loading cached metadata for ${appId}: `, this.getCachedData(appId), this.dataProviders[appId]);
 
 			void this.apply(appId);
 
-			return this.data[appId];
+			return this.getCachedData(appId);
 		}
 		catch (e: any){
 			this.handleError(e);
@@ -984,6 +1041,7 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 			id: appId,
 
 			description: t("noDescription"),
+
 			// Achievements are handled by their module
 			store_categories: cats.filter(c => c !== StoreCategory.Achievements)
 		};

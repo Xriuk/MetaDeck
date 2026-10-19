@@ -47,11 +47,11 @@ export const IdOverrideComponent = ({
 		description
 	}: IdOverrideProps) => {
 	const { modules, overviews } = useMetaDeckState();
-	const [app, setApp] = useState<number>();
-	const [id, setId] = useState<OverrideEntry>();
 	const [entries, setEntries] = useState<Record<number, OverrideEntry>>({});
 	const [appOptions, setAppOptions] = useState<DropdownOption[]>([]);
+	const [app, setApp] = useState<number>();
 	const [idOptions, setIdOptions] = useState<DropdownOption[]>([]);
+	const [id, setId] = useState<OverrideEntry>();
 	const [loaded, setLoaded] = useState(false);
 
 	useEffect(() => {
@@ -68,7 +68,7 @@ export const IdOverrideComponent = ({
 					ret[key] = {
 						...result,
 						appDisplayName: appStore.GetAppOverviewByAppID(appId).display_name,
-						appId: appId,
+						appId: appId
 					};
 				}
 			}
@@ -108,6 +108,7 @@ export const IdOverrideComponent = ({
 			if(app){
 				let results = await resultsForApp(app);
 				let selected = defaultResults ? await defaultResults(results, app) : [];
+				let appDisplayName = appStore.GetAppOverviewByAppID(app).display_name;
 
 				// Set selected first, if any
 				setIdOptions(results
@@ -115,7 +116,9 @@ export const IdOverrideComponent = ({
 					.concat(results.filter(r => !selected.some(s => s.id === r.id)))
 					.map(value => ({
 						label: `${value.title} (${value.id})`,
-						data: value
+						data: value,
+						appDisplayName: appDisplayName,
+						appId: app
 					})));
 			}
 			else

@@ -20,8 +20,20 @@ declare global
 	// @ts-ignore
 	let appDetailsStore: AppDetailsStore;
 
+	/*
+	Versions scraped
+	const S = "associations"
+	, b = 2
+	, O = "descriptions"
+	, m = 1
+	, T = "achievements"
+	, L = 2
+	, Q = "customimage"
+	, E = 1;
+	*/
 	let appDetailsCache: {
-		SetCachedDataForApp<TCacheKey extends keyof CachedAppDetails>(app_id: number, field: TCacheKey, version: number, data: CachedAppDetails[TCacheKey]['data']): void;
+		GetCachedDataForApp<TCacheKey extends keyof CachedAppDetails>(app_id: number, field: TCacheKey, version: number): Promise<CachedAppDetails[TCacheKey]['data'] | undefined>;
+		SetCachedDataForApp<TCacheKey extends keyof CachedAppDetails>(app_id: number, field: TCacheKey, version: number, data: CachedAppDetails[TCacheKey]['data'] | undefined): void;
 	}
 
 	// let collectionStore: CollectionStore;

@@ -8,7 +8,7 @@ import { MetadataProvider } from "../MetadataProvider";
 import { separator } from "../../resolvers/MultiId/MultiIdResolver";
 import { getLaunchCommand, getShortcutCategories, isCemuGame, isDolphinGame, isGameCubeId6, isRPCS3Game, isRyujinxGame } from "../../../shortcuts";
 import { getAppDetails, toasterToast } from "../../../util";
-import { callable } from "@decky/api";
+import { callable, fetchNoCors } from "@decky/api";
 import { MetadataData, StoreCategory } from "../../../Interfaces";
 import { FaG } from "react-icons/fa6";
 
@@ -32,6 +32,23 @@ const wiiUrl = "https://www.gametdb.com/wiitdb.zip";
 const wiiUUrl = "https://www.gametdb.com/wiiutdb.zip";
 const switchUrl = "https://www.gametdb.com/switchtdb.zip";
 const ps3Url = "https://www.gametdb.com/ps3tdb.zip";
+
+// GameTDB is extremely unreliable so we try the website and fallback to wayback machine
+const waybackMachineLatest = "https://web.archive.org/web/20260922134245/";
+export async function fetchGameTDBNoCors(url: string){
+	try{
+		let response = await fetchNoCors(url);
+		if(!response.ok && response.status >= 500)
+			throw new Error("gateway");
+		return response;
+	}
+	catch(e: any){
+		if((e.toString() as string).toLowerCase().includes("gateway"))
+			return await fetchNoCors(waybackMachineLatest + url);
+
+		throw e;
+	}
+}
 
 type GameTDBGame = {
 	id: string;
@@ -93,8 +110,16 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 			try{
 				await this.gametdb_get_db(url);
 			}
-			catch(e){
-				errors.push(e);
+			catch(e1){
+				// DEV: maybe check if gateway error
+				this.logger.error(e1);
+				
+				try{
+					await this.gametdb_get_db(waybackMachineLatest + url);
+				}
+				catch(e2){
+					errors.push(e2);
+				}
 			}
 		}
 		if(errors.length){
@@ -109,13 +134,14 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 		predicate: (locale: NonNullable<GameTDBGame['locales']>[string]) => any):
 			NonNullable<GameTDBGame['locales']>[string] | undefined{
 
-		let language = this.language.toUpperCase();
+		let language = this.language;
 
 		// Retrieve localized version
-		let locale = locales.find(l => l[0].toUpperCase() == language && predicate(l[1]));
+		let locale = locales.find(l => l[0] === language && predicate(l[1]));
 
 		// If we haven't found anything we try retrieving english
-		locale ??= locales.find(l => l[0].toUpperCase() == "EN" && predicate(l[1]));
+		if(language !== "EN")
+			locale ??= locales.find(l => l[0] === "EN" && predicate(l[1]));
 		
 		return locale?.[1];
 	}
@@ -197,12 +223,15 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 		let locales = entries.flatMap(e => Object.entries(e.locales ?? {}));
 		let release = entries.find(e => e.date)?.date;
 
+		let localized = this.getLocalized(locales, l => l.synopsis);
+
 		return {
 			id: entries[0].id,
 			title: this.getLocalized(locales, l => l.title)?.title
 				?? entries[0].name,
 
-			description: this.getLocalized(locales, l => l.synopsis)?.synopsis || t("noDescription"),
+			description: localized?.synopsis || t("noDescription"),
+			matches_user_language: localized && locales.find(l => l[1] === localized)?.[0] === this.language,
 
 			release_date: release ? Math.floor(Date.parse(release) / 1000) : undefined,
 			developers: entries

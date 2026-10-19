@@ -9,7 +9,6 @@ import { useState } from "react";
 import { DialogControlsSection, Dropdown, Field } from "@decky/ui";
 import { StoreCategory, type MetadataData } from "../../../Interfaces";
 import { getAppDetails, toasterToast } from "../../../util";
-import { getLaunchCommand, getShortcutCategories } from "../../../shortcuts";
 
 type TitleDbEntry = {
 	id: string;
@@ -55,18 +54,18 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 		
 		// Try matching a simple country/language code (IT.it, FR.fr, DE.de, ...)
 		let language = lang.toUpperCase() + "." + lang.toLowerCase();
-		if(this.languages.indexOf(language) !== -1)
+		if(this.languages.includes(language))
 			return language;
 
 		// Try matching specific cases 
 		if(lang === "es419")
 			lang = "es"; // Will match the first non Spain-Spanish below
 		else if(lang === "ptBr"){
-			if(this.languages.indexOf("BR.pt") !== -1)
+			if(this.languages.includes("BR.pt"))
 				return "BR.pt";
 		}
 		else if(lang === "zhCn"){
-			if(this.languages.indexOf("CN.zh") !== -1)
+			if(this.languages.includes("CN.zh"))
 				return "CN.zh";
 		}
 		else if(lang === "zhTw")
@@ -79,9 +78,9 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 				return language;
 		}
 
-		if(this.languages.indexOf("US.en") !== -1)
+		if(this.languages.includes("US.en"))
 			return "US.en";
-		else if(this.languages.indexOf("GB.en") !== -1)
+		else if(this.languages.includes("GB.en"))
 			return "GB.en";
 		else{
 			language = this.languages.find(l => l.endsWith(".en"))!;
@@ -128,7 +127,7 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 	}
 
 	async provide(appId: number): Promise<MetadataData | undefined> {
-		if(this.excludedApps.includes(appId) || !this.languages.length)
+		if(!this.languages.length)
 			return undefined;
 
 		const resolved = await this.resolve(appId, true);
@@ -146,9 +145,7 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 		let game: TitleDbEntry = JSON.parse(entry);
 		let strDate = game.releaseDate?.toString();
 
-		const launchCommand = getLaunchCommand(details);
-		const cats = await getShortcutCategories(launchCommand);
-		cats.push(StoreCategory.SinglePlayer);
+		const cats: StoreCategory[] = [ StoreCategory.SinglePlayer ];
 		if(game.numberOfPlayers && game.numberOfPlayers > 1)
 			cats.push(StoreCategory.MultiPlayer);
 
@@ -158,6 +155,7 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 
 			description: (game.description ?? game.intro) || t("noDescription"),
 			snippet: game.intro ?? undefined,
+			matches_user_language: true,
 
 			release_date: strDate ? Math.floor(Date.parse(`${strDate.substring(0, 4)}-${strDate.substring(4, 6)}-${strDate.substring(6, 8)}`) / 1000) : undefined,
 			developers: game.developer ? [{name: game.developer, url: ''}] : undefined,

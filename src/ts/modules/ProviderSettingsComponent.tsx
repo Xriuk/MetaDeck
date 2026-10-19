@@ -54,19 +54,6 @@ export const ProviderSettingsComponent: FC = () => {
 
 					<provider.settingsComponent/>
 
-					<DialogControlsSection>
-						<ExcludeAppComponent
-							source={provider}
-							value={excluded}
-							disabled={state.loadingData.loading}
-							onChange={async (value) => {
-								let oldValue = provider.excludedAppsSelf;
-								setExcluded(value);
-								provider.excludedAppsSelf = value;
-								await provider.module.onExcludedChange(oldValue, value);
-							}} />
-					</DialogControlsSection>
-
 					{ 
 						Object.keys(provider.resolvers).length > 1 &&
 						<DialogControlsSection>
@@ -101,6 +88,19 @@ export const ProviderSettingsComponent: FC = () => {
 							}
 						</DialogControlsSection>
 					}
+
+					<DialogControlsSection>
+						<ExcludeAppComponent
+							source={provider}
+							value={excluded}
+							disabled={state.loadingData.loading}
+							onChange={async (value) => {
+								let oldValue = provider.excludedAppsSelf;
+								setExcluded(value);
+								provider.excludedAppsSelf = value;
+								await provider.module.onExcludedChange(oldValue, value);
+							}} />
+					</DialogControlsSection>
 				</DialogBody>
 			)
 		})

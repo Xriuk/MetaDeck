@@ -44,21 +44,12 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 		void this.saveConfig();
 	}
 
-	// DEV: maybe make abstract and avoid double-search?
 	override async test(appId: number): Promise<boolean>{
-		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
 			return false;
 
-		const details = await getAppDetails(appId);
-		if(!details)
-			return false;
-
-		const results = await this.getAllMetadataForGame(appId);
-		if (!results.length)
-			return false;
-
-		const games = await this.pickDefaultEntry(results, appId);
-		return games.length > 0;
+		// We return true to not double search, as we'll do it inside provide
+		return true;
 	}
 
 	provide(appId: number): Promise<MetadataData | undefined>{
@@ -118,7 +109,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 
 		const game = games.reverse().pop();
 		if (game){
-			game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
+			game.store_categories = (game.store_categories ?? []).concat(await getShortcutCategories(getLaunchCommand(details)));
 
 			await this.enrichMetadataForGame(appId, game);
 		}
@@ -128,7 +119,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 	}
 
 	protected async getAllMetadataForGame(appId: number, external = false): Promise<MetadataData[]>{
-		if(!external && this.excludedApps.includes(appId))
+		if((!external && this.excludedApps.includes(appId)) || this.overrides[appId] === 0)
 			return [];
 
 		const details = await getAppDetails(appId);
@@ -186,9 +177,6 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 								}}
 							/>
 						} />
-				</DialogControlsSection>
-
-				<DialogControlsSection>
 					<IdOverrideComponent
 						source={this}
 						value={overrides}

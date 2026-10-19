@@ -2,10 +2,11 @@ import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {getLaunchCommand, isCemuGame, romRegex} from "../../../shortcuts";
 import {getAppDetails, toasterToast} from "../../../util";
 import { MultiIdResolver, separator } from "./MultiIdResolver";
-import { call, fetchNoCors } from "@decky/api";
+import { call } from "@decky/api";
 import type { ID } from "../../../Interfaces";
 import { t } from "../../../useTranslations";
 import { MdOutlineTablet } from "react-icons/md";
+import { fetchGameTDBNoCors } from "../../metadata/providers/GameTDBMetadataProvider";
 
 export interface MultiIdCemuResolverConfig extends ResolverConfig{
 	
@@ -26,7 +27,7 @@ export class MultiIdCemuResolver extends MultiIdResolver<"cemu">{
 	}
 
 	override async mount(): Promise<void> {
-		const response = await fetchNoCors("https://www.gametdb.com/wiiutdb.txt?LANG=ORIG");
+		const response = await fetchGameTDBNoCors("https://www.gametdb.com/wiiutdb.txt?LANG=ORIG");
 		if(!response.ok){
 			toasterToast(t("initError"), this);
 
@@ -63,15 +64,16 @@ export class MultiIdCemuResolver extends MultiIdResolver<"cemu">{
 			}
 			
 			const launchCommand = getLaunchCommand(details);
-			const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
+			const rom = launchCommand.match(romRegex)?.[0];
 			if(!rom){
 				this.gameCodes[appId] = null;
 				return undefined;
 			}
 
-			// Returned serial is like "WUP-P-AMKE", we only need the last segment
+			// Returned serial is like "WUP-P-AMKE...", we only need the last segment,
+			// also it seems that it adds random stuff to it, we only need the first 4 chars of it
 			const gameSerial = (await call<[string], string | null>("cemu_get_gameserial", rom))?.split('-') ?? null;
-			if(!gameSerial?.length || gameSerial[gameSerial.length-1].length !== 4){
+			if(!gameSerial?.length){
 				this.gameCodes[appId] = null;
 				return undefined;
 			}
@@ -86,6 +88,8 @@ export class MultiIdCemuResolver extends MultiIdResolver<"cemu">{
 		// Retrieve all the ids by changing region
 		let regionIds = Object.keys(this.titlesCache)
 			.filter(i => i.startsWith(code));
+		if(!regionIds.length)
+			return undefined;
 			
 		let publisher = regionIds[0].substring(4);
 

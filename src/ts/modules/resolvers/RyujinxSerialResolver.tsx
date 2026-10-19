@@ -4,6 +4,7 @@ import { RyujinxTitleIdResolver, type RyujinxTitleIdResolverCache, type RyujinxT
 import Logger from "../../logger";
 import { t } from "../../useTranslations";
 import { toasterToast } from "../../util";
+import type { ResolverCaches } from "../Resolver";
 
 export interface RyujinxSerialResolverConfig extends RyujinxTitleIdResolverConfig{
 	
@@ -28,6 +29,9 @@ export class RyujinxSerialResolver extends RyujinxTitleIdResolver{
 	// Shares cache
 	override get cache(){
 		return this.state.settings.cache.resolvers["ryujinx_titleid"];
+	}
+	override set cache(cache: ResolverCaches["ryujinx_titleid"]){
+		this.state.settings.cache.resolvers["ryujinx_titleid"] = cache;
 	}
 
 	override async mount(): Promise<void> {

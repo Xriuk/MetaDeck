@@ -3,7 +3,7 @@ import {MetadataProvider} from "../MetadataProvider";
 import {MetadataData, StoreCategory} from "../../../Interfaces";
 import {fetchNoCorsLegacyTimeout, getAppDetails} from "../../../util";
 import {GamesDBResult} from "../../GamesDBResult";
-import {t} from "../../../useTranslations";
+import {getCurrentLanguage, t} from "../../../useTranslations";
 import {
 	getLaunchCommand,
 	getShortcutCategories
@@ -64,7 +64,10 @@ export class GOGMetadataProvider extends MetadataProvider<"gog">{
 					let steam = await this.steamProvider.getAppMetadata(parseInt(result.game.releases.find(r => r.platform_id === "steam")?.external_id ?? '0', 10), true);
 					if(steam){
 						steam.release_date = Math.floor(new Date(result.game.first_release_date).getTime() / 1000);
-						steam.store_categories.push(...cats);
+						steam.store_categories = [
+							...(steam.store_categories ?? []),
+							...cats
+						];
 
 						return steam;
 					}
@@ -80,7 +83,10 @@ export class GOGMetadataProvider extends MetadataProvider<"gog">{
 				return {
 					id: result.id,
 					title: result.title["en-US"],
+
 					description: result.summary["en-US"] || t("noDescription"),
+					matches_user_language: getCurrentLanguage() === "en",
+
 					rating: result.game.aggregated_rating,
 					release_date: Math.floor(new Date(result.game.first_release_date).getTime() / 1000),
 					developers: result.game.developers.map((dev) => ({name: dev.name, url: ""})),

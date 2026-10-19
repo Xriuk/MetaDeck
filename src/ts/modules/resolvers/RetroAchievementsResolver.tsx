@@ -65,7 +65,7 @@ export class RetroAchievementsResolver extends Resolver<"ra">{
 		let md5 = this.hashes[appId];
 		if(!md5){
 			const launchCommand = getLaunchCommand(details);
-			const rom = launchCommand?.match(new RegExp(romRegex, "i"))?.[0];
+			const rom = launchCommand?.match(romRegex)?.[0];
 			if(!rom)
 				return undefined;
 			md5 = await call<[string], string>("hash", rom);

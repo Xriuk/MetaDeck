@@ -22,7 +22,7 @@ export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver<"rpcs3">{
 		const details = await getAppDetails(appId);
 		if (!details)
 			return false;
-
+		
 		return isRPCS3Game(getLaunchCommand(details));
 	}
 
@@ -32,7 +32,7 @@ export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver<"rpcs3">{
 			return undefined;
 
 		const launchCommand = getLaunchCommand(details);
-		const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
+		const rom = launchCommand.match(romRegex)?.[0];
 		if(!rom)
 			return undefined;
 
@@ -52,5 +52,5 @@ export class MultiIdRPCS3Resolver extends MultiIdSerialStationResolver<"rpcs3">{
 
 	override icon = <SiPlaystation3/>;
 
-	// DEV: maybe retrieve and match title from GameTDB to retrieve other regions?
+	// DEV: maybe retrieve and match title from GameTDB like Wii to retrieve other regions?
 }

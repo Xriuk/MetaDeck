@@ -43,6 +43,7 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider<"cemu"
 		const details = await getAppDetails(appId);
 		if(!details)
 			return false;
+		
 		if(!isCemuGame(getLaunchCommand(details)))
 			return false;
 
@@ -50,12 +51,12 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider<"cemu"
 	}
 
 	protected async search(title: string): Promise<CompatdataData[]>{
-		let response = await fetchNoCorsLegacyTimeout('https://wiki.cemu-emu.org/api.php?' + new URLSearchParams({
+		let response = await fetchNoCorsLegacyTimeout('https://wiki.cemu.info/api.php?' + new URLSearchParams({
 			action: 'opensearch',
 			limit: '10',
 			search: title
 		}).toString());
-		if(!response)
+		if(!response.ok)
 			return [];
 
 		let results: WikiSearchResponse = await response.json();
@@ -73,7 +74,7 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider<"cemu"
 
 		// Retrieve the wiki entry
 		let title = game.title.replace(" ", "_");
-		let response = await fetchNoCorsLegacyTimeout('https://wiki.cemu-emu.org/index.php?' + new URLSearchParams({
+		let response = await fetchNoCorsLegacyTimeout('https://wiki.cemu.info/index.php?' + new URLSearchParams({
 			action: 'raw',
 			title: title
 		}).toString());
@@ -88,7 +89,7 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider<"cemu"
 			title = removeBeforeAndIncluding(text, "#REDIRECT [[");
 			title = title.substring(0, title.length-2).replace(" ", "_"); // Remove ending ]]
 
-			response = await fetchNoCorsLegacyTimeout('https://wiki.cemu-emu.org/index.php?' + new URLSearchParams({
+			response = await fetchNoCorsLegacyTimeout('https://wiki.cemu.info/index.php?' + new URLSearchParams({
 				action: 'raw',
 				title: title
 			}).toString());

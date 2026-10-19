@@ -74,7 +74,7 @@ export class RyujinxTitleIdResolver extends Resolver<"ryujinx_titleid" | "ryujin
 			return undefined;
 
 		const launchCommand = getLaunchCommand(details);
-		const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
+		const rom = launchCommand.match(romRegex)?.[0];
 		if(!rom)
 			return undefined;
 

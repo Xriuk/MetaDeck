@@ -3,14 +3,14 @@ import { useState } from "react";
 import { StoreCategory, type MetadataData } from "../../../Interfaces";
 import Logger from "../../../logger";
 import {
-	getShortcutCategories, isXeniaGame, isRPCS3Game, isXemuGame,
+	isXeniaGame, isRPCS3Game, isXemuGame,
 	isShadPS4Game, isPCSX2Game, isDuckstationGame, isDolphinGame, isCemuGame, isMelonDSGame, isMGBAGame,
 	isPPSSPPGame, isRosaliesMupenGUIGame, isVita3KGame, isNSLGame, isJunkStoreGame,
 	isHeroicGame, isFlycastGame,
 	getLaunchCommand,
 	isRyujinxGame
 } from "../../../shortcuts";
-import { t } from "../../../useTranslations";
+import { getCurrentLanguage, t } from "../../../useTranslations";
 import { getAppDetails, fetchNoCorsLegacyTimeout, toasterToast } from "../../../util";
 import { Markdown } from "../../../markdown";
 import { useMetaDeckState } from "../../../MetaDeckState";
@@ -168,6 +168,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 				title: i.name,
 
 				description: '', // Will enrich later
+				
 				rating: i.metacritic,
 				release_date: i.released ? Math.floor(new Date(i.released).getTime() / 1000) : undefined,
 				store_categories: i.tags
@@ -192,7 +193,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 		}
 	}
 
-	protected override async enrichMetadataForGame(appId: number, game: MetadataData): Promise<void> {
+	protected override async enrichMetadataForGame(_appId: number, game: MetadataData): Promise<void> {
 		if(game.description)
 			return;
 
@@ -200,9 +201,6 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 			game.description = t("noDescription"); // To not enrich again
 			return;
 		}
-
-		const details = (await getAppDetails(appId))!;
-		game.store_categories = game.store_categories.concat(await getShortcutCategories(getLaunchCommand(details)));
 
 		const response = await this.fetchNoCorsWithRetry(`https://api.rawg.io/api/games/${game.id}?key=${this.apiKey}`);
 		if(!response.ok){
@@ -221,6 +219,8 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 		} = await response.json();
 		
 		game.description = gameR.description_raw || t("noDescription");
+		game.matches_user_language = getCurrentLanguage() === "en";
+
 		game.developers = gameR.developers?.map(d => ({ name: d.name, url: '' }));
 		game.publishers = gameR.publishers?.map(p => ({ name: p.name, url: '' }));
 	}
@@ -260,9 +260,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 								}}/>
 						} />
 					<Field description={
-						<Markdown>
-							{t("rawgApiKeyInstructionsMD")}
-						</Markdown>
+						<Markdown>{t("rawgApiKeyInstructionsMD")}</Markdown>
 					} />
 				</DialogControlsSection>
 
@@ -286,9 +284,6 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 								}}
 							/>
 						} />
-				</DialogControlsSection>
-					
-				<DialogControlsSection>
 					<IdOverrideComponent
 						source={this}
 						value={overrides}
@@ -321,7 +316,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 			next: string | null;
 			results: typeof totalAchievements;
 		} = {
-			next: `https://api.rawg.io/api/games/${metadata.id}/?` + new URLSearchParams({
+			next: `https://api.rawg.io/api/games/${metadata.id}/achievements?` + new URLSearchParams({
 				key: this.apiKey
 			}).toString(),
 			results: []

@@ -71,7 +71,7 @@ export class RPCS3NPWRResolver extends Resolver<"rpcs3_npwr">{
 			return undefined;
 
 		const launchCommand = getLaunchCommand(details);
-		const rom = launchCommand.match(new RegExp(romRegex, "i"))?.[0];
+		const rom = launchCommand.match(romRegex)?.[0];
 		if(!rom)
 			return undefined;
 

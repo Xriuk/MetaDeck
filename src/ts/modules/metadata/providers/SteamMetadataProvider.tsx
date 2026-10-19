@@ -134,7 +134,10 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 			return games.response.store_items.map(i => ({
 				id: i.id,
 				title: i.name,
+
 				description: i.basic_info?.short_description || t("noDescription"),
+				matches_user_language: true,
+
 				rating: undefined, // DEV: maybe retrieve from full page in enrich?
 				release_date: i.release?.original_release_date || i.release?.steam_release_date || undefined,
 				developers: i.basic_info?.developers?.map(d => ({ name: d.name, url: '' })),
@@ -179,6 +182,9 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 								this.language = newVal.data;
 							}} />
 					</Field>
+				</DialogControlsSection>
+
+				<DialogControlsSection>
 					<Field
 						label={t("fuzziness")}
 						description={
@@ -198,9 +204,6 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 								}}
 							/>
 						} />
-				</DialogControlsSection>
-
-				<DialogControlsSection>
 					<IdOverrideComponent
 						source={this}
 						value={overrides}
@@ -242,7 +245,10 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 		return {
 			id: game.data.steam_appid,
 			title: game.data.name,
+
 			description: game.data.short_description || t("noDescription"),
+			matches_user_language: true,
+
 			rating: game.data.metacritic?.score,
 			release_date: undefined, // Cannot parse
 			developers: game.data.developers.map(d => ({name: d, url: ""})),

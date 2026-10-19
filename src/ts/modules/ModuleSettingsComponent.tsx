@@ -10,7 +10,7 @@ import {
 import {Module} from "./Module";
 import {Provider} from "./Provider";
 import {Modules, useMetaDeckState} from "../MetaDeckState";
-import {format, t} from "../useTranslations";
+import {t} from "../useTranslations";
 import { ExcludeAppComponent } from "./ExcludeAppComponent";
 import { IdOverrideComponent } from "./IdOverrideComponent";
 
@@ -46,7 +46,9 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 				<Field
 					label={t("settingsEnabled")}
 					description={disabled ?
-						format(t("settingsDependencyNotMet"), module.title, missing.join(", ")) :
+						t("settingsDependencyNotMet")
+							.replace("{setting1}", module.title)
+							.replace("{setting2}", missing.join(", ")) :
 						t("settingsEnabledDesc")}>
 					<Toggle
 						value={enabled}
@@ -65,7 +67,7 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 			</DialogControlsSection>
 			
 			<DialogControlsSection>
-				<Field label={format(t("settingsModuleProvider"), module.title)}>
+				<Field label={t("settingsModuleProvider").replace("{data}", module.title)}>
 					<DialogButton
 						onClick={() => {
 							Navigation.CloseSideMenus();
@@ -101,7 +103,7 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 				<ExcludeAppComponent
 					source={module}
 					value={excluded}
-					disabled={disabled || loadingData.loading}
+					disabled={loadingData.loading}
 					onChange={async (value) => {
 						let oldValue = module.excludedAppsSelf;
 						setExcluded(value);
