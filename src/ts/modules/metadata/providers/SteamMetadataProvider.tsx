@@ -75,12 +75,12 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 			?? langMap['en']!;
 	}
 
-	set language(language: string){
+	set language(language: string | null){
 		let current = this.language;
 		this.config.language = language;
 		void this.saveConfig();
 
-		if(current != language)
+		if(current != this.language)
 			void this.clearModuleCache();
 	}
 
@@ -165,7 +165,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [language, setLanguage] = useState(this.language);
+		const [language, setLanguage] = useState(this.config.language);
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
 

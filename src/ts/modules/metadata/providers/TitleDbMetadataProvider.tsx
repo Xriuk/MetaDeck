@@ -44,12 +44,12 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 			?? this.getDefaultLanguage();
 	}
 
-	set language(language: string){
+	set language(language: string | null){
 		let current = this.language;
 		this.config.language = language;
 		void this.saveConfig();
 
-		if(current != language)
+		if(current != this.language)
 			void this.clearModuleCache();
 	}
 
@@ -174,7 +174,7 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [language, setLanguage] = useState(this.language);
+		const [language, setLanguage] = useState(this.config.language);
 
 		const languageTitle = (language: string) => {
 			let [country, lang]: [string, Language] = language.split('.') as any;

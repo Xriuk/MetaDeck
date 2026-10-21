@@ -111,12 +111,12 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			?? langMap['en']!;
 	}
 
-	set language(language: number){
+	set language(language: number | null){
 		let current = this.language;
 		this.config.language = language;
 		void this.saveConfig();
 
-		if(current != language)
+		if(current != this.language)
 			void this.clearModuleCache();
 	}
 
@@ -360,7 +360,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [userPath, setUserPath] = useState(this.userPath);
-		const [language, setLanguage] = useState(this.language);
+		const [language, setLanguage] = useState(this.config.language);
 		const [gamerscore, setGamerscore] = useState(this.gamerscore);
 		const [descriptionLocked, setDescriptionLocked] = useState(this.descriptionLocked);
 

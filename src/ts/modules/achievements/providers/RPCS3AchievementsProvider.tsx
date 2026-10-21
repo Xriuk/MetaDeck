@@ -128,12 +128,12 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 			?? langMap['en']!;
 	}
 
-	set language(language: string){
+	set language(language: string | null){
 		let current = this.language;
 		this.config.language = language;
 		void this.saveConfig();
 
-		if(current != language)
+		if(current != this.language)
 			void this.clearModuleCache();
 	}
 
@@ -570,7 +570,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [userPath, setUserPath] = useState(this.userPath);
-		const [language, setLanguage] = useState(this.language);
+		const [language, setLanguage] = useState(this.config.language);
 		const [trophyCategories, setTrophyCategories] = useState(this.trophyCategories);
 		const [PSNNPSSO, setPSNNPSSO] = useState(this.PSNNPSSO);
 		const [trophysetPrefix, setTrophysetPrefix] = useState(this.trophySets);
