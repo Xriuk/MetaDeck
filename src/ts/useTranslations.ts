@@ -1,5 +1,6 @@
 import {useState} from "react";
 import languages from "./translations";
+import type { DropdownOption } from "@decky/ui";
 
 type LocalizationLanguage = keyof typeof languages;
 export type Language = LocalizationLanguage | "ar" | "id" | "ms";
@@ -46,13 +47,6 @@ export function t(key: keyof (typeof languages)['en']): string {
 		return languages.en?.[key];
 	else 
 		return key;
-}
-
-export function format(fmt: string, ...args: any[]){
-	return fmt
-		.split("%%")
-		.reduce((aggregate, chunk, i) =>
-			aggregate + chunk + (args[i] || ""), "");
 }
 
 export function getLanguageTitle(code: Language, original = true){
@@ -190,4 +184,12 @@ export function getLanguageTitle(code: Language, original = true){
 
 	return languageNames[code].localized +
 		(original && code !== currentLanguage ? " - " + languageNames[code].original : "");
+}
+
+export function getAutoLanguageOptions(defaultLanguageTitle: string): DropdownOption[]{
+	return [{
+		data: null,
+		label: t("languageAuto")
+			.replace("{language}", defaultLanguageTitle)
+	}];
 }

@@ -90,8 +90,6 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 						if(!module.isValid || module.excludedApps.includes(args[0]))
 							return callOriginal;
 
-						module.logger.debug("LoadMyAchievements", args[0]);
-
 						if (appStore.GetAppOverviewByAppID(args[0])?.app_type === SteamAppTypeShortcut && !Achievements.m_mapGlobalAchievements.has(args[0])){
 							const data = module.fetchData(args[0]);
 							if(data){
@@ -120,12 +118,8 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 									loading: false,
 									data: global
 								} as GlobalAchievements);
-
-								module.logger.debug(user);
-								module.logger.debug(global);
 							}
-							else
-								module.logger.debug("No achievements");
+							
 							return;
 						}
 
@@ -150,9 +144,6 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 							return callOriginal;
 
 						// @ts-ignore
-						module.logger.debug("BHasStoreCategory", this, args);
-
-						// @ts-ignore
 						if ((this as SteamAppOverview).app_type == SteamAppTypeShortcut &&
 							args[0] === StoreCategory.Achievements){
 
@@ -171,11 +162,18 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 		// Patching appDetailsStore.GetAchievements retrieves them only on app details,
 		// while patching appDetailsStore.GetAppData retrieves them also on overlay
 		const achievementsAppData = (appId: number, appData: AppData) => {
-			if(!appData.details || appData.details.achievements?.vecHighlight != null)
-				return;
+			if(!appData.details || appData.details.achievements?.nTotal ||
+				(appData.bLoadingAchievments && !module.hasCachedData(appId))){
 
+				return;
+			}
+
+			// Start loading achievements and wait for them to finish
 			appData.bLoadingAchievments = true;
 			const data = module.fetchData(appId);
+			if(!module.hasCachedData(appId))
+				return;
+
 			let achieved = data?.achievements.filter(a => a.bAchieved);
 			const nAchieved = achieved?.length ?? 0;
 			const nTotal = data?.achievements.length ?? 0;
@@ -219,8 +217,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 				return afterPatch(
 					appDetailsStore.__proto__,
 					"GetAppData",
-					(args, appData: AppData) =>
-					{
+					(args, appData: AppData) =>{
 						if(!module.isValid || !module.overlayMenu || module.excludedApps.includes(args[0]) || !appData.details)
 							return appData;
 
@@ -271,7 +268,6 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 					if (!module.isValid || module.excludedApps.includes(appId))
 						return;
 
-					module.logger.debug("overlay", appId, active);
 					if(active && appStore.GetAppOverviewByAppID(appId).app_type == SteamAppTypeShortcut){
 						void module.removeCache(appId);
 						module.fetchData(appId);
@@ -282,7 +278,6 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 					if (!module.isValid || module.excludedApps.includes(update.unAppID))
 						return;
 
-					module.logger.debug("lifetime", update);
 					if (!update.bRunning && appStore.GetAppOverviewByAppID(update.unAppID).app_type == SteamAppTypeShortcut){
 						void module.removeCache(update.unAppID);
 						module.fetchData(update.unAppID);

@@ -1,22 +1,24 @@
 import { call } from "@decky/api";
-import type { ID } from "../../Interfaces";
-import { getLaunchCommand, isRPCS3Game, romRegex } from "../../shortcuts";
-import { getAppDetails, toasterToast } from "../../util";
-import { Resolver, type ResolverCache, type ResolverConfig } from "../Resolver";
-import { rpcs3IdRegex, rpcs3RomPathRegex } from "./MultiId/MultiIdRPCS3Resolver";
-import { t } from "../../useTranslations";
+import type { ID } from "../../../Interfaces";
+import { getLaunchCommand, isRPCS3Game, romRegex } from "../../../shortcuts";
+import { getAppDetails, toasterToast } from "../../../util";
+import { type ResolverCache, type ResolverConfig } from "../../Resolver";
+import { rpcs3IdRegex, rpcs3RomPathRegex } from "./MultiIdRPCS3Resolver";
+import { t } from "../../../useTranslations";
 import { SiPlaystation3 } from "react-icons/si";
+import { MultiIdResolver, separator } from "./MultiIdResolver";
 
-export interface RPCS3NPWRResolverConfig extends ResolverConfig{
+export interface MultiIdRPCS3NPWRResolverConfig extends ResolverConfig{
 	// Like /home/deck/Emulation/storage/rpcs3/dev_hdd0/
 	hdd_path: string;
 }
 
-export interface RPCS3NPWRResolverCache extends ResolverCache{
+export interface MultiIdRPCS3NPWRResolverCache extends ResolverCache{
 	npwr_ids: Record<number, string | null>;
 }
 
-export class RPCS3NPWRResolver extends Resolver<"rpcs3_npwr">{
+// A game can have multiple trophy sets
+export class MultiIdRPCS3NPWRResolver extends MultiIdResolver<"rpcs3_npwr">{
 	identifier = "rpcs3_npwr" as const;
 
 	get hddPath(): string{
@@ -62,9 +64,9 @@ export class RPCS3NPWRResolver extends Resolver<"rpcs3_npwr">{
 		if(!this.hddPath)
 			return undefined;
 
-		let npwrId = this.NPWRIds[appId];
-		if(npwrId !== undefined)
-			return npwrId ?? undefined;
+		let npwrIds = this.NPWRIds[appId];
+		if(npwrIds !== undefined)
+			return npwrIds ?? undefined;
 
 		const details = await getAppDetails(appId);
 		if(!details)
@@ -78,19 +80,21 @@ export class RPCS3NPWRResolver extends Resolver<"rpcs3_npwr">{
 		// If the game is installed it will have its id in the path
 		// Then we retrieve the trophy dir, either from the game id path or from the rom folder itself
 		let titleId = rom.match(new RegExp(rpcs3IdRegex))?.[1] ?? null;
+		let ids: string[];
 		if(titleId)
-			npwrId = await call<[string], string>("rpcs3_get_trophy_dir_path", this.hddPath + "game/" + titleId) ?? null;
+			ids = await call<[string], string[]>("rpcs3_get_trophy_dir_paths", this.hddPath + "game/" + titleId) ?? null;
 		else{
 			let romFolder = rom.match(new RegExp(rpcs3RomPathRegex))?.[1];
 			if(!romFolder)
 				return undefined;
 
-			npwrId = await call<[string], string | null>("rpcs3_get_trophy_dir_path", romFolder) ?? null;
+			ids = await call<[string], string[]>("rpcs3_get_trophy_dir_paths", romFolder) ?? null;
 		}
 
-		this.NPWRIds[appId] = npwrId;
+		npwrIds = ids.length ? ids.join(separator) : null;
+		this.NPWRIds[appId] = npwrIds;
 
-		return npwrId ?? undefined;
+		return npwrIds ?? undefined;
 	}
 	
 	override icon = <SiPlaystation3/>;

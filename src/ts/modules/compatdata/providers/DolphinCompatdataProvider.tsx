@@ -24,6 +24,7 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 	title = t("providerCompatdataDolphin");
 
 	logger = new Logger(this.identifier);
+	_maintenance?: Date;
 
 	private _gameTDBProvider?: GameTDBMetadataProvider;
 	get gameTDBProvider(): GameTDBMetadataProvider{
@@ -51,13 +52,23 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 	}
 
 	protected async search(title: string): Promise<CompatdataData[]>{
+		// Check for maintenance
+		if(this._maintenance && (new Date().getTime() - this._maintenance.getTime()) < 1000 * 60 * 60)
+			return [];
+		else if(this._maintenance)
+			this._maintenance = undefined;
+
 		let response = await fetchNoCorsLegacyTimeout('https://wiki.dolphin-emu.org/api.php?' + new URLSearchParams({
 			action: 'opensearch',
 			limit: '10',
 			search: title
 		}).toString());
-		if(!response)
+		if(!response.ok){
+			if(response.status === 503)
+				this._maintenance = new Date();
+
 			return [];
+		}
 
 		let results: WikiSearchResponse = await response.json();
 		

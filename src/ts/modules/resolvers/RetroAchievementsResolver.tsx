@@ -38,8 +38,10 @@ export class RetroAchievementsResolver extends Resolver<"ra">{
 				"User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)`,
 			}
 		});
-		if(!response.ok)
+		if(!response.ok){
 			toasterToast(t("initError"), this);
+			return;
+		}
 
 		const body = await response.text();
 		this.hashRAIds = (JSON.parse(body.toLowerCase()) as { md5list: Record<string, number>; }).md5list;

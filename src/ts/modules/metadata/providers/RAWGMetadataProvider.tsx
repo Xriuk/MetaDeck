@@ -25,13 +25,11 @@ type RAWGAchievement = {
 	percent: string;
 };
 
-export interface RAWGMetadataProviderConfig extends FuzzySearchMetadataProviderConfig
-{
+export interface RAWGMetadataProviderConfig extends FuzzySearchMetadataProviderConfig{
 	api_key: string
 }
 
-export interface RAWGMetadataProviderCache extends FuzzySearchMetadataProviderCache
-{
+export interface RAWGMetadataProviderCache extends FuzzySearchMetadataProviderCache{
 	
 }
 
@@ -260,7 +258,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 								}}/>
 						} />
 					<Field description={
-						<Markdown>{t("rawgApiKeyInstructionsMD")}</Markdown>
+						<Markdown>{t("rawgApiKeyInstructionsMD").replace("{rawgUrl}", "[rawg.io](https://rawg.io/login/?forward=developer)")}</Markdown>
 					} />
 				</DialogControlsSection>
 
@@ -288,11 +286,11 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 						source={this}
 						value={overrides}
 						disabled={loadingData.loading}
-						onChange={async (value) => {
+						onChange={(value) => {
 							let oldValue = this.overrides;
 							setOverrides(value);
 							this.overrides = value;
-							await this.onOverridesChange(oldValue, value);
+							void this.onOverridesChange(oldValue, value);
 						}}
 						resultsForApp={(appId) => this.throttle(() => this.getAllMetadataForGame(appId))}
 						defaultResults={(results, appId) => this.pickDefaultEntry(results, appId)} />

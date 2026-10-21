@@ -1,7 +1,7 @@
 import {useMetaDeckState, type Modules} from "./MetaDeckState";
 import {FC, useEffect, useState, type CSSProperties, type ReactElement} from "react";
 import {useTranslations} from "./useTranslations";
-import {ButtonItem, PanelSection, PanelSectionRow, Navigation, Field, ProgressBar} from "@decky/ui";
+import {ButtonItem, PanelSection, PanelSectionRow, Navigation, Field, ProgressBar, GamepadEvent, GamepadButton} from "@decky/ui";
 import {FaArrowLeft, FaCog, FaSync, FaTrash} from "react-icons/fa";
 import React from "react";
 import { truncate } from "lodash-es";
@@ -111,6 +111,14 @@ const ModulesList: FC = () => {
 	const t = useTranslations();
 	const { modules } = useMetaDeckState();
 	const [active, setActive] = useState(activeModule);
+
+	const handleBack = (event: GamepadEvent) => {
+		if(event.detail.button == GamepadButton.CANCEL){
+			setActive(null);
+			activeModule = null;
+			event.stopImmediatePropagation();
+		}
+	};
 	
 	return <>
 		{
@@ -123,7 +131,8 @@ const ModulesList: FC = () => {
 					onActivate={() => {
 						setActive(null);
 						activeModule = null;
-					}}>
+					}}
+					onButtonDown={handleBack}>
 				</Field>
 			</PanelSectionRow>
 		}
@@ -138,6 +147,7 @@ const ModulesList: FC = () => {
 						return <PanelSectionRow key={m.identifier}>
 							<Field
 								label={m.title}
+								icon={m.icon}
 								description={`${hasData.length}/${apps.length}`}
 								childrenLayout="below"
 								onActivate={() => {
@@ -145,7 +155,8 @@ const ModulesList: FC = () => {
 										setActive(m.identifier);
 										activeModule = m.identifier;
 									}
-								}}>
+								}}
+								onButtonDown={handleBack}>
 								<ProgressBar
 									focusable={false}
 									nProgress={(hasData.length / apps.length * 100)}
@@ -162,10 +173,12 @@ const ModulesList: FC = () => {
 						return <PanelSectionRow key={p.identifier}>
 							<Field
 								label={p.title}
-								description={`${hasDataProvider.length}/${hasDataModule.length}`}
+								icon={p.icon}
+								description={`${hasDataProvider.length}/${hasDataModule.length} - ${p.identifier}`}
 								disabled={!p.enabled}
 								childrenLayout="below"
-								focusable={true}>
+								focusable={true}
+								onButtonDown={handleBack}>
 								<ProgressBar
 									focusable={false}
 									nProgress={(hasDataProvider.length / hasDataModule.length * 100)}
@@ -193,7 +206,8 @@ const ModulesList: FC = () => {
 										onActivate={() => {
 											Navigation.CloseSideMenus();
 											Navigation.Navigate(`/metadeck/${modules[active].identifier}`);
-										}}>
+										}}
+										onButtonDown={handleBack}>
 									</Field>
 								</PanelSectionRow>;
 							}
@@ -209,12 +223,12 @@ export const MetaDeckComponent: FC = () => {
 
 	return (
 		<PanelSection>
-			<PanelSectionRow>
-				<SettingsButton />
-			</PanelSectionRow>
 			{
 				(!loadingData.loading) &&
 				<>
+					<PanelSectionRow>
+						<SettingsButton />
+					</PanelSectionRow>
 					<PanelSectionRow>
 						<RefreshButton />
 					</PanelSectionRow>
@@ -232,9 +246,7 @@ export const MetaDeckComponent: FC = () => {
 			{
 				(!loadingData.loading) &&
 				<PanelSectionRow>
-
 					<ModulesList />
-					
 				</PanelSectionRow>
 			}
 		</PanelSection>

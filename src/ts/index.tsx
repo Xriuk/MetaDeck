@@ -97,31 +97,10 @@ export default definePlugin(() => {
 	const mounts = new Mounts(eventBus, logger);
 	const state = new MetaDeckState(eventBus, mounts);
 	window.MetaDeck__SECRET = {
-		set bypassCounter(count: number)
-		{
+		set bypassCounter(count: number){
 			state.modules.metadata.bypassBypass = count
 		}
 	};
-
-
-	// const checkOnlineStatus = async () => {
-	// 	try
-	// 	{
-	// 		const online = await fetchNoCors("https://example.com");
-	// 		return online.ok && online.status >= 200 && online.status < 300; // either true or false
-	// 	} catch (err)
-	// 	{
-	// 		return false; // definitely offline
-	// 	}
-	// }
-	//
-	// const waitForOnline = async () => {
-	// 	while (!(await checkOnlineStatus()))
-	// 	{
-	// 		logger.debug("No internet connection, retrying...");
-	// 		await sleep(1000);
-	// 	}
-	// }
 
 	mounts.addPageMount("/metadeck/settings", () =>
 		<MetaDeckStateContextProvider metaDeckState={state}>
@@ -136,7 +115,7 @@ export default definePlugin(() => {
 	);
 	
 	state.loadingData.total = 0;
-	const unregister = mounts.register();
+	const unregister = mounts.register(state.settings);
 
 	return {
 		name,
@@ -146,8 +125,7 @@ export default definePlugin(() => {
 				<MetaDeckComponent/>
 			</MetaDeckStateContextProvider>,
 		icon: <FaDatabase/>,
-		onDismount()
-		{
+		onDismount(){
 			unregister();
 		}
 	};

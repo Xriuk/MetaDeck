@@ -7,6 +7,10 @@ import {Patch} from "@decky/ui";
 import Logger from "./logger";
 import { name } from "@decky/manifest";
 import { version } from "@decky/pkg";
+import type { Settings } from "./settings";
+import { Module } from "./modules/Module";
+import { Provider } from "./modules/Provider";
+import { Resolver } from "./modules/Resolver";
 
 export const systemClock: Clock = {
 	getTimeMs() {
@@ -17,6 +21,7 @@ export const systemClock: Clock = {
 interface Clock {
 	getTimeMs: () => number
 }
+
 export interface Mountable {
 	mount(): void,
 	dismount(): void
@@ -31,13 +36,11 @@ export interface AsyncMountable {
 	dismount(): Promise<void>
 }
 
-export interface AsyncPatchMountable
-{
+export interface AsyncPatchMountable{
 	patch(): Promise<Patch>
 }
 
-export class Mounts implements AsyncMountable
-{
+export class Mounts implements AsyncMountable{
 	private mounts: Array<Mountable | AsyncMountable> = []
 	private logger: Logger;
 	private eventBus: EventBus
@@ -75,42 +78,41 @@ export class Mounts implements AsyncMountable
 		})
 	}
 
-	async mount() {
+	async mount(settings?: Settings) {
 		for (let mount of this.mounts) {
-			await mount.mount()
+			// Prevent saving cache on initialization as it will be saved in refresh
+			if(settings && (mount instanceof Module || mount instanceof Provider || mount instanceof Resolver))
+				await settings.runInDisabledSaveState(() => mount.mount());
+			else
+				await mount.mount();
 		}
-		await this.eventBus.emit("Mount", {createdAt: systemClock.getTimeMs(), mounts: this.mounts})
+		await this.eventBus.emit("Mount", {createdAt: systemClock.getTimeMs(), mounts: this.mounts});
 	}
 
-	async dismount()
-	{
+	async dismount(){
 		await this.eventBus.emit("Dismount", {createdAt: systemClock.getTimeMs(), mounts: this.mounts})
 		for (let mount of this.mounts) {
-			await mount.dismount()
+			await mount.dismount();
 		}
 	}
 
-	register(): () => void
-	{
+	register(settings?: Settings): () => void{
 		let self = this;
 		return registerForLoginStateChange(
-			   function (username) {
-				   (async function () {
-					   if (await waitForServicesInitialized())
-					   {
-						   self.logger.log(`Constructing ${name} v${version} for ${username}`);
-						   await self.mount();
-					   }
-				   })().catch(err => self.logger.error(`Error while constructing ${name} v${version}`, err));
-			   },
-			   function () {
-				   {
-					   (async function () {
-						   self.logger.log(`Deconstructing ${name} v${version}`);
-						   await self.dismount()
-					   })().catch(err => self.logger.error(`Error while deconstructing ${name} v${version}`, err));
-				   }
-			   }
+			function (username) {
+				(async function () {
+					if (await waitForServicesInitialized()){
+						self.logger.log(`Constructing ${name} v${version} for ${username}`);
+						await self.mount(settings);
+					}
+				})().catch(err => self.logger.error(`Error while constructing ${name} v${version}`, err));
+			},
+			function () {
+				(async function () {
+					self.logger.log(`Deconstructing ${name} v${version}`);
+					await self.dismount();
+				})().catch(err => self.logger.error(`Error while deconstructing ${name} v${version}`, err));
+			}
 		);
 	}
 }

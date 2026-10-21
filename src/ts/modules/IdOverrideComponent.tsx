@@ -148,6 +148,7 @@ export const IdOverrideComponent = ({
 						onChange={(value) => {
 							setApp(value.data);
 							setId(undefined);
+							modules.metadata.logger.debug("Set", app, id);
 						}}
 					/>
 				</div>
@@ -158,6 +159,7 @@ export const IdOverrideComponent = ({
 						selectedOption={id}
 						onChange={(value) => {
 							setId(value.data);
+							modules.metadata.logger.debug("Set", app, id);
 						}}
 					/>
 				</div>
@@ -173,9 +175,10 @@ export const IdOverrideComponent = ({
 						justifyContent: 'center',
 					}}
 					onClick={() => {
-						if (id){
+						if (app && id){
 							const obj = (entries);
-							obj[id.appId] = id;
+							obj[app] = id;
+							modules.metadata.logger.debug("Add", app, id);
 							onChange(objectMap(obj, (_, value) => value.id));
 						}
 					}}>

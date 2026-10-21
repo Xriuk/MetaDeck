@@ -76,6 +76,7 @@ export class Settings
 					// Id-based (english)
 					gog: { // Can resolve to Steam if finds id
 						enabled: true,
+						language: null,
 						excluded_apps: [],
 						resolvers: {
 							gog_junk: {
@@ -213,6 +214,7 @@ export class Settings
 						language: null,
 						trophy_categories: true,
 						psn_npsso: '',
+						trophy_sets: true,
 						excluded_apps: [],
 						resolvers: {
 							rpcs3_npwr: {
@@ -344,8 +346,7 @@ export class Settings
 	private cacheRead = false; // To avoid writing before reading
 	private cacheAllowSaving = true;
 
-	constructor(state: MetaDeckState)
-	{
+	constructor(state: MetaDeckState){
 		this.state = state;
 		this.logger = new Logger("Settings");
 	}
@@ -398,8 +399,7 @@ export class Settings
 	}
 	
 
-	public async readSettings(): Promise<void>
-	{
+	public async readSettings(): Promise<void>{
 		this.logger.debug("Reading settings...");
 		const start = systemClock.getTimeMs();
 		await this.readConfig();
@@ -408,8 +408,7 @@ export class Settings
 		this.logger.debug("Read settings in " + (end - start) + "ms");
 	}
 
-	public async writeSettings(): Promise<void>
-	{
+	public async writeSettings(): Promise<void>{
 		this.logger.debug("Writing settings...");
 		const start = systemClock.getTimeMs();
 		await this.writeConfig();

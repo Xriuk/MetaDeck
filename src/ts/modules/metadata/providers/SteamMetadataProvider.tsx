@@ -4,7 +4,7 @@ import { DialogControlsSection, Dropdown, Field, SliderField } from "@decky/ui";
 import { useState } from "react";
 import { StoreCategory, type MetadataData } from "../../../Interfaces";
 import Logger from "../../../logger";
-import { getCurrentLanguage, getLanguageTitle, t, type Language } from "../../../useTranslations";
+import { getAutoLanguageOptions, getCurrentLanguage, getLanguageTitle, t, type Language } from "../../../useTranslations";
 import React from "react";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import { IdOverrideComponent } from "../../IdOverrideComponent";
@@ -76,8 +76,12 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 	}
 
 	set language(language: string){
+		let current = this.language;
 		this.config.language = language;
 		void this.saveConfig();
+
+		if(current != language)
+			void this.clearModuleCache();
 	}
 
 	protected async search(title: string): Promise<MetadataData[]>{
@@ -165,6 +169,9 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
 
+		const currentLanguage = getCurrentLanguage();
+		const defaultLanguage = langMap[currentLanguage] ? currentLanguage : 'en';
+
 		return (
 			<>
 				<DialogControlsSection>
@@ -172,9 +179,10 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 						label={t("language")}
 						childrenContainerWidth={'fixed'}>
 						<Dropdown
-							rgOptions={Object.entries(langMap)
+							rgOptions={getAutoLanguageOptions(getLanguageTitle(defaultLanguage))
+							.concat(Object.entries(langMap)
 								.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
-								.sort((a, b) => a.label.localeCompare(b.label))}
+								.sort((a, b) => a.label.localeCompare(b.label)))}
 							selectedOption={language}
 							disabled={loadingData.loading}
 							onChange={(newVal) => {
@@ -208,11 +216,11 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 						source={this}
 						value={overrides}
 						disabled={loadingData.loading}
-						onChange={async (value) => {
+						onChange={(value) => {
 							let oldValue = this.overrides;
 							setOverrides(value);
 							this.overrides = value;
-							await this.onOverridesChange(oldValue, value);
+							void this.onOverridesChange(oldValue, value);
 						}}
 						resultsForApp={(appId) => this.throttle(() => this.getAllMetadataForGame(appId))}
 						defaultResults={(results, appId) => this.pickDefaultEntry(results, appId)} />

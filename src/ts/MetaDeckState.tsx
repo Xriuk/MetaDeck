@@ -10,15 +10,15 @@ import {EventBus} from "./events";
 import {SteamAppOverview} from "./SteamTypes";
 import { AchievementsModule } from "./modules/achievements/AchievementsModule";
 import type { Resolver, ResolverIdentifier } from "./modules/Resolver";
-import { GOGMetadataProviderHeroicResolver } from "./modules/metadata/resolvers/GOG/GOGMetadataProviderHeroicResolver";
-import { GOGMetadataProviderJunkStoreResolver } from "./modules/metadata/resolvers/GOG/GOGMetadataProviderJunkStoreResolver";
-import { GOGMetadataProviderNSLResolver } from "./modules/metadata/resolvers/GOG/GOGMetadataProviderNSLResolver";
+import { GOGMetadataProviderHeroicResolver } from "./modules/resolvers/GOG/GOGMetadataProviderHeroicResolver";
+import { GOGMetadataProviderJunkStoreResolver } from "./modules/resolvers/GOG/GOGMetadataProviderJunkStoreResolver";
+import { GOGMetadataProviderNSLResolver } from "./modules/resolvers/GOG/GOGMetadataProviderNSLResolver";
 import { MultiIdCemuResolver } from "./modules/resolvers/MultiId/MultiIdCemuResolver";
 import { MultiIdDolphinResolver } from "./modules/resolvers/MultiId/MultiIdDolphinResolver";
 import { MultiIdPCSX2Resolver } from "./modules/resolvers/MultiId/MultiIdPCSX2Resolver";
 import { MultiIdRPCS3Resolver } from "./modules/resolvers/MultiId/MultiIdRPCS3Resolver";
 import { RetroAchievementsResolver } from "./modules/resolvers/RetroAchievementsResolver";
-import { RPCS3NPWRResolver } from "./modules/resolvers/RPCS3NPWRResolver";
+import { MultiIdRPCS3NPWRResolver } from "./modules/resolvers/MultiId/MultiIdRPCS3NPWRResolver";
 import { RyujinxSerialResolver } from "./modules/resolvers/RyujinxSerialResolver";
 import { RyujinxTitleIdResolver } from "./modules/resolvers/RyujinxTitleIdResolver";
 import { XeniaResolver } from "./modules/resolvers/XeniaResolver";
@@ -86,7 +86,7 @@ export interface Resolvers extends Record<ResolverIdentifier, Resolver<any>>{
 
 	readonly pcsx2: MultiIdPCSX2Resolver;
 	readonly rpcs3: MultiIdRPCS3Resolver;
-	readonly rpcs3_npwr: RPCS3NPWRResolver;
+	readonly rpcs3_npwr: MultiIdRPCS3NPWRResolver;
 
 	readonly xenia: XeniaResolver;
 
@@ -299,8 +299,7 @@ export class MetaDeckState implements AsyncMountable
 	private readonly _resolvers: Resolvers;
 	private readonly _eventBus: EventBus
 
-	constructor(eventBus: EventBus, mounts: Mounts)
-	{
+	constructor(eventBus: EventBus, mounts: Mounts){
 		const self = this;
 		this._settings = new Settings(this);
 		this._eventBus = eventBus;
@@ -326,7 +325,7 @@ export class MetaDeckState implements AsyncMountable
 
 			pcsx2: new MultiIdPCSX2Resolver(this),
 			rpcs3: new MultiIdRPCS3Resolver(this),
-			rpcs3_npwr: new RPCS3NPWRResolver(this),
+			rpcs3_npwr: new MultiIdRPCS3NPWRResolver(this),
 
 			xenia: new XeniaResolver(this),
 
@@ -335,9 +334,9 @@ export class MetaDeckState implements AsyncMountable
 			ryujinx_titleid: new RyujinxTitleIdResolver(this),
 			ryujinx_serial: new RyujinxSerialResolver(this),
 
-			gog_nsl: new GOGMetadataProviderNSLResolver(this),
-			gog_junk: new GOGMetadataProviderJunkStoreResolver(this),
-			gog_heroic: new GOGMetadataProviderHeroicResolver(this)
+			gog_nsl: new GOGMetadataProviderNSLResolver("metadata", this),
+			gog_junk: new GOGMetadataProviderJunkStoreResolver("metadata", this),
+			gog_heroic: new GOGMetadataProviderHeroicResolver("metadata", this)
 		};
 		this.mounts.addMount(this);
 		for (let key of Object.keys(this.modules)){
@@ -425,14 +424,12 @@ export class MetaDeckState implements AsyncMountable
 		return this._eventBus;
 	}
 
-	async mount(): Promise<void>
-	{
-		await this.refresh();
+	mount(): Promise<void>{
+		return this.refresh();
 	}
 
-	async dismount(): Promise<void>
-	{
-		await this.settings.writeSettings();
+	dismount(): Promise<void>{
+		return this.settings.writeSettings();
 	}
 
 	async refresh(): Promise<void>

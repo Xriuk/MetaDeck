@@ -156,7 +156,9 @@ export abstract class Provider<
 			return;
 
 		for (const resolver of this.resolvers){
-			if (resolver instanceof ModuleResolver && resolver.isEnabled(this as any) && await resolver.test(appId)){
+			if (resolver instanceof ModuleResolver && resolver.moduleIdentifier === this.module.identifier &&
+				resolver.isEnabled(this as any) && await resolver.test(appId)){
+					
 				await resolver.apply(appId, data);
 				return;
 			}
@@ -171,11 +173,10 @@ export abstract class Provider<
 			.concat(Object.keys(oldOverrides).filter(a => !newOverrides[a as any]) as unknown as number[])
 			.map(a => +a);
 
-		// Remove cache and re-fetch
+		// Remove cache, not re-fetching because there might be a lot of entries, they will be fetched as needed
 		await this.state.settings.runInDisabledSaveState(async () => {
 			for(let changedId of changedIds){
 				await this.module.removeCache(changedId);
-				await this.module.fetchDataAsync(changedId);
 			}
 		});
 
@@ -188,6 +189,11 @@ export abstract class Provider<
 
 	saveCache(): Promise<void>{
 		return this.module.saveCache();
+	}
+
+	clearModuleCache(){
+		// Not re-fetching because there might be a lot of entries, they will be fetched as needed
+		return this.module.clearProviderCache(this.identifier);
 	}
 
 	abstract provide(appId: number): ReturnType<Mod['fetchDataAsync']>;

@@ -160,7 +160,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								}}/>
 						} />
 					<Field description={
-						<Markdown>{t("raApiKeyInstructionsMD")}</Markdown>
+						<Markdown>{t("raApiKeyInstructionsMD").replace("{raUrl}", "[retroachievements.org](https://retroachievements.org/controlpanel.php)")}</Markdown>
 					} />
 				</DialogControlsSection>
 

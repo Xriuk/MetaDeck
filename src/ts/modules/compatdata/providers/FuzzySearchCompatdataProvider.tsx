@@ -155,11 +155,11 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 					source={this}
 					value={overrides}
 					disabled={loadingData.loading}
-					onChange={async (value) => {
+					onChange={(value) => {
 						let oldValue = this.overrides;
 						setOverrides(value);
 						this.overrides = value;
-						await this.onOverridesChange(oldValue, value);
+						void this.onOverridesChange(oldValue, value);
 					}}
 					resultsForApp={(appId) => this.throttle(() => this.getAllCompatdataForGame(appId))}
 					defaultResults={(results, appId) => this.pickDefaultEntry(results, appId)} />

@@ -19,11 +19,11 @@ export const SettingsComponent: FC = () => {
 				<ExcludeAppComponent
 					value={excluded}
 					disabled={state.loadingData.loading}
-					onChange={async (value) => {
+					onChange={(value) => {
 						let oldValue = state.excludedApps;
 						setExcluded(value);
 						state.setExcludedApps(value);
-						await state.onExcludedChange(oldValue, value);
+						void state.onExcludedChange(oldValue, value);
 					}} />
 			</DialogControlsSection>
 		</DialogBody>

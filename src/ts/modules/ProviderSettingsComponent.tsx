@@ -54,8 +54,8 @@ export const ProviderSettingsComponent: FC = () => {
 
 					<provider.settingsComponent/>
 
-					{ 
-						Object.keys(provider.resolvers).length > 1 &&
+					{
+						(Object.keys(enabledResolvers).length > 0) &&
 						<DialogControlsSection>
 							<Field
 								label={t("settingsProviderResolvers")}
@@ -63,27 +63,20 @@ export const ProviderSettingsComponent: FC = () => {
 							</Field>
 							{
 								provider.resolvers.map(r =>
-							
-								<Field
-									label={r.identifier}
-									icon={r.icon}>
-									<Toggle
-										value={enabledResolvers[r.identifier]}
-										disabled={state.loadingData.loading}
-										onChange={async (checked) => {
-											setEnabledResolvers({
-												...enabledResolvers,
-												[r.identifier]: checked
-											});
-											if(checked != r.config.enabled){
-												if(checked)
-													await r.mount();
-												else
-													await r.dismount();
-											}
-											r.setEnabled(provider, checked);
-										}}/>
-								</Field>
+									<Field
+										label={r.identifier}
+										icon={r.icon}>
+										<Toggle
+											value={enabledResolvers[r.identifier]}
+											disabled={state.loadingData.loading || Object.keys(enabledResolvers).length === 1 || (enabledResolvers[r.identifier] && Object.values(enabledResolvers).filter(r => r).length === 1)}
+											onChange={async (checked) => {
+												setEnabledResolvers({
+													...enabledResolvers,
+													[r.identifier]: checked
+												});
+												r.setEnabled(provider, checked);
+											}}/>
+									</Field>
 								)
 							}
 						</DialogControlsSection>
@@ -94,11 +87,11 @@ export const ProviderSettingsComponent: FC = () => {
 							source={provider}
 							value={excluded}
 							disabled={state.loadingData.loading}
-							onChange={async (value) => {
+							onChange={(value) => {
 								let oldValue = provider.excludedAppsSelf;
 								setExcluded(value);
 								provider.excludedAppsSelf = value;
-								await provider.module.onExcludedChange(oldValue, value);
+								void provider.module.onExcludedChange(oldValue, value);
 							}} />
 					</DialogControlsSection>
 				</DialogBody>

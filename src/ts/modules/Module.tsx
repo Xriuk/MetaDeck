@@ -1,4 +1,4 @@
-import {Provider, ProviderCache, ProviderConfig} from "./Provider";
+import {Provider, ProviderCache, ProviderConfig, type ProviderIdentifier} from "./Provider";
 import {MetadataCache, MetadataConfig} from "./metadata/MetadataModule";
 import {AsyncMountable, Mounts} from "../System";
 import {MetaDeckState, Modules} from "../MetaDeckState";
@@ -48,14 +48,11 @@ export abstract class Module<
 	Prov extends Provider<any, any>,
 
 	Data = ModuleCaches[Identifier]['data'][number]
-> implements AsyncMountable
-{
-
+> implements AsyncMountable{
 	private readonly _state: MetaDeckState;
 	get state(): MetaDeckState{
 		return this._state;
 	}
-
 
 	abstract identifier: Identifier;
 	abstract title: string;
@@ -216,6 +213,17 @@ export abstract class Module<
 		delete this.notCachedData[appId];
 	}
 
+	async clearProviderCache(identifier: ProviderIdentifier<Module<Identifier, Prov>>){
+		await this.state.settings.runInDisabledSaveState(async () => {
+			for (let appId of this.state.apps){
+				if(this.dataProviders[appId] === identifier)
+					await this.removeCache(+appId);
+			}
+		});
+
+		await this.saveCache();
+	}
+
 	async clearCache(): Promise<void>{
 		await this.state.settings.runInDisabledSaveState(async () => {
 			for (let appId of this.state.apps){
@@ -290,6 +298,21 @@ export abstract class Module<
 		}
 	}
 
+	protected async fetchDataProviders(appId: number): Promise<[ProviderIdentifier<Module<Identifier, Prov>>, Data] | undefined>{
+		for (const provider of this.providers){
+			if(!provider.enabled || !await provider.test(appId))
+				continue;
+			
+			const data = await provider.provide(appId);
+			if(!data || this.isEmpty(data))
+				continue;
+			
+			return [provider.identifier, data];
+		}
+
+		return undefined;
+	}
+
 	public async fetchDataAsync(appId: number): Promise<Data | undefined>{
 		if(this.excludedApps.includes(appId))
 			return undefined;
@@ -325,20 +348,13 @@ export abstract class Module<
 
 					// Retrieve a new provider
 					if(!this.hasCachedData(appId)){
-						for (const provider of this.providers){
-							if(!provider.enabled || !await provider.test(appId))
-								continue;
-							
-							const data = await provider.provide(appId);
-							if(!data || this.isEmpty(data))
-								continue;
-							
-							await this.provideAdditional(appId, data);
-							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data, provider.identifier);
+						const data = await this.fetchDataProviders(appId);
+						if(data){
+							await this.provideAdditional(appId, data[1]);
+							this.logger.debug(`Caching ${this.identifier} for ${appId}: `, data[1], data[0]);
 
-							this.cacheData(appId, data);
-							this.dataProviders[appId] = provider.identifier;
-							break;
+							this.cacheData(appId, data[1]);
+							this.dataProviders[appId] = data[0] as any;
 						}
 					}
 					
@@ -481,8 +497,7 @@ export abstract class Module<
 		if(this.excludedApps.includes(appId))
 			return undefined;
 
-		for (const provider of this.providers)
-		{
+		for (const provider of this.providers){
 			if (provider.enabled && await provider.test(appId)){
 				await provider.apply(appId, data);
 				return;
@@ -507,12 +522,11 @@ export abstract class Module<
 			.filter(a => !oldExcluded.includes(a))
 			.concat(oldExcluded.filter(a => !newExcluded.includes(a)));
 
-		// Remove cache, clear provider and re-fetch
+		// Remove cache and clear provider, not re-fetching because there might be a lot of entries, they will be fetched as needed
 		await this.state.settings.runInDisabledSaveState(async () => {
 			for(let changedId of changedIds){
 				await this.removeCache(changedId);
 				delete this.dataProviders[changedId];
-				await this.fetchDataAsync(changedId);
 			}
 		});
 

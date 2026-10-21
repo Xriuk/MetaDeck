@@ -21,11 +21,8 @@ export const Markdown: FC<MarkdownProps> = (props) =>
 						return (
 							// TODO fix focus ring
 							<Focusable
-								onActivate={() =>
-								{
-								}}
-								onOKButton={() =>
-								{
+								onActivate={() => {}}
+								onOKButton={() => {
 									props.onDismiss?.();
 									Navigation.CloseSideMenus();
 									if (aRef.current!.href.startsWith("http://") || aRef.current!.href.startsWith("https://"))

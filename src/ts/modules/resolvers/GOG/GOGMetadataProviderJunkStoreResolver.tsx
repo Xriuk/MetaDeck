@@ -1,9 +1,9 @@
-import {ID, MetadataData} from "../../../../Interfaces";
-import {ResolverCache, ResolverConfig} from "../../../Resolver";
+import {ID, MetadataData} from "../../../Interfaces";
+import {ResolverCache, ResolverConfig} from "../../Resolver";
 import {GOGMetadataProviderResolver} from "./GOGMetadataProviderResolver";
-import {getExe, getLaunchCommand, isEpicGame, isGOGGame, isJunkStoreGame} from "../../../../shortcuts";
-import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../../GamesDBResult";
-import {getAppDetails} from "../../../../util";
+import {getExe, getLaunchCommand, isEpicGame, isGOGGame, isJunkStoreGame} from "../../../shortcuts";
+import {removeAfterAndIncluding, removeBeforeAndIncluding} from "../../GamesDBResult";
+import {getAppDetails} from "../../../util";
 import {callable} from "@decky/api";
 import { FaStore } from "react-icons/fa";
 

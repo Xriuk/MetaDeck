@@ -1,6 +1,6 @@
 import { call, fetchNoCors } from "@decky/api";
 import Logger from "../../../logger";
-import { getCurrentLanguage, getLanguageTitle, isValidLanguage, t, type Language } from "../../../useTranslations";
+import { getAutoLanguageOptions, getCurrentLanguage, getLanguageTitle, isValidLanguage, t, type Language } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
 import { MetadataProvider } from "../MetadataProvider";
 import { BsNintendoSwitch } from "react-icons/bs";
@@ -45,8 +45,12 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 	}
 
 	set language(language: string){
+		let current = this.language;
 		this.config.language = language;
 		void this.saveConfig();
+
+		if(current != language)
+			void this.clearModuleCache();
 	}
 
 	private getDefaultLanguage(){
@@ -171,35 +175,37 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [language, setLanguage] = useState(this.language);
+
+		const languageTitle = (language: string) => {
+			let [country, lang]: [string, Language] = language.split('.') as any;
+			let finalLanguage;
+			if(lang === "es" && country !== "ES")
+				finalLanguage = "es419";
+			else if(lang === "pt" && country !== "PT")
+				finalLanguage = "ptBr";
+			else if ((lang as any) === "zh"){
+				if(country === "CN")
+					finalLanguage = "zhCn";
+				else
+					finalLanguage = "zhTw";
+			}
+			else
+				finalLanguage = lang;
+
+			return (isValidLanguage(finalLanguage) ? getLanguageTitle(finalLanguage) : finalLanguage) +
+				(this.languages.filter(l => l.startsWith(country + ".") || l.endsWith("." + finalLanguage)).length > 1 ? ` (${country})` : "");
+		};
+
 		return (
 			<DialogControlsSection>
 				<Field
 					label={t("language")}
 					childrenContainerWidth={'fixed'}>
 					<Dropdown
-						rgOptions={this.languages
-							.map(l => {
-								let [country, lang]: [string, Language] = l.split('.') as any;
-								let language;
-								if(lang === "es" && country !== "ES")
-									language = "es419";
-								else if(lang === "pt" && country !== "PT")
-									language = "ptBr";
-								else if ((lang as any) === "zh"){
-									if(country === "CN")
-										language = "zhCn";
-									else
-										language = "zhTw";
-								}
-								else
-									language = lang;
-
-								return {
-									data: l, label: (isValidLanguage(language) ? getLanguageTitle(language) : language) +
-										(this.languages.filter(l => l.startsWith(country + ".") || l.endsWith("." + language)).length > 1 ? ` (${country})` : "")
-								};
-							})
-							.sort((a, b) => a.label.localeCompare(b.label))}
+						rgOptions={getAutoLanguageOptions(languageTitle(this.getDefaultLanguage()))
+							.concat(this.languages
+								.map(l => ({ data: l, label: languageTitle(l) }))
+								.sort((a, b) => a.label.localeCompare(b.label)))}
 						selectedOption={language}
 						disabled={loadingData.loading}
 						onChange={(newVal) => {

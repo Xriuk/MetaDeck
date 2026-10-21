@@ -1,5 +1,5 @@
-import { ModuleResolver } from "../../../Resolver";
-import type { MetadataModule } from "../../MetadataModule";
+import { ModuleResolver } from "../../Resolver";
+import type { MetadataModule } from "../../metadata/MetadataModule";
 
 // Separates plaform (gog, epic, origin, ...) from the actual game id in a string
 export const separator = "$GOG$";

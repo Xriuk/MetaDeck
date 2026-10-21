@@ -86,11 +86,11 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 					source={module}
 					value={overrides}
 					disabled={loadingData.loading}
-					onChange={async (value) => {
+					onChange={(value) => {
 						let oldValue = module.providerOverrides;
 						setOverrides(value as any);
 						module.providerOverrides = value as any;
-						await module.onOverridesChange(oldValue, value as any);
+						void module.onOverridesChange(oldValue, value as any);
 					}}
 					resultsForApp={_ => providers}
 					defaultResults={(results, appId) => {
@@ -104,11 +104,11 @@ export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {
 					source={module}
 					value={excluded}
 					disabled={loadingData.loading}
-					onChange={async (value) => {
+					onChange={(value) => {
 						let oldValue = module.excludedAppsSelf;
 						setExcluded(value);
 						module.excludedAppsSelf = value;
-						await module.onExcludedChange(oldValue, value);
+						void module.onExcludedChange(oldValue, value);
 					}} />
 			</DialogControlsSection>
 		</DialogBody>

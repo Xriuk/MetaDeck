@@ -177,3 +177,10 @@ export function toasterToast(
 		body: message
 	});
 }
+
+export function stripHtml(str: string){
+	if(!str)
+		return str;
+	else
+		return str.replace(/<\/?[^>]+(>|$)/g, "").trim();
+}

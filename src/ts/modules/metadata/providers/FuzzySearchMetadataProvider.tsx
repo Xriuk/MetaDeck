@@ -181,11 +181,11 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 						source={this}
 						value={overrides}
 						disabled={loadingData.loading}
-						onChange={async (value) => {
+						onChange={(value) => {
 							let oldValue = this.overrides;
 							setOverrides(value);
 							this.overrides = value;
-							await this.onOverridesChange(oldValue, value);
+							void this.onOverridesChange(oldValue, value);
 						}}
 						resultsForApp={(appId) => this.throttle(() => this.getAllMetadataForGame(appId))}
 						defaultResults={(results, appId) => this.pickDefaultEntry(results, appId)} />

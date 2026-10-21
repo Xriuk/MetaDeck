@@ -5,16 +5,16 @@ import {ID} from "../Interfaces";
 import type { ReactNode } from "react";
 import type { MultiIdRPCS3ResolverConfig, MultiIdRPCS3ResolverCache } from "./resolvers/MultiId/MultiIdRPCS3Resolver";
 import type { RetroAchievementsResolverConfig, RetroAchievementsResolverCache } from "./resolvers/RetroAchievementsResolver";
-import type { RPCS3NPWRResolverConfig, RPCS3NPWRResolverCache } from "./resolvers/RPCS3NPWRResolver";
+import type { MultiIdRPCS3NPWRResolverConfig, MultiIdRPCS3NPWRResolverCache } from "./resolvers/MultiId/MultiIdRPCS3NPWRResolver";
 import type { RyujinxSerialResolverConfig, RyujinxSerialResolverCache } from "./resolvers/RyujinxSerialResolver";
 import type { RyujinxTitleIdResolverConfig, RyujinxTitleIdResolverCache } from "./resolvers/RyujinxTitleIdResolver";
 import type { XeniaResolverConfig, XeniaResolverCache } from "./resolvers/XeniaResolver";
 import type { MultiIdCemuResolverConfig, MultiIdCemuResolverCache } from "./resolvers/MultiId/MultiIdCemuResolver";
 import type { MultiIdDolphinResolverConfig, MultiIdDolphinResolverCache } from "./resolvers/MultiId/MultiIdDolphinResolver";
 import type { MultiIdPCSX2ResolverConfig, MultiIdPCSX2ResolverCache } from "./resolvers/MultiId/MultiIdPCSX2Resolver";
-import type { GOGMetadataProviderNSLResolverCache, GOGMetadataProviderNSLResolverConfig } from "./metadata/resolvers/GOG/GOGMetadataProviderNSLResolver";
-import type { GOGMetadataProviderJunkStoreResolverCache, GOGMetadataProviderJunkStoreResolverConfig } from "./metadata/resolvers/GOG/GOGMetadataProviderJunkStoreResolver";
-import type { GOGMetadataProviderHeroicResolverConfig, GOGMetadataProviderHeroicResolverCache } from "./metadata/resolvers/GOG/GOGMetadataProviderHeroicResolver";
+import type { GOGMetadataProviderNSLResolverCache, GOGMetadataProviderNSLResolverConfig } from "./resolvers/GOG/GOGMetadataProviderNSLResolver";
+import type { GOGMetadataProviderJunkStoreResolverCache, GOGMetadataProviderJunkStoreResolverConfig } from "./resolvers/GOG/GOGMetadataProviderJunkStoreResolver";
+import type { GOGMetadataProviderHeroicResolverConfig, GOGMetadataProviderHeroicResolverCache } from "./resolvers/GOG/GOGMetadataProviderHeroicResolver";
 import type { Provider } from "./Provider";
 import { merge } from "lodash-es";
 import { Settings } from "../settings";
@@ -32,7 +32,7 @@ export interface ResolverConfigs{
 
 	pcsx2: MultiIdPCSX2ResolverConfig;
 	rpcs3: MultiIdRPCS3ResolverConfig;
-	rpcs3_npwr: RPCS3NPWRResolverConfig;
+	rpcs3_npwr: MultiIdRPCS3NPWRResolverConfig;
 
 	xenia: XeniaResolverConfig;
 
@@ -51,7 +51,7 @@ export interface ResolverCaches{
 
 	pcsx2: MultiIdPCSX2ResolverCache;
 	rpcs3: MultiIdRPCS3ResolverCache;
-	rpcs3_npwr: RPCS3NPWRResolverCache;
+	rpcs3_npwr: MultiIdRPCS3NPWRResolverCache;
 
 	xenia: XeniaResolverCache;
 
@@ -134,6 +134,10 @@ export abstract class ModuleResolver<
 	Identifier extends ResolverIdentifier,
 	Mod extends Module<any, any, any>>
 		extends Resolver<Identifier>{
+
+	constructor(public readonly moduleIdentifier: Mod['identifier'], state: MetaDeckState){
+		super(state);
+	}
 
 	apply(_appId: number, _data: Mod['data'][number]): Promise<void> {
 		return Promise.resolve();

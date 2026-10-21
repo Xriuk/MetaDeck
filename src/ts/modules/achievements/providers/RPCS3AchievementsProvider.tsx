@@ -1,6 +1,6 @@
 import { call, callable, fetchNoCors, FileSelectionType, openFilePicker } from "@decky/api";
 import Logger from "../../../logger";
-import { t, getLanguageTitle, getCurrentLanguage, type Language } from "../../../useTranslations";
+import { t, getLanguageTitle, getCurrentLanguage, type Language, getAutoLanguageOptions } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
 import { AchievementsProvider } from "../AchievementsProvider";
 import type { AchievementsData } from "../../../Interfaces";
@@ -16,6 +16,7 @@ import React from "react";
 import { Markdown } from "../../../markdown";
 import { RAWGMetadataProvider } from "../../metadata/providers/RAWGMetadataProvider";
 import { cloneDeep } from "lodash-es";
+import { separator } from "../../resolvers/MultiId/MultiIdResolver";
 
 const langMap: Partial<Record<Language, string>> = {
 	'ja': '00',
@@ -52,7 +53,6 @@ type RPCS3GameTrophies = {
 		detail?: string;
 
 		icon: string;
-		locked_icon: string;
 	}[];
 	rarity?: Pick<UserThinTrophy, 'trophyId' | 'trophyEarnedRate'>[];
 };
@@ -74,10 +74,11 @@ export interface RPCS3AchievementsProviderConfig extends ProviderConfig<'rpcs3_n
 	language: string | null; // null will try to guess or fallback to english
 	trophy_categories: boolean;
 	psn_npsso: string; // 64-chars token to access PSN API
+	trophy_sets: boolean;
 }
 
 export interface RPCS3AchievementsProviderCache extends ProviderCache{
-	game_trophies: Record<number, RPCS3GameTrophies | null>; // Cached without icons, or from RAWG, without grayscale
+	game_trophies: Record<number, Record<string, RPCS3GameTrophies> | null>; // Cached without icons, or from RAWG, for each trophy id
 }
 
 /**
@@ -127,10 +128,13 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 			?? langMap['en']!;
 	}
 
-	set language(data: string)
-	{
-		this.config.language = data;
+	set language(language: string){
+		let current = this.language;
+		this.config.language = language;
 		void this.saveConfig();
+
+		if(current != language)
+			void this.clearModuleCache();
 	}
 
 	get trophyCategories(): boolean
@@ -155,7 +159,16 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 		void this.saveConfig();
 	}
 
-	get gameTrophies(): Record<number, RPCS3GameTrophies | null>{
+	get trophySets(): boolean{
+		return this.config.trophy_sets;
+	}
+
+	set trophySets(data: boolean){
+		this.config.trophy_sets = data;
+		void this.saveConfig();
+	}
+
+	get gameTrophies(): Record<number, Record<string, RPCS3GameTrophies> | null>{
 		return this.cache.game_trophies;
 	}
 
@@ -262,8 +275,8 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 		if(this.gameTrophies[appId] === null)
 			return undefined;
 		
-		const trophyId = await this.resolve(appId);
-		if(!trophyId){
+		const trophyIds = (await this.resolve(appId))?.toString().split(separator);
+		if(!trophyIds?.length){
 			this.gameTrophies[appId] = null;
 			return undefined;
 		}
@@ -282,37 +295,49 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 		}
 
 		let romFolder = rom.match(new RegExp(rpcs3RomPathRegex))?.[1];
-		let titleId = await this.rpcs3Resolver.resolve(appId);
+		// Resolved id is multi, the first one is the actual title id of the installed game
+		let titleId = (await this.rpcs3Resolver.resolve(appId))?.toString().split(separator)[0];
 		
 		// Retrieve from cache first, since trophies data does not change
-		let trophies: RPCS3GameTrophiesStats;
-		let fromGameFolder = false; // True if retrieved from game folder (0 achieved)
-		if(this.gameTrophies[appId])
-			trophies = cloneDeep(this.gameTrophies[appId]);
-		else {
-			// Try retrieving the trophies from the user directory first
-			let result = await this.rpcs3_get_all_trophies_user(this.userPath, trophyId.toString()) ?? null;
-			trophies = JSON.parse(result ?? '{}') as RPCS3GameTrophies;
+		let trophies: Record<string, RPCS3GameTrophiesStats> = {}; // Trophies for each id
+		let fromGameFolder: Record<string, boolean> = {}; // True if retrieved from game folder (0 achieved)
+		let notCached: string[] = []; // List of not previously cached trophy ids
+		for(let trophyId of trophyIds){
+			if(this.gameTrophies[appId]?.[trophyId])
+				trophies[trophyId] = cloneDeep(this.gameTrophies[appId][trophyId]);
+			else {
+				// Try retrieving the trophies from the user directory first
+				let result = await this.rpcs3_get_all_trophies_user(this.userPath, trophyId) ?? null;
+				trophies[trophyId] = JSON.parse(result ?? '{}') as RPCS3GameTrophies;
 
-			// If we found nothing we search the game folder
-			if(!trophies.trophies.length){
-				if(romFolder)
-					result = await this.rpcs3_get_all_trophies_game(romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language) ?? null;
-				else{
-					if(titleId)
-						result = await this.rpcs3_get_all_trophies_game(this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language) ?? null;
-					else
-						result = '';
+				// If we found nothing we search the game folder
+				if(!trophies[trophyId].trophies?.length){
+					if(romFolder)
+						result = await this.rpcs3_get_all_trophies_game(romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language) ?? null;
+					else{
+						if(titleId)
+							result = await this.rpcs3_get_all_trophies_game(this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", this.language) ?? null;
+						else
+							result = '';
+					}
+
+					if(result){
+						trophies[trophyId] = JSON.parse(result ?? '{}') as RPCS3GameTrophies;
+						fromGameFolder[trophyId] = true;
+					}
 				}
 
-				if(result){
-					trophies = JSON.parse(result ?? '{}') as RPCS3GameTrophies;
-					fromGameFolder = true;
-				}
+				if(trophies[trophyId].trophies?.length)				
+					notCached.push(trophyId);
 			}
+		}
 
-			// Retrieve trophies rarity, from PSN or RAWG,
-			// Also if we have RAWG we retrieve trophies icons to save on data size instead of using base 64
+		// Retrieve trophies rarity, from PSN or RAWG,
+		// Also if we have RAWG we retrieve trophies icons to save on data size instead of using base 64
+		if(notCached.length){
+			if(!this.gameTrophies[appId])
+				this.gameTrophies[appId] = {};
+
 			if(this._psnTokens){
 				// Refresh the token if needed
 				if(this._psnTokensExpiration && new Date() >= this._psnTokensExpiration){
@@ -348,25 +373,27 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 						'8477639012129454573',
 						'7390413838940571081'
 					];
-					for(let accountId of psnAccounts){
-						try{
-							// npServiceName=trophy: PS3 trophies
-							let rarity: Awaited<ReturnType<typeof getUserTrophiesEarnedForTitle>> = await (await fetchNoCorsLegacyTimeout(
-								`https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${trophyId}/trophyGroups/all/trophies?npServiceName=trophy`,
-								'GET',
-								{
-									headers: {
-										Authorization: `Bearer ${this._psnTokens.accessToken}`,
-										"Content-Type": "application/json",
-									}
-								})).json();
-							if(rarity.trophies.length){
-								trophies.rarity = rarity.trophies;
-								this.logger.debug(`${appId} rarity: `, trophies.rarity);
-								break;
+					for(let trophyId of notCached){
+						for(let accountId of psnAccounts){
+							try{
+								// npServiceName=trophy: PS3 trophies
+								let rarity: Awaited<ReturnType<typeof getUserTrophiesEarnedForTitle>> = await (await fetchNoCorsLegacyTimeout(
+									`https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${trophyId}/trophyGroups/all/trophies?npServiceName=trophy`,
+									'GET',
+									{
+										headers: {
+											Authorization: `Bearer ${this._psnTokens.accessToken}`,
+											"Content-Type": "application/json",
+										}
+									})).json();
+								if(rarity.trophies.length){
+									trophies[trophyId].rarity = rarity.trophies;
+									this.logger.debug(`${appId} rarity: `, trophies[trophyId].rarity);
+									break;
+								}
 							}
+							catch{ }
 						}
-						catch{ }
 					}
 				}
 			}
@@ -375,101 +402,124 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 
 				// If we have trophies we'll need to match them with local ones, but we need english titles
 				if(rawgAchievements?.length){
-					let trophiesNames: Record<string, string> = {}; // English name: trophy id ("001", "002")
+					let trophiesNames: Record<string, Record<string, string>> = {}; // trophyId: { English name: trophy id ("001", "002") }
 					if(this.language === langMap['en']){
-						for(let trophy of trophies.trophies){
-							trophiesNames[trophy.name] = trophy.id;
+						for(let trophyId of notCached){
+							trophiesNames[trophyId] = {};
+
+							for(let trophy of trophies[trophyId].trophies){
+								trophiesNames[trophyId][trophy.name] = trophy.id;
+							}
 						}
 					}
 					else{
-						if(romFolder)
-							result = await call<[string, string], string>("rpcs3_get_all_trophies_game", romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", langMap['en']!) ?? null;
-						else{
-							if(titleId)
-								result = await call<[string, string], string>("rpcs3_get_all_trophies_game", this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", langMap['en']!) ?? null;
-							else
-								result = '';
-						}
+						for(let trophyId of notCached){
+							let result: string;
+							if(romFolder)
+								result = await call<[string, string], string>("rpcs3_get_all_trophies_game", romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", langMap['en']!) ?? null;
+							else{
+								if(titleId)
+									result = await call<[string, string], string>("rpcs3_get_all_trophies_game", this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", langMap['en']!) ?? null;
+								else
+									result = '';
+							}
 
-						if(result){
-							let englishTrophies = JSON.parse(result ?? '{}') as RPCS3GameTrophies;
-							for(let trophy of englishTrophies.trophies){
-								trophiesNames[trophy.name] = trophy.id;
+							if(result){
+								trophiesNames[trophyId] = {};
+
+								let englishTrophies = JSON.parse(result ?? '{}') as RPCS3GameTrophies;
+								for(let trophy of englishTrophies.trophies){
+									trophiesNames[trophyId][trophy.name] = trophy.id;
+								}
 							}
 						}
 					}
 
 					if(Object.keys(trophiesNames).length){
 						this.logger.debug("Matching RAWG achievements with names", rawgAchievements, trophiesNames);
-						let setTrophies = !trophies.rarity;
-						if(setTrophies)
-							trophies.rarity = [];
-						for(let achievement of rawgAchievements){
-							let trophyId = trophiesNames[achievement.name];
+						for(let trophyId of notCached){
+							let setTrophies = !trophies[trophyId].rarity;
+							if(setTrophies)
+								trophies[trophyId].rarity = [];
+							for(let achievement of rawgAchievements){
+								let trophyTrophyId = trophiesNames[trophyId][achievement.name];
 
-							if(!trophyId)
-								continue;
+								if(!trophyTrophyId)
+									continue;
 
-							if(setTrophies){
-								trophies.rarity!.push({
-									trophyId: parseInt(trophyId, 10),
-									trophyEarnedRate: achievement.percent
-								});
+								if(setTrophies){
+									trophies[trophyId].rarity!.push({
+										trophyId: parseInt(trophyTrophyId, 10),
+										trophyEarnedRate: achievement.percent
+									});
+								}
+
+								trophies[trophyId].trophies.find(t => t.id === trophyTrophyId)!.icon = achievement.image;
 							}
-
-							trophies.trophies.find(t => t.id === trophyId)!.icon = achievement.image;
 						}
-						this.logger.debug("Achievements not matched:", trophies.trophies.filter(t => !t.icon));
+						this.logger.debug("Achievements not matched:", Object.entries(trophies).filter(t => t[1].trophies.some(t => !t.icon)));
 					}
 				}
 			}
-			
-			this.gameTrophies[appId] = trophies.trophies.length ? cloneDeep(trophies) : null;
+
+			for(let trophyId of notCached){
+				if(trophies[trophyId].trophies.length)
+					this.gameTrophies[appId][trophyId] = cloneDeep(trophies[trophyId]);
+			}
+
+			if(!Object.keys(this.gameTrophies[appId]).length)
+				this.gameTrophies[appId] = null;
 		}
 
-		if(!trophies.trophies.length)
+		if(!Object.keys(trophies).length){
+			if(!notCached.length)
+				this.gameTrophies[appId] = null;
+			
 			return undefined;
+		}
 
-		// Retrieve trophies icons if needed and create grayscale versions for locked
-		for(let trophy of trophies.trophies){
-			if(!trophy.icon){
-				// Retrieve from user folder first, then default to game
-				if(!fromGameFolder)
-					trophy.icon = await call<[string, string, string], string>("rpcs3_get_trophy_icon_user", this.userPath, trophyId.toString(), trophy.id) ?? '';
-				
+		// Retrieve trophies icons if needed
+		for(let trophyId of trophyIds){
+			for(let trophy of trophies[trophyId].trophies){
 				if(!trophy.icon){
-					if(romFolder)
-						trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
-					else if(titleId)
-						trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
+					// Retrieve from user folder first, then default to game
+					if(!fromGameFolder)
+						trophy.icon = await call<[string, string, string], string>("rpcs3_get_trophy_icon_user", this.userPath, trophyId, trophy.id) ?? '';
+					
+					if(!trophy.icon){
+						if(romFolder)
+							trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", romFolder + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
+						else if(titleId)
+							trophy.icon = await call<[string, string], string>("rpcs3_get_trophy_icon_game", this.resolvers[0].hddPath + "game/" + titleId + "/TROPDIR/" + trophyId + "/TROPHY.TRP", trophy.id) ?? '';
+					}
 				}
 			}
-			
-			// Create a locked grayscale version
-			if(trophy.icon)
-				trophy.locked_icon = await grayScaleIcon(trophy.icon);
-			else
-				trophy.locked_icon = '';
 		}
 
 		// Retrieve progress for non-game trophies (actually played)
-		if(!fromGameFolder){
-			let result = await call<[string, string], string>("rpcs3_get_all_trophies_status", this.userPath, trophyId.toString()) ?? null;
-			trophies.progress = JSON.parse(result ?? '{}') as Record<string, RPCS3TrophyStatus>;
-			this.logger.debug(`${appId} progress: `, trophies.progress);
+		for(let trophyId of trophyIds){
+			if(!fromGameFolder[trophyId] && trophies[trophyId]){
+				let result = await call<[string, string], string>("rpcs3_get_all_trophies_status", this.userPath, trophyId) ?? null;
+				trophies[trophyId].progress = JSON.parse(result ?? '{}') as Record<string, RPCS3TrophyStatus>;
+				this.logger.debug(`${appId} (${trophyId}) progress: `, trophies.progress);
+			}
+			else
+				this.logger.debug(`${appId} (${trophyId}) no progress yet`);
 		}
-		else
-			this.logger.debug(`${appId} no progress yet`);
 
-		return {
+		let result: AchievementsData = {
 			title: details.strDisplayName,
-			id: trophyId,
+			id: trophyIds.join(', '),
 
-			achievements: trophies.trophies.map(trophy => {
-				let achieved = trophies.progress?.[trophy.id]?.unlocked === true;
+			achievements: []
+		};
+
+		for(let trophyId of trophyIds){
+			for(let trophy of trophies[trophyId].trophies){
+				let achieved = trophies[trophyId].progress?.[trophy.id]?.unlocked === true;
 
 				let trophyIdInt = parseInt(trophy.id, 10);
-				let rate = trophies.rarity?.find(t => t.trophyId === trophyIdInt)?.trophyEarnedRate;
+				let rate = trophies[trophyId].rarity?.find(t => t.trophyId === trophyIdInt)?.trophyEarnedRate;
 
 				let trophyCategory: string | undefined = undefined;
 				if(this.trophyCategories){
@@ -489,7 +539,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 					}
 				}
 
-				return {
+				result.achievements.push({
 					bAchieved: achieved,
 					bHidden: trophy.hidden === true,
 					flAchieved: rate ? parseFloat(rate) : 0,
@@ -497,19 +547,22 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 					flMaxProgress: 1,
 					flMinProgress: 0,
 					rtUnlocked:
-						(achieved && trophies.progress?.[trophy.id]?.unlock_time_utc) ?
-							trophies.progress[trophy.id].unlock_time_utc! :
+						(achieved && trophies[trophyId].progress?.[trophy.id]?.unlock_time_utc) ?
+							trophies[trophyId].progress[trophy.id].unlock_time_utc! :
 							0,
 					strDescription: [
+						(this.trophySets && trophyIds.length > 1 ? trophyId : undefined),
 						trophyCategory,
 						trophy.detail
 					].filter(d => d).join(' - '),
-					strID: trophy.id,
-					strImage: achieved ? trophy.icon : trophy.locked_icon,
+					strID: trophyId + "_" + trophy.id,
+					strImage: achieved ? trophy.icon : await grayScaleIcon(trophy.icon),
 					strName: trophy.name
-				};
-			})
-		};
+				});
+			}
+		}
+
+		return result;
 	}
 
 	override icon = <SiPlaystation3/>;
@@ -520,6 +573,10 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 		const [language, setLanguage] = useState(this.language);
 		const [trophyCategories, setTrophyCategories] = useState(this.trophyCategories);
 		const [PSNNPSSO, setPSNNPSSO] = useState(this.PSNNPSSO);
+		const [trophysetPrefix, setTrophysetPrefix] = useState(this.trophySets);
+
+		const currentLanguage = getCurrentLanguage();
+		const defaultLanguage = langMap[currentLanguage] ? currentLanguage : 'en';
 
 		const markdown = t("rpcs3UserPathDesc") + "  \n" + 
 			t("rpcs3UserPathInstructions") + "  \n" + 
@@ -561,9 +618,10 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 						label={t("language")}
 						childrenContainerWidth={'fixed'}>
 						<Dropdown
-							rgOptions={Object.entries(langMap)
-								.map(([lang, code]) => ({ data: code, label: getLanguageTitle(lang as Language) }))
-								.sort((a, b) => a.label.localeCompare(b.label))}
+							rgOptions={getAutoLanguageOptions(getLanguageTitle(defaultLanguage))
+								.concat(Object.entries(langMap)
+									.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
+									.sort((a, b) => a.label.localeCompare(b.label)))}
 							selectedOption={language}
 							disabled={loadingData.loading}
 							onChange={(newVal) => {
@@ -584,6 +642,16 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 								this.trophyCategories = checked;
 							}}/>
 					</Field>
+					<Field
+						label={t("rpcs3TrophiesSetPrefixes")}
+						description={t("rpcs3TrophiesSetPrefixesDesc")}>
+						<Toggle
+							value={trophysetPrefix}
+							onChange={(checked) => {
+								setTrophysetPrefix(checked);
+								this.trophySets = checked;
+							}}/>
+					</Field>
 				</DialogControlsSection>
 
 				<DialogControlsSection>
@@ -599,7 +667,9 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 								}}/>
 						} />
 					<Field description={
-						<Markdown>{t("psnApiKeyInstructionsMD")}</Markdown>
+						<Markdown>{t("psnApiKeyInstructionsMD")
+							.replace("{playstationUrl}", "[www.playstation.com](https://www.playstation.com)")
+							.replace("{cookieUrl}", "[https://ca.account.sony.com/api/v1/ssocookie](https://ca.account.sony.com/api/v1/ssocookie)")}</Markdown>
 					} />
 				</DialogControlsSection>
 			</>

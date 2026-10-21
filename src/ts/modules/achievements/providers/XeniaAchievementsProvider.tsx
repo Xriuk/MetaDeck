@@ -1,7 +1,7 @@
 import { call, callable, FileSelectionType, openFilePicker } from "@decky/api";
 import type { AchievementsData } from "../../../Interfaces";
 import Logger from "../../../logger";
-import { t, getLanguageTitle, type Language, getCurrentLanguage } from "../../../useTranslations";
+import { t, getLanguageTitle, type Language, getCurrentLanguage, getAutoLanguageOptions } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
 import { AchievementsProvider } from "../AchievementsProvider";
 import { FaXbox } from "react-icons/fa";
@@ -49,7 +49,6 @@ type XeniaAchievement = {
 	unlock_time?: number; // Only in status call
 
 	icon: string;
-	locked_icon: string;
 };
 
 type XeniaGameAchievements = {
@@ -72,7 +71,7 @@ export interface XeniaAchievementsProviderConfig extends ProviderConfig<'xenia'>
 }
 
 export interface XeniaAchievementsProviderCache extends ProviderCache{
-	game_achievements: Record<number, XeniaGameAchievements | null>; // Cached without icons, or from RAWG, without grayscale
+	game_achievements: Record<number, XeniaGameAchievements | null>; // Cached without icons, or from RAWG
 }
 
 export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
@@ -112,10 +111,13 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			?? langMap['en']!;
 	}
 
-	set language(data: number)
-	{
-		this.config.language = data;
+	set language(language: number){
+		let current = this.language;
+		this.config.language = language;
 		void this.saveConfig();
+
+		if(current != language)
+			void this.clearModuleCache();
 	}
 
 	get gamerscore(): boolean
@@ -283,7 +285,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		if(!achievements.achievements.length)
 			return undefined;
 
-		// Retrieve achievements icons if needed and create grayscale versions for locked
+		// Retrieve achievements icons if needed
 		for(let achievement of achievements.achievements){
 			if(!achievement.icon){
 				// Retrieve icon from user profile GPD first
@@ -294,12 +296,6 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 				if(!achievement.icon && rom)
 					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_game", rom, titleId.toString(), achievement.icon_id) ?? '';
 			}
-			
-			// Create a locked grayscale version
-			if(achievement.icon)
-				achievement.locked_icon = await grayScaleIcon(achievement.icon);
-			else
-				achievement.locked_icon = '';
 		}
 
 		// Retrieve progress if using cached data
@@ -311,48 +307,52 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		else
 			this.logger.debug(`${appId} no progress yet`);
 
-		return {
+		let result: AchievementsData = {
 			title: details.strDisplayName,
 			id: titleId,
 
-			achievements: achievements.achievements.map(achievement => {
-				let achieved = achievement.flags?.earned === true ||
-					achievement.flags?.earned_online === true ||
-					!!achievements.progress?.[achievement.id]?.unlock_time;
-
-				let unlocked: number;
-				if(achieved && achievements.progress?.[achievement.id]?.unlock_time){
-					const fileTimeBigInt = BigInt(achievements.progress[achievement.id].unlock_time!);
-		
-					// 100-nanosecond intervals between Jan 1, 1601 and Jan 1, 1970
-					const WINDOWS_TICK_OFFSET = 116444736000000000n;
-					
-					// Convert ticks to Unix epoch milliseconds
-					unlocked = Number((fileTimeBigInt - WINDOWS_TICK_OFFSET) / 10000000n);
-				}
-				else
-					unlocked = 0;
-
-				return {
-					bAchieved: achieved,
-					bHidden: achievement.flags?.secret === true,
-					flAchieved: achievements.rarity?.[achievement.id] ?? 0,
-					flCurrentProgress: achieved ? 1 : 0,
-					flMaxProgress: 1,
-					flMinProgress: 0,
-					rtUnlocked: unlocked,
-					strDescription: [
-						((this.gamerscore && achievement.gamerscore) ? `G ${achievement.gamerscore}` : undefined),
-						(((achieved && this.descriptionLocked == null) || this.descriptionLocked === false) ?
-							achievement.description_achieved :
-							achievement.description_unachieved)
-					].filter(d => d).join(' - '),
-					strID: achievement.id.toString(),
-					strImage: achieved ? achievement.icon : achievement.locked_icon,
-					strName: achievement.name
-				};
-			})
+			achievements: []
 		};
+
+		for(let achievement of achievements.achievements){
+			let achieved = achievement.flags?.earned === true ||
+				achievement.flags?.earned_online === true ||
+				!!achievements.progress?.[achievement.id]?.unlock_time;
+
+			let unlocked: number;
+			if(achieved && achievements.progress?.[achievement.id]?.unlock_time){
+				const fileTimeBigInt = BigInt(achievements.progress[achievement.id].unlock_time!);
+	
+				// 100-nanosecond intervals between Jan 1, 1601 and Jan 1, 1970
+				const WINDOWS_TICK_OFFSET = 116444736000000000n;
+				
+				// Convert ticks to Unix epoch milliseconds
+				unlocked = Number((fileTimeBigInt - WINDOWS_TICK_OFFSET) / 10000000n);
+			}
+			else
+				unlocked = 0;
+
+			result.achievements.push({
+				bAchieved: achieved,
+				bHidden: achievement.flags?.secret === true,
+				flAchieved: achievements.rarity?.[achievement.id] ?? 0,
+				flCurrentProgress: achieved ? 1 : 0,
+				flMaxProgress: 1,
+				flMinProgress: 0,
+				rtUnlocked: unlocked,
+				strDescription: [
+					((this.gamerscore && achievement.gamerscore) ? `G ${achievement.gamerscore}` : undefined),
+					(((achieved && this.descriptionLocked == null) || this.descriptionLocked === false) ?
+						achievement.description_achieved :
+						achievement.description_unachieved)
+				].filter(d => d).join(' - '),
+				strID: achievement.id.toString(),
+				strImage: achieved ? achievement.icon : await grayScaleIcon(achievement.icon),
+				strName: achievement.name
+			});
+		}
+		
+		return result;
 	}
 
 	override icon = <FaXbox/>;
@@ -363,6 +363,9 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		const [language, setLanguage] = useState(this.language);
 		const [gamerscore, setGamerscore] = useState(this.gamerscore);
 		const [descriptionLocked, setDescriptionLocked] = useState(this.descriptionLocked);
+
+		const currentLanguage = getCurrentLanguage();
+		const defaultLanguage = langMap[currentLanguage] ? currentLanguage : 'en';
 
 		const markdown = t("xeniaUserPathDesc") + "  \n" +
 			t("xeniaUserPathInstructions") + "  \n" +
@@ -401,9 +404,10 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 						label={t("language")}
 						childrenContainerWidth={'fixed'}>
 						<Dropdown
-							rgOptions={Object.entries(langMap)
-								.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
-								.sort((a, b) => a.label.localeCompare(b.label))}
+							rgOptions={getAutoLanguageOptions(getLanguageTitle(defaultLanguage))
+								.concat(Object.entries(langMap)
+									.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
+									.sort((a, b) => a.label.localeCompare(b.label)))}
 							selectedOption={language}
 							disabled={loadingData.loading}
 							onChange={(newVal) => {

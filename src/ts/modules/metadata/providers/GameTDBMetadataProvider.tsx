@@ -2,7 +2,7 @@ import { DialogControlsSection, Dropdown, Field } from "@decky/ui";
 import { useState } from "react";
 import Logger from "../../../logger";
 import { useMetaDeckState } from "../../../MetaDeckState";
-import { t, getLanguageTitle, type Language, getCurrentLanguage } from "../../../useTranslations";
+import { t, getLanguageTitle, type Language, getCurrentLanguage, getAutoLanguageOptions } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
 import { MetadataProvider } from "../MetadataProvider";
 import { separator } from "../../resolvers/MultiId/MultiIdResolver";
@@ -95,8 +95,12 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 	}
 
 	set language(language: string){
+		let current = this.language;
 		this.config.language = language;
 		void this.saveConfig();
+
+		if(current != language)
+			void this.clearModuleCache();
 	}
 
 	override async mount(): Promise<void> {
@@ -226,9 +230,9 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 		let localized = this.getLocalized(locales, l => l.synopsis);
 
 		return {
-			id: entries[0].id,
 			title: this.getLocalized(locales, l => l.title)?.title
 				?? entries[0].name,
+			id: entries[0].id,
 
 			description: localized?.synopsis || t("noDescription"),
 			matches_user_language: localized && locales.find(l => l[1] === localized)?.[0] === this.language,
@@ -251,15 +255,20 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
 		const [language, setLanguage] = useState(this.language);
+
+		const currentLanguage = getCurrentLanguage();
+		const defaultLanguage = langMap[currentLanguage] ? currentLanguage : 'en';
+
 		return (
 			<DialogControlsSection>
 				<Field
 					label={t("language")}
 					childrenContainerWidth={'fixed'}>
 					<Dropdown
-						rgOptions={Object.entries(langMap)
-							.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
-							.sort((a, b) => a.label.localeCompare(b.label))}
+						rgOptions={getAutoLanguageOptions(getLanguageTitle(defaultLanguage))
+							.concat(Object.entries(langMap)
+								.map(([lang, id]) => ({ data: id, label: getLanguageTitle(lang as Language) }))
+								.sort((a, b) => a.label.localeCompare(b.label)))}
 						selectedOption={language}
 						disabled={loadingData.loading}
 						onChange={(newVal) => {

@@ -307,19 +307,15 @@ class Plugin:
 
 		return file_directory
 
-	async def rpcs3_get_trophy_dir_path(self, rom_path: str) -> str | None:
+	async def rpcs3_get_trophy_dir_paths(self, rom_path: str) -> list[str]:
 		if rom_path is None or rom_path == "":
-			return None
+			return []
 			
 		dir = rom_path + "/TROPDIR"
 		if not os.path.isdir(dir):
-			return None
+			return []
 
-		children = next(os.walk(dir))[1]
-		if len(children) != 1:
-			return None
-		else:
-			return children[0]
+		return next(os.walk(dir))[1]
 	
 	async def rpcs3_get_all_trophies_file(self, file_bytes: bytes):
 		result = {'trophies': []}

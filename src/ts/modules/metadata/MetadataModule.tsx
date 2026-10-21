@@ -25,7 +25,7 @@ import {t} from "../../useTranslations";
 import {getAppDetails, stateTransaction} from "../../util";
 import {ReactElement, ReactNode, useState} from "react";
 import {Markdown} from "../../markdown";
-import {SteamAppDetails, SteamAppOverview, type AppData} from "../../SteamTypes";
+import {SteamAppDetails, SteamAppOverview} from "../../SteamTypes";
 import {routePatch} from "../../RoutePatches";
 import Logger from "../../logger";
 import {
@@ -143,15 +143,14 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 		const module = this;
 
 		mounts.addPatchMount({
-			patch(): Patch
-			{
+			patch(): Patch{
 				return replacePatch(
-					   // @ts-ignore
-					   appDetailsStore.__proto__,
-					   "GetDescriptions",
-					   (args) => {
-						   	if (!module.isValid || module.excludedApps.includes(args[0]))
-							   return callOriginal;
+					// @ts-ignore
+					appDetailsStore.__proto__,
+					"GetDescriptions",
+					(args) => {
+							if (!module.isValid || module.excludedApps.includes(args[0]))
+							return callOriginal;
 
 							const overview = appStore.GetAppOverviewByAppID(args[0]);
 							if (overview.app_type == SteamAppTypeShortcut){
@@ -187,35 +186,6 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 								}
 							}
 							return callOriginal;
-					   }
-				)
-			}
-		});
-
-		mounts.addPatchMount({
-			patch(): Patch
-			{
-				return afterPatch(
-					// @ts-ignore
-					appDetailsStore.__proto__,
-					"GetDescriptions",
-					(args, ret: NonNullable<AppData['descriptionsData']>): NonNullable<AppData['descriptionsData']> => {
-						if (!module.isValid || module.excludedApps.includes(args[0]))
-							return ret;
-
-						const overview = appStore.GetAppOverviewByAppID(args[0]);
-						if (module.config.markdown){
-							return {
-								strFullDescription: <Markdown>
-									{module.config.title_header ? `# ${overview.display_name}\n${ret?.strFullDescription}` : `${ret?.strFullDescription}`}
-								</Markdown>,
-								strSnippet: <Markdown>
-									{module.config.title_header ? `# ${overview.display_name}\n${ret?.strSnippet}` : `${ret?.strSnippet}`}
-								</Markdown>
-							}
-						}
-						else
-							return ret;
 					}
 				)
 			}
@@ -474,7 +444,7 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 		mounts.addPatchMount({
 			patch(): Patch
 			{
-				const AppGameInfoContainer = findModuleExport((e) => e?.toString()?.includes("().AppGameInfoContainer"));
+				const AppGameInfoContainer = findModuleExport((e) => e?.toString?.()?.includes("().AppGameInfoContainer"));
 				module.logger.debug("AppGameInfoContainer", AppGameInfoContainer);
 
 				return afterPatch(AppGameInfoContainer.prototype, "render", (_, ret) => {
@@ -909,120 +879,47 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 			return total;
 	}
 
-	override async fetchDataAsync(appId: number): Promise<MetadataData | undefined> {
-		if(this.excludedApps.includes(appId))
-			return undefined;
-
-		try{
-			if (!this.hasCachedData(appId)){
-				// Prevent saving multiple times inside providers
-				await this.state.settings.runInDisabledSaveState(async () => {
-					// Check if we have a saved provider
-					if(this.dataProviders[appId] || this.providerOverrides[appId]){
-						let providerId = this.dataProviders[appId] ?? this.providerOverrides[appId];
-						const provider = this.providers.find(p => p.identifier === providerId);
-						if(provider?.enabled && await provider.test(appId)){
-							const data = await provider.provide(appId);
-							if(data && !this.isEmpty(data)){
-								// DEV: merge with below
-								await this.provideAdditional(appId, data);
-								this.logger.debug(`Caching metadata for ${appId}: `, data, provider.identifier);
-
-								this.cacheData(appId, data);
-								this.dataProviders[appId] = provider.identifier;
-							}
-							else if(!this.providerOverrides[appId])
-								delete this.dataProviders[appId];
-							else
-								return undefined;
-						}
-						else if(!this.providerOverrides[appId])
-							delete this.dataProviders[appId];
-						else
-							return undefined;
-					}
-
-					// Retrieve a new provider
-					if(!this.hasCachedData(appId)){
-						let results: Partial<Record<ProviderIdentifier<MetadataModule>, MetadataData>> = {};
-						for (const provider of this.providers){
-							if(!provider.enabled || !await provider.test(appId))
-								continue;
-							
-							const data = await provider.provide(appId);
-							if(!data || this.isEmpty(data))
-								continue;
-							
-							// If we have a "perfect" entry we return it rightaway,
-							// it will be processed below
-							let score = this.getEntryScore(data);
-							if(score === Number.MAX_VALUE){
-								results = { [provider.identifier]: data };
-								
-								break;
-							}
-							
-							results[provider.identifier as ProviderIdentifier<MetadataModule>] = data;
-						}
-
-						// If we didn't find a "perfect" entry we try matching the best,
-						// or if we have a single entry we use that
-						if(Object.keys(results).length){
-							let entries = Object.entries(results).sort((a, b) => this.getEntryScore(a[1]) -  this.getEntryScore(b[1]));
-
-							let obj: {
-								provider: string;
-								score: number | 'max';
-								entry: MetadataData
-							}[] = entries.map(e => {
-								let score = this.getEntryScore(e[1]);
-								return {
-									provider: e[0],
-									score: score === Number.MAX_VALUE ? 'max' : score,
-									entry: e[1]
-								};
-							});
-							this.logger.debug(`Resulting metadata for ${appId}: `, obj);
-							
-							const [provider, data] = entries[entries.length-1] as [ProviderIdentifier<MetadataModule>, MetadataData];
-
-							await this.provideAdditional(appId, data);
-							this.logger.debug(`Caching metadata for ${appId}: `, data, provider);
-
-							this.cacheData(appId, data);
-							this.dataProviders[appId] = provider;
-						}
-					}
-					
-					// Provide default data, if any,
-					// or still cache undefined to avoid querying continuously
-					if(!this.hasCachedData(appId)){
-						let defaultData = await this.provideDefault(appId);
-						if(defaultData && !this.isEmpty(defaultData)){
-							this.logger.debug(`Caching metadata for ${appId}: `, defaultData, 'default');
-
-							this.cacheData(appId, defaultData);
-						}
-						else{
-							this.logger.debug(`Caching no provider/default metadata for ${appId}: `);
-
-							this.cacheData(appId, null);
-						}
-					}
-				});
-
-				await this.saveCache();
-			}
-			else
-				this.logger.debug(`Loading cached metadata for ${appId}: `, this.getCachedData(appId), this.dataProviders[appId]);
-
-			void this.apply(appId);
-
-			return this.getCachedData(appId);
+	protected override async fetchDataProviders(appId: number): Promise<[ProviderIdentifier<MetadataModule>, MetadataData] | undefined> {
+		let results: Partial<Record<ProviderIdentifier<MetadataModule>, MetadataData>> = {};
+		for (const provider of this.providers){
+			if(!provider.enabled || !await provider.test(appId))
+				continue;
+			
+			const data = await provider.provide(appId);
+			if(!data || this.isEmpty(data))
+				continue;
+			
+			// If we have a "perfect" entry we return it rightaway
+			let score = this.getEntryScore(data);
+			if(score === Number.MAX_VALUE)
+				return [provider.identifier, data];
+			
+			results[provider.identifier as ProviderIdentifier<MetadataModule>] = data;
 		}
-		catch (e: any){
-			this.handleError(e);
+
+		// If we didn't find a "perfect" entry we try matching the best,
+		// or if we have a single entry we use that
+		if(Object.keys(results).length){
+			let entries = Object.entries(results).sort((a, b) => this.getEntryScore(a[1]) -  this.getEntryScore(b[1])) as [ProviderIdentifier<MetadataModule>, MetadataData][];
+
+			let obj: {
+				provider: string;
+				score: number | 'max';
+				entry: MetadataData
+			}[] = entries.map(e => {
+				let score = this.getEntryScore(e[1]);
+				return {
+					provider: e[0],
+					score: score === Number.MAX_VALUE ? 'max' : score,
+					entry: e[1]
+				};
+			});
+			this.logger.debug(`Resulting metadata for ${appId}: `, obj);
+			
+			return entries[entries.length-1];
 		}
+
+		return undefined;
 	}
 
 	override async provideDefault(appId: number): Promise<MetadataData | undefined>
