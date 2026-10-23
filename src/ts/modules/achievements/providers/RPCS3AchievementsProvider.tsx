@@ -144,8 +144,24 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 
 	set trophyCategories(data: boolean)
 	{
+		let current = this.trophyCategories;
 		this.config.trophy_categories = data;
 		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
+	get trophySets(): boolean{
+		return this.config.trophy_sets;
+	}
+	set trophySets(data: boolean){
+		let current = this.trophySets;
+		this.config.trophy_sets = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
 	}
 
 	get PSNNPSSO(): string
@@ -156,14 +172,6 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 	set PSNNPSSO(data: string)
 	{
 		this.config.psn_npsso = data;
-		void this.saveConfig();
-	}
-
-	get trophySets(): boolean{
-		return this.config.trophy_sets;
-	}
-	set trophySets(data: boolean){
-		this.config.trophy_sets = data;
 		void this.saveConfig();
 	}
 
@@ -506,6 +514,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 				this.logger.debug(`${appId} (${trophyId}) no progress yet`);
 		}
 
+		// All trophies have categories
 		// 1 set (trophySets=false, trophyCategories=false)
 		// 1 + 4 sets (trophySets=false, trophyCategories=true)
 		// 1 + 1 + ... + 1 sets (trophySets=true, trophyCategories=false)
@@ -519,13 +528,16 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 				name: '',
 				achievements: []
 			}].concat(multipleSets || this.trophyCategories ? trophyIds.flatMap((trophyId, i) => {
+				if(!multipleSets && i !== 0)
+					return [];
+
 				if(multipleSets && !this.trophyCategories){
 					return [{
 						name: trophyId,
 						achievements: []
 					}];
 				}
-				else if(multipleSets || i === 0){
+				else{
 					let baseName = (multipleSets ? `${trophyId} - ` : '');
 					return [
 						{
@@ -546,10 +558,10 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 						}
 					]
 				}
-				else
-					return [];
 			}) : [])
 		};
+
+		this.logger.debug(`${appId} groups: `, result.groups);
 
 		let i = 0;
 		for(let trophyId of trophyIds){
@@ -564,27 +576,23 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 				if(this.trophyCategories){
 					switch(trophy.type){
 					case 'B':
-						if(this.module.hasAchievementSetsSupport)
-							groupId = 1 + (multipleSets ? i * 4 : 0) + 0;
-						else
+						groupId = 1 + (multipleSets ? i * 4 : 0) + 0;
+						if(!this.module.hasAchievementSetsSupport)
 							trophyCategory = "🟧";
 						break;
 					case 'S':
-						if(this.module.hasAchievementSetsSupport)
-							groupId = 1 + (multipleSets ? i * 4 : 0) + 1;
-						else
+						groupId = 1 + (multipleSets ? i * 4 : 0) + 1;
+						if(!this.module.hasAchievementSetsSupport)
 							trophyCategory = "⬜";
 						break;
 					case 'G':
-						if(this.module.hasAchievementSetsSupport)
-							groupId = 1 + (multipleSets ? i * 4 : 0) + 2;
-						else
+						groupId = 1 + (multipleSets ? i * 4 : 0) + 2;
+						if(!this.module.hasAchievementSetsSupport)
 							trophyCategory = "🟨";
 						break;
 					case 'P':
-						if(this.module.hasAchievementSetsSupport)
-							groupId = 1 + (multipleSets ? i * 4 : 0) + 3;
-						else
+						groupId = 1 + (multipleSets ? i * 4 : 0) + 3;
+						if(!this.module.hasAchievementSetsSupport)
 							trophyCategory = "💎";
 						break;
 					}
@@ -601,7 +609,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 							trophies[trophyId].progress[trophy.id].unlock_time_utc! :
 							0,
 					strDescription: [
-						((!this.module.hasAchievementSetsSupport && this.trophySets && trophyIds.length > 1) ? trophyId : undefined),
+						((!this.module.hasAchievementSetsSupport && multipleSets) ? trophyId : undefined),
 						trophyCategory,
 						trophy.detail
 					].filter(d => d).join(' - '),
@@ -689,6 +697,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 						description={(this.module.hasAchievementSetsSupport ? t("rpcs3TrophiesCatSetsDesc") : t("rpcs3TrophiesCatPrefixesDesc"))}>
 						<Toggle
 							value={trophyCategories}
+							disabled={loadingData.loading}
 							onChange={(checked) => {
 								setTrophyCategories(checked);
 								this.trophyCategories = checked;
@@ -699,6 +708,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 						description={(this.module.hasAchievementSetsSupport ? t("rpcs3TrophiesSetSetsDesc") : t("rpcs3TrophiesSetPrefixesDesc"))}>
 						<Toggle
 							value={trophysetPrefix}
+							disabled={loadingData.loading}
 							onChange={(checked) => {
 								setTrophysetPrefix(checked);
 								this.trophySets = checked;

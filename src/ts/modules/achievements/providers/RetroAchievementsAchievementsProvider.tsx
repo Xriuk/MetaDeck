@@ -11,7 +11,6 @@ import { useMetaDeckState } from "../../../MetaDeckState"
 import { useState } from "react"
 import { Markdown } from "../../../markdown"
 import React from "react"
-import { version } from "@decky/pkg"
 
 export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<'ra'>{
 	username: string;
@@ -19,6 +18,9 @@ export interface RetroAchievementsAchievementsProviderConfig extends ProviderCon
 	points: boolean;
 	// https://github.com/RetroAchievements/RAWeb/blob/fa58a24122f80e86e401443514800a49d344b7d1/public/API/API_GetGameInfoAndUserProgress.php#L31
 	achievement_types: boolean;
+	parent_sets: boolean; // One set per parent or one single base set
+	subsets: boolean;
+	subsets_sets: boolean;
 }
 
 export interface RetroAchievementsAchievementsProviderCache extends ProviderCache{
@@ -33,6 +35,8 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	title = t("providerAchievementsRA");
 
 	logger = new Logger(this.identifier);
+
+	private parentSubsets: Record<ID, ID[]> = {}; // Parent ID, subset IDs
 
 	get username(): string{
 		return this.config.username;
@@ -60,8 +64,12 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 	set points(data: boolean)
 	{
+		let current = this.points;
 		this.config.points = data;
 		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
 	}
 
 	get achievementTypes(): boolean
@@ -71,13 +79,111 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 	set achievementTypes(data: boolean)
 	{
+		let current = this.achievementTypes;
 		this.config.achievement_types = data;
 		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
+	get parentSets(): boolean
+	{
+		return this.config.parent_sets;
+	}
+
+	set parentSets(data: boolean)
+	{
+		let current = this.parentSets;
+		this.config.parent_sets = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
+	get subsets(): boolean
+	{
+		return this.config.subsets;
+	}
+
+	set subsets(data: boolean)
+	{
+		let current = this.subsets;
+		this.config.subsets = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
+	get subsetsSets(): boolean
+	{
+		return this.config.subsets_sets;
+	}
+
+	set subsetsSets(data: boolean)
+	{
+		let current = this.subsetsSets;
+		this.config.subsets_sets = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
 	}
 
 	get gameInfo(): RetroAchievementsAchievementsProviderCache['game_info']
 	{
 		return this.cache.game_info;
+	}
+
+	override async mount(): Promise<void> {
+		let init = false;
+		try{
+			// Retrieve consoles list
+			let response = await fetchNoCorsLegacyTimeout(
+				`https://retroachievements.org/API/API_GetConsoleIDs.php?` + new URLSearchParams({
+					y: this.apiKey,
+					a: '1',
+					g: '1'
+				}).toString(), 'GET');
+			if(!response.ok)
+				return;
+
+			let consoles: { ID: number; }[] = await response.json();
+			if(!consoles.length)
+				return;
+
+			// For each console retrieve all games
+			for(let console of consoles){
+				let response = await fetchNoCorsLegacyTimeout(
+				`https://retroachievements.org/API/API_GetGameList.php?` + new URLSearchParams({
+					y: this.apiKey,
+					i: console.ID.toString(),
+					f: '1',
+					h: '1',
+					c: '0' // Retrieve all
+				}).toString(), 'GET');
+				if(!response.ok)
+					return;
+
+				let games: {
+					Title: string;
+					ID: number;
+				}[] = await response.json();
+				for(let game of games){
+					let matchingGames = games.filter(g => g.Title.startsWith(game.Title) && g.ID !== game.ID);
+					if(!matchingGames.length)
+						continue;
+
+					this.parentSubsets[game.ID] = matchingGames.map(g => g.ID);
+				}
+			}
+		}
+		finally{
+			if(!init)
+				toasterToast(t("initError"), this);
+		}
 	}
 
 	override test(appId: number, external = false): Promise<boolean> {
@@ -92,7 +198,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 			return Promise.resolve(undefined);
 
 		return this.throttle(async () => {
-			const game = await this.getGameInfoAndProgress(appId);
+			let game = await this.getGameInfoAndProgress(appId);
 
 			this.logger.debug(`${appId} game: `, game);
 
@@ -102,68 +208,160 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 			const details = await getAppDetails(appId);
 			if (!details)
 				return undefined;
-					
-			let result: AchievementsData = {
-				title: details.strDisplayName,
-				id: game.ID,
 
-				groups: [{
-					name: '',
-					achievements: []
-				}].concat(this.achievementTypes ? [
-					{
-						name: t("raAchievementTypeProgression"),
-						achievements: []
-					},
-					{
-						name: t("raAchievementTypeMissable"),
-						achievements: []
-					},
-					{
-						name: t("raAchievementTypeCompletion"),
-						achievements: []
-					}
-				] : [])
-			};
+			// Retrieve parent game
+			let parents: Record<ID, typeof game> = { [game.ID]: game };
+			while((game as any).ParentGameID){
+				let newGame = await this.getGameInfoAndProgressInternal((game as any).ParentGameID);
+				if(!newGame)
+					break;
 
-			for(let achievement of Object.values(game.Achievements)
-				.sort((a, b) => Number(a.DisplayOrder) - Number(b.DisplayOrder))){
+				parents[game.ID] = newGame;
+				newGame = game;
+			}
 
-				let achieved = !!achievement.DateEarned;
+			const parentGame = game;
 
-				let groupId = 0;
-				if(this.achievementTypes){
-					switch((achievement as any).Type){
-					case 'progression':
-						groupId = 1;
-						break;
-					case 'missable':
-						groupId = 2;
-						break;
-					case 'win_condition':
-						groupId = 3;
-						break;
+			// Retrieve all subsets if needed
+			let subsets: Record<ID, typeof game> = {};
+			if(this.subsets){
+				for(let gameId of Object.keys(parents)){
+					if(!this.parentSubsets[gameId])
+						continue;
+
+					for(let subsetId of this.parentSubsets[gameId]){
+						if(parents[subsetId])
+							continue;
+
+						game = await this.getGameInfoAndProgressInternal(subsetId);
+						if(!game)
+							continue;
+
+						parents[game.ID] = game;
 					}
 				}
-					
-				result.groups[groupId].achievements.push({
-					bAchieved: achieved,
-					bHidden: false,
-					flAchieved: (((achievement.NumAwarded ? Number(achievement.NumAwarded) : 0) / (game.NumDistinctPlayersCasual ? Number(game.NumDistinctPlayersCasual) : 1)) * 100.0),
-					rtUnlocked: achieved ?
-						(achievement.DateEarnedHardcore ? ((new Date(achievement.DateEarnedHardcore).getTime() / 1000) + (new Date(achievement.DateEarnedHardcore).getTimezoneOffset() * 60)) :
-							achievement.DateEarned ? ((new Date(achievement.DateEarned).getTime() / 1000) + (new Date(achievement.DateEarned).getTimezoneOffset() * 60)) :
-							0) :
-						0,
-					strDescription: [
-						(this.points ? `${achievement.Points} CP` : undefined),
-						achievement.Description
-					].filter(d => d).join(' - '),
-					strID: achievement.ID,
-					strImage: `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`,
-					strImageLocked: `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`,
-					strName: achievement.Title
-				});
+			}
+			
+			// 1 + ... + 1 sets (achievementTypes=false)
+			// 1 + 3 + ... + 1 + 3 sets (achievementTypes=true)
+			let multipleParents = (Object.keys(parents).length > 1 && this.parentSets);
+			let multipleSubsets = (Object.keys(subsets).length && this.subsets && this.subsetsSets);
+			let result: AchievementsData = {
+				title: details.strDisplayName,
+				id: parentGame.ID,
+
+				groups: [parentGame]
+					.concat(Object.values(parents).filter(g => g.ID !== parentGame.ID))
+					.concat(Object.values(subsets))
+					.flatMap(game => {
+
+					let isBase = game.ID === parentGame.ID;
+					let isParent = !isBase && parents[game.ID];
+					if(!isBase && !(isParent ? multipleParents : multipleSubsets))
+						return [];
+
+					let subsetTitle = isBase ?
+						'' :
+						game.Title.match(/\[subset\s*-\s*(.+)\s*\]/i)?.[1]
+							?? game.Title;
+
+					if(!this.achievementTypes){
+						return [{
+							name: subsetTitle,
+							achievements: []
+						}];
+					}
+					else{
+						if(isBase)
+							subsetTitle = t("defaultAchievementSet");
+						let baseName = `${subsetTitle} - `;
+						return [
+							{
+								name: subsetTitle,
+								achievements: []
+							},
+							{
+								name: baseName + t("raAchievementTypeProgression"),
+								achievements: []
+							},
+							{
+								name: baseName + t("raAchievementTypeMissable"),
+								achievements: []
+							},
+							{
+								name: baseName + t("raAchievementTypeCompletion"),
+								achievements: []
+							}
+						];
+					}
+				})
+			};
+
+			this.logger.debug(`${appId} groups: `, result.groups);
+
+			let i = 0;
+			for(let game of [parentGame]
+				.concat(Object.values(parents).filter(g => g.ID !== parentGame.ID))
+				.concat(Object.values(subsets))){
+
+				let isBase = game.ID === parentGame.ID;
+				let isParent = !isBase && parents[game.ID];
+				let isBaseGroup = !isBase && !(isParent ? multipleParents : multipleSubsets); // Base does not default to 0 group, but it is 0 group
+
+				for(let achievement of Object.values(game.Achievements)
+					.sort((a, b) => Number(a.DisplayOrder) - Number(b.DisplayOrder))){
+						
+					let achieved = !!achievement.DateEarned;
+
+					let groupId = isBaseGroup ? 0 : i;
+					let achievementType: string | undefined = undefined;
+					if(this.achievementTypes){
+						switch((achievement as any).Type){
+						case 'progression':
+							groupId = (groupId * 4) + 1;
+							if(!this.module.hasAchievementSetsSupport)
+								achievementType = t("raAchievementTypeProgression");
+							break;
+						case 'missable':
+							groupId = (groupId * 4) + 2;
+							if(!this.module.hasAchievementSetsSupport)
+								achievementType = t("raAchievementTypeMissable");
+							break;
+						case 'win_condition':
+							groupId = (groupId * 4) + 3;
+							if(!this.module.hasAchievementSetsSupport)
+								achievementType = t("raAchievementTypeCompletion");
+							break;
+						default:
+							groupId = (groupId * 4) + 0;
+							break;
+						}
+					}
+						
+					result.groups[groupId].achievements.push({
+						bAchieved: achieved,
+						bHidden: false,
+						flAchieved: (((achievement.NumAwarded ? Number(achievement.NumAwarded) : 0) / (game.NumDistinctPlayersCasual ? Number(game.NumDistinctPlayersCasual) : 1)) * 100.0),
+						rtUnlocked: achieved ?
+							(achievement.DateEarnedHardcore ? ((new Date(achievement.DateEarnedHardcore).getTime() / 1000) + (new Date(achievement.DateEarnedHardcore).getTimezoneOffset() * 60)) :
+								achievement.DateEarned ? ((new Date(achievement.DateEarned).getTime() / 1000) + (new Date(achievement.DateEarned).getTimezoneOffset() * 60)) :
+								0) :
+							0,
+						strDescription: [
+							((!this.module.hasAchievementSetsSupport && (multipleParents || multipleSubsets) && !isBase && !isBaseGroup) ? game.ID.toString() : undefined),
+							(this.points ? `${achievement.Points} CP` : undefined),
+							achievementType,
+							achievement.Description
+						].filter(d => d).join(' - '),
+						strID: achievement.ID,
+						strImage: `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`,
+						strImageLocked: `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`,
+						strName: achievement.Title
+					});
+				}
+
+				if(!isBaseGroup)
+					i++;
 			}
 
 			return result;
@@ -176,8 +374,11 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		const { loadingData } = useMetaDeckState();
 		const [username, setUsername] = useState(this.username);
 		const [apiKey, setApiKey] = useState(this.apiKey);
+		const [subsets, setSubsets] = useState(this.subsets);
 		const [points, setPoints] = useState(this.points);
 		const [achievementTypes, setAchievementTypes] = useState(this.achievementTypes);
+		const [parentSets, setParentSets] = useState(this.parentSets);
+		const [subsetsSets, setSubsetsSets] = useState(this.subsetsSets);
 
 		return (
 			<>
@@ -211,6 +412,19 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 				<DialogControlsSection>
 					<Field
+						label={t("raSubsets")}
+						description={t("raSubsetsDesc")}>
+						<Toggle
+							value={subsets}
+							onChange={(checked) => {
+								setSubsets(checked);
+								this.subsets = checked;
+							}}/>
+					</Field>
+				</DialogControlsSection>
+
+				<DialogControlsSection>
+					<Field
 						label={t("raPoints")}
 						description={t("raPointsDesc")}>
 						<Toggle
@@ -232,28 +446,47 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								this.achievementTypes = checked;
 							}}/>
 					</Field>
+					<Field
+						label={(this.module.hasAchievementSetsSupport ? t("raParentSetSets") : t("raParentSetPrefixes"))}
+						description={(this.module.hasAchievementSetsSupport ? t("raParentSetSetsDesc") : t("raParentSetPrefixesDesc"))}>
+						<Toggle
+							value={parentSets}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setParentSets(checked);
+								this.parentSets = checked;
+							}}/>
+					</Field>
+					<Field
+						label={(this.module.hasAchievementSetsSupport ? t("raSubsetSetSets") : t("raSubsetSetPrefixes"))}
+						description={!subsets ?
+							t("settingsDependencyNotMet")
+								.replace("{setting1}", (this.module.hasAchievementSetsSupport ? t("raSubsetSetSets") : t("raSubsetSetPrefixes")))
+								.replace("{setting2}", t("raSubsets")) :
+							(this.module.hasAchievementSetsSupport ? t("raSubsetSetSetsDesc") : t("raSubsetSetPrefixesDesc"))}>
+						<Toggle
+							value={subsetsSets}
+							disabled={loadingData.loading || !subsets}
+							onChange={(checked) => {
+								setSubsetsSets(checked);
+								this.subsetsSets = checked;
+							}}/>
+					</Field>
 				</DialogControlsSection>
 			</>
 		)
 	}
 
 
-	public async getGameInfoAndProgress(appId: number): Promise<GetGameInfoAndUserProgressResponse | undefined>{
-		if(!this.username || !this.apiKey)
-			return undefined;
-		
-		const resolved = await this.resolve(appId, true);
-		if (!resolved)
-			return undefined;
-
+	private async getGameInfoAndProgressInternal(raId: ID): Promise<GetGameInfoAndUserProgressResponse | undefined>{
 		// Cache lasts 5 mins
-		let game: (typeof this.gameInfo[ID]) | undefined = this.gameInfo[resolved];
+		let game: (typeof this.gameInfo[ID]) | undefined = this.gameInfo[raId];
 		if(game && Math.floor(Math.abs(new Date().getTime() - game.retrieved) / (1000 * 60)) < 5)
 			return game;
 
 		// Clear cache
 		game = undefined;
-		delete this.gameInfo[resolved];
+		delete this.gameInfo[raId];
 
 		// Retry because of RetroAchievements throttling
 		let retry = 0;
@@ -267,16 +500,12 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 			if(!game){
 				const response = await fetchNoCorsLegacyTimeout(
 					`https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?` + new URLSearchParams({
-						z: this.username,
 						y: this.apiKey,
 						u: this.username,
-						g: resolved.toString(),
-					}).toString(), 'GET',
-					{
-						headers: { "User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)` }
-					});
+						g: raId.toString(),
+					}).toString(), 'GET');
 				if (response.status == 429 || response.status == 504 || response.status == 500){
-					this.logger.debug(`Response status for app id ${appId} (RA id: ${resolved}) was ${response.status}, retrying`, retry);
+					this.logger.debug(`Response status for RA id: ${raId} was ${response.status}, retrying`, retry);
 					retry++;
 				}
 				else if (response.status == 200){
@@ -285,7 +514,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 						game.retrieved = new Date().getTime();
 
 					if(game)
-						this.gameInfo[resolved] = game;
+						this.gameInfo[raId] = game;
 
 					return game;
 				}
@@ -298,12 +527,23 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 						this.apiKey = '';
 					}
 
-					this.logger.debug(`Response status for app id ${appId} (RA id: ${resolved}) ${response.status}`);
+					this.logger.debug(`Response status for RA id: ${raId} ${response.status}`);
 					throw new Error(`${response.status}`);
 				}
 			}
 		}
 
 		throw new Error("Maximum retries exceeded");
+	}
+
+	public async getGameInfoAndProgress(appId: number): Promise<GetGameInfoAndUserProgressResponse | undefined>{
+		if(!this.username || !this.apiKey)
+			return undefined;
+		
+		const resolved = await this.resolve(appId, true);
+		if (!resolved)
+			return undefined;
+
+		return await this.getGameInfoAndProgressInternal(resolved);
 	}
 }

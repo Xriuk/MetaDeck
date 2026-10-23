@@ -16,8 +16,7 @@ type PCSX2CompatData = {
 	status: "Perfect" | "Playable" | "Ingame" | "Menus" | "Intros" | "Nothing";
 };
 
-export interface PCSX2CompatdataProviderConfig extends ProviderConfig<"pcsx2">
-{
+export interface PCSX2CompatdataProviderConfig extends ProviderConfig<"pcsx2">{
 	
 }
 

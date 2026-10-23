@@ -208,6 +208,9 @@ export class Settings
 						api_key: '',
 						points: true,
 						achievement_types: true,
+						parent_sets: true,
+						subsets: true,
+						subsets_sets: true,
 						excluded_apps: [],
 						resolvers: {
 							ra: {

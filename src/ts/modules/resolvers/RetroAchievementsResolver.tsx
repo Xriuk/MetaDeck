@@ -34,9 +34,7 @@ export class RetroAchievementsResolver extends Resolver<"ra">{
 	override async mount(): Promise<void> {
 		// DEV: check if works, if not replace with new authenticated API
 		const response = await fetchNoCors("https://retroachievements.org/dorequest.php?r=hashlibrary", {
-			headers: {
-				"User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)`,
-			}
+			headers: { "User-Agent": `MetaDeck/${version} (+https://github.com/Xriuk/MetaDeck)` }
 		});
 		if(!response.ok){
 			toasterToast(t("initError"), this);

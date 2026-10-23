@@ -793,11 +793,19 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 		);
 	};
 
-	public clearAchievementsSchema(appId: number){
+	public removeAchievementsSchema(appId: number){
 		this.queryCache?.invalidateQueries({
 			queryKey: ["achievements", appId, "schema"],
 			exact: true
 		});
+	}
+	public clearAchievementsSchema(){
+		if(!this.queryCache)
+			return;
+
+		for (let appId of this.state.apps){
+			this.removeAchievementsSchema(+appId);
+		}
 	}
 
 	// applyOverview and applyDetails not used apparently...

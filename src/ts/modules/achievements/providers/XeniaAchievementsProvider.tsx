@@ -128,8 +128,12 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 	set gamerscore(data: boolean)
 	{
+		let current = this.gamerscore;
 		this.config.gamerscore = data;
 		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
 	}
 
 	get descriptionLocked(): boolean | null
@@ -139,8 +143,12 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 	set descriptionLocked(data: boolean | null)
 	{
+		let current = this.descriptionLocked;
 		this.config.description_locked = data;
 		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
 	}
 
 	get achievementTypes(): boolean
@@ -150,8 +158,12 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 	set achievementTypes(data: boolean)
 	{
+		let current = this.achievementTypes;
 		this.config.achievement_types = data;
 		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
 	}
 
 	get gameAchievements(): Record<number, XeniaGameAchievements | null>{
@@ -354,6 +366,8 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			] : [])
 		};
 
+		this.logger.debug(`${appId} groups: `, result.groups);
+
 		for(let achievement of achievements.achievements){
 			let achieved = achievement.flags?.earned === true ||
 				achievement.flags?.earned_online === true ||
@@ -373,25 +387,38 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 				unlocked = 0;
 
 			let groupId = 0;
+			let achievementType: string | undefined = undefined;
 			if(this.achievementTypes){
 				switch(achievement.flags?.type){
 				case 'Completion':
 					groupId = 1;
+					if(!this.module.hasAchievementSetsSupport)
+						achievementType = t("xeniaAchievementTypeCompletion");
 					break;
 				case 'Leveling':
 					groupId = 2;
+					if(!this.module.hasAchievementSetsSupport)
+						achievementType = t("xeniaAchievementTypeLeveling");
 					break;
 				case 'Unlock':
 					groupId = 3;
+					if(!this.module.hasAchievementSetsSupport)
+						achievementType = t("xeniaAchievementTypeUnlock");
 					break;
 				case 'Event':
 					groupId = 4;
+					if(!this.module.hasAchievementSetsSupport)
+						achievementType = t("xeniaAchievementTypeEvent");
 					break;
 				case 'Tournament':
+					if(!this.module.hasAchievementSetsSupport)
+						achievementType = t("xeniaAchievementTypeTournament");
 					groupId = 5;
 					break;
 				case 'Checkpoint':
 					groupId = 6;
+					if(!this.module.hasAchievementSetsSupport)
+						achievementType = t("xeniaAchievementTypeCheckpoint");
 					break;
 				}
 			}
@@ -403,6 +430,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 				rtUnlocked: unlocked,
 				strDescription: [
 					((this.gamerscore && achievement.gamerscore) ? `G ${achievement.gamerscore}` : undefined),
+					achievementType,
 					(((achieved && this.descriptionLocked == null) || this.descriptionLocked === false) ?
 						achievement.description_achieved :
 						achievement.description_unachieved)
