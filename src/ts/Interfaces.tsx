@@ -46,7 +46,14 @@ export interface CompatdataData extends EntryData{
 }
 
 export interface AchievementsData extends EntryData{
-	achievements: SteamAppAchievement[];
+	// First group is base game
+	groups: {
+		// DEV: add info for DLCs?
+		name: string; // Should be empty for base game
+		achievements: (SteamAppAchievement & {
+			strImageLocked?: string;
+		})[]; // Can be empty if base game
+	}[];
 }
 
 export const SteamAppTypeShortcut = 1073741824;

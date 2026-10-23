@@ -17,6 +17,8 @@ export interface RetroAchievementsAchievementsProviderConfig extends ProviderCon
 	username: string;
 	api_key: string;
 	points: boolean;
+	// https://github.com/RetroAchievements/RAWeb/blob/fa58a24122f80e86e401443514800a49d344b7d1/public/API/API_GetGameInfoAndUserProgress.php#L31
+	achievement_types: boolean;
 }
 
 export interface RetroAchievementsAchievementsProviderCache extends ProviderCache{
@@ -32,19 +34,16 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 	logger = new Logger(this.identifier);
 
-	get username(): string
-	{
+	get username(): string{
 		return this.config.username;
 	}
 
-	set username(data: string)
-	{
+	set username(data: string){
 		this.config.username = data;
 		void this.saveConfig();
 	}
 
-	get apiKey(): string
-	{
+	get apiKey(): string{
 		return this.config.api_key;
 	}
 
@@ -62,6 +61,17 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	set points(data: boolean)
 	{
 		this.config.points = data;
+		void this.saveConfig();
+	}
+
+	get achievementTypes(): boolean
+	{
+		return this.config.achievement_types;
+	}
+
+	set achievementTypes(data: boolean)
+	{
+		this.config.achievement_types = data;
 		void this.saveConfig();
 	}
 
@@ -93,37 +103,70 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 			if (!details)
 				return undefined;
 					
-			return {
+			let result: AchievementsData = {
 				title: details.strDisplayName,
 				id: game.ID,
 
-				achievements: Object.values(game.Achievements)
-					.sort((a, b) => Number(a.DisplayOrder) - Number(b.DisplayOrder))
-					.map(achievement => {
-						let achieved = !!achievement.DateEarned;
-				
-						return {
-							bAchieved: achieved,
-							bHidden: false,
-							flAchieved: (((achievement.NumAwarded ? Number(achievement.NumAwarded) : 0) / (game.NumDistinctPlayersCasual ? Number(game.NumDistinctPlayersCasual) : 1)) * 100.0),
-							flCurrentProgress: achieved ? 1 : 0,
-							flMaxProgress: 1,
-							flMinProgress: 0,
-							rtUnlocked: achieved ?
-								(achievement.DateEarnedHardcore ? ((new Date(achievement.DateEarnedHardcore).getTime() / 1000) + (new Date(achievement.DateEarnedHardcore).getTimezoneOffset() * 60)) :
-									achievement.DateEarned ? ((new Date(achievement.DateEarned).getTime() / 1000) + (new Date(achievement.DateEarned).getTimezoneOffset() * 60)) :
-									0) :
-								0,
-							strDescription: [
-								(this.points ? `${achievement.Points} CP` : undefined),
-								achievement.Description
-							].filter(d => d).join(' - '),
-							strID: achievement.ID,
-							strImage: `https://media.retroachievements.org/Badge/${achievement.BadgeName}${(achieved ? "" : "_lock")}.png`,
-							strName: achievement.Title
-						};
-					})
+				groups: [{
+					name: '',
+					achievements: []
+				}].concat(this.achievementTypes ? [
+					{
+						name: t("raAchievementTypeProgression"),
+						achievements: []
+					},
+					{
+						name: t("raAchievementTypeMissable"),
+						achievements: []
+					},
+					{
+						name: t("raAchievementTypeCompletion"),
+						achievements: []
+					}
+				] : [])
 			};
+
+			for(let achievement of Object.values(game.Achievements)
+				.sort((a, b) => Number(a.DisplayOrder) - Number(b.DisplayOrder))){
+
+				let achieved = !!achievement.DateEarned;
+
+				let groupId = 0;
+				if(this.achievementTypes){
+					switch((achievement as any).Type){
+					case 'progression':
+						groupId = 1;
+						break;
+					case 'missable':
+						groupId = 2;
+						break;
+					case 'win_condition':
+						groupId = 3;
+						break;
+					}
+				}
+					
+				result.groups[groupId].achievements.push({
+					bAchieved: achieved,
+					bHidden: false,
+					flAchieved: (((achievement.NumAwarded ? Number(achievement.NumAwarded) : 0) / (game.NumDistinctPlayersCasual ? Number(game.NumDistinctPlayersCasual) : 1)) * 100.0),
+					rtUnlocked: achieved ?
+						(achievement.DateEarnedHardcore ? ((new Date(achievement.DateEarnedHardcore).getTime() / 1000) + (new Date(achievement.DateEarnedHardcore).getTimezoneOffset() * 60)) :
+							achievement.DateEarned ? ((new Date(achievement.DateEarned).getTime() / 1000) + (new Date(achievement.DateEarned).getTimezoneOffset() * 60)) :
+							0) :
+						0,
+					strDescription: [
+						(this.points ? `${achievement.Points} CP` : undefined),
+						achievement.Description
+					].filter(d => d).join(' - '),
+					strID: achievement.ID,
+					strImage: `https://media.retroachievements.org/Badge/${achievement.BadgeName}.png`,
+					strImageLocked: `https://media.retroachievements.org/Badge/${achievement.BadgeName}_lock.png`,
+					strName: achievement.Title
+				});
+			}
+
+			return result;
 		});
 	}
 
@@ -134,6 +177,8 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		const [username, setUsername] = useState(this.username);
 		const [apiKey, setApiKey] = useState(this.apiKey);
 		const [points, setPoints] = useState(this.points);
+		const [achievementTypes, setAchievementTypes] = useState(this.achievementTypes);
+
 		return (
 			<>
 				<DialogControlsSection>
@@ -174,6 +219,17 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 							onChange={(checked) => {
 								setPoints(checked);
 								this.points = checked;
+							}}/>
+					</Field>
+					<Field
+						label={(this.module.hasAchievementSetsSupport ? t("raAchievementTypesSets") : t("raAchievementTypesPrefix"))}
+						description={(this.module.hasAchievementSetsSupport ? t("raAchievementTypesSetsDesc") : t("raAchievementTypesPrefixDesc"))}>
+						<Toggle
+							value={achievementTypes}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setAchievementTypes(checked);
+								this.achievementTypes = checked;
 							}}/>
 					</Field>
 				</DialogControlsSection>

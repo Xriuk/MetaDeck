@@ -56,12 +56,10 @@ export class Mounts implements AsyncMountable{
 	addPatchMount(mount: PatchMountable | AsyncPatchMountable): void {
 		let patch: Patch;
 		this.addMount({
-			async mount()
-			{
+			async mount(){
 				return patch = (await mount.patch());
 			},
-			async dismount()
-			{
+			async dismount(){
 				patch?.unpatch();
 			}
 		})

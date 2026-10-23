@@ -73,9 +73,9 @@ type SteamAppAchievement =
 	rtUnlocked: number, // Unlocked date timestamp
 	strImage: string,
 	bHidden: boolean,
-	flMinProgress: number,
-	flCurrentProgress: number, // Progress percentage of the player achievement (flMinProgress-flMaxProgress)
-	flMaxProgress: number,
+	flMinProgress?: number,
+	flCurrentProgress?: number, // Progress percentage of the player achievement (flMinProgress-flMaxProgress), used only if the achievement has progression (eg: 2 items out of 5 picked)
+	flMaxProgress?: number,
 	flAchieved: number // Percentage of players who achieved (0-100)
 }
 

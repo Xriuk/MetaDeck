@@ -6,7 +6,7 @@ import type { ProviderConfig, ProviderCache } from "../../Provider";
 import { AchievementsProvider } from "../AchievementsProvider";
 import { FaXbox } from "react-icons/fa";
 import { getLaunchCommand, romRegex } from "../../../shortcuts";
-import { getAppDetails, grayScaleIcon, toasterToast } from "../../../util";
+import { getAppDetails, toasterToast } from "../../../util";
 import { RAWGMetadataProvider } from "../../metadata/providers/RAWGMetadataProvider";
 import { DialogControlsSection, Field, TextField, DialogButton, Toggle, Dropdown } from "@decky/ui";
 import React, { useState } from "react";
@@ -68,6 +68,7 @@ export interface XeniaAchievementsProviderConfig extends ProviderConfig<'xenia'>
 	language: number | null; // null will try to guess or fallback to english
 	gamerscore: boolean;
 	description_locked: boolean | null; // null: show locked/unlocked, true: show locked, false: show unlocked
+	achievement_types: boolean;
 }
 
 export interface XeniaAchievementsProviderCache extends ProviderCache{
@@ -139,6 +140,17 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 	set descriptionLocked(data: boolean | null)
 	{
 		this.config.description_locked = data;
+		void this.saveConfig();
+	}
+
+	get achievementTypes(): boolean
+	{
+		return this.config.achievement_types;
+	}
+
+	set achievementTypes(data: boolean)
+	{
+		this.config.achievement_types = data;
 		void this.saveConfig();
 	}
 
@@ -311,7 +323,35 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			title: details.strDisplayName,
 			id: titleId,
 
-			achievements: []
+			groups: [{
+				name: '',
+				achievements: []
+			}].concat(this.achievementTypes ? [
+				{
+					name: t("xeniaAchievementTypeCompletion"),
+					achievements: []
+				},
+				{
+					name: t("xeniaAchievementTypeLeveling"),
+					achievements: []
+				},
+				{
+					name: t("xeniaAchievementTypeUnlock"),
+					achievements: []
+				},
+				{
+					name: t("xeniaAchievementTypeEvent"),
+					achievements: []
+				},
+				{
+					name: t("xeniaAchievementTypeTournament"),
+					achievements: []
+				},
+				{
+					name: t("xeniaAchievementTypeCheckpoint"),
+					achievements: []
+				}
+			] : [])
 		};
 
 		for(let achievement of achievements.achievements){
@@ -332,13 +372,34 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			else
 				unlocked = 0;
 
-			result.achievements.push({
+			let groupId = 0;
+			if(this.achievementTypes){
+				switch(achievement.flags?.type){
+				case 'Completion':
+					groupId = 1;
+					break;
+				case 'Leveling':
+					groupId = 2;
+					break;
+				case 'Unlock':
+					groupId = 3;
+					break;
+				case 'Event':
+					groupId = 4;
+					break;
+				case 'Tournament':
+					groupId = 5;
+					break;
+				case 'Checkpoint':
+					groupId = 6;
+					break;
+				}
+			}
+
+			result.groups[groupId].achievements.push({
 				bAchieved: achieved,
 				bHidden: achievement.flags?.secret === true,
 				flAchieved: achievements.rarity?.[achievement.id] ?? 0,
-				flCurrentProgress: achieved ? 1 : 0,
-				flMaxProgress: 1,
-				flMinProgress: 0,
 				rtUnlocked: unlocked,
 				strDescription: [
 					((this.gamerscore && achievement.gamerscore) ? `G ${achievement.gamerscore}` : undefined),
@@ -347,7 +408,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 						achievement.description_unachieved)
 				].filter(d => d).join(' - '),
 				strID: achievement.id.toString(),
-				strImage: achieved ? achievement.icon : await grayScaleIcon(achievement.icon),
+				strImage: achievement.icon,
 				strName: achievement.name
 			});
 		}
@@ -363,6 +424,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		const [language, setLanguage] = useState(this.config.language);
 		const [gamerscore, setGamerscore] = useState(this.gamerscore);
 		const [descriptionLocked, setDescriptionLocked] = useState(this.descriptionLocked);
+		const [achievementTypes, setAchievementTypes] = useState(this.achievementTypes);
 
 		const currentLanguage = getCurrentLanguage();
 		const defaultLanguage = langMap[currentLanguage] ? currentLanguage : 'en';
@@ -445,6 +507,17 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 								setDescriptionLocked(newVal.data);
 								this.descriptionLocked = newVal.data;
 							}} />
+					</Field>
+					<Field
+						label={(this.module.hasAchievementSetsSupport ? t("xeniaAchievementTypesSets") : t("xeniaAchievementTypesPrefix"))}
+						description={(this.module.hasAchievementSetsSupport ? t("xeniaAchievementTypesSetsDesc") : t("xeniaAchievementTypesPrefixDesc"))}>
+						<Toggle
+							value={achievementTypes}
+							disabled={loadingData.loading}
+							onChange={(checked) => {
+								setAchievementTypes(checked);
+								this.achievementTypes = checked;
+							}}/>
 					</Field>
 				</DialogControlsSection>
 			</>

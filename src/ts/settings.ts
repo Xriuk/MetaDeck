@@ -6,14 +6,19 @@ import {ModuleCaches, ModuleConfigs} from "./modules/Module";
 import {merge} from "lodash-es";
 import { Mutex } from "async-mutex";
 import type { ResolverConfigs, ResolverCaches } from "./modules/Resolver";
+import { version } from "@decky/pkg";
+import type { EntryData } from "./Interfaces";
+import type { SteamAppAchievement } from "./SteamTypes";
 
 export type ConfigData = {
+	version: string; // Plugin version
 	excluded_apps: number[];
 	modules: ModuleConfigs;
 	resolvers: ResolverConfigs;
 }
 
 export type CacheData = {
+	version: string; // Plugin version
 	modules: ModuleCaches;
 	resolvers: ResolverCaches;
 }
@@ -26,6 +31,7 @@ export class Settings
 	private readonly packet_size: number = 4000; // chars
 
 	static readonly defaultConfig: ConfigData = {
+		version: version,
 		excluded_apps: [],
 		modules: {
 			metadata: {
@@ -201,6 +207,7 @@ export class Settings
 						username: '',
 						api_key: '',
 						points: true,
+						achievement_types: true,
 						excluded_apps: [],
 						resolvers: {
 							ra: {
@@ -228,6 +235,7 @@ export class Settings
 						language: null,
 						gamerscore: true,
 						description_locked: null,
+						achievement_types: false, // Weird categories, we'll disable them by default
 						excluded_apps: [],
 						resolvers: {
 							xenia: {
@@ -254,9 +262,10 @@ export class Settings
 			gog_junk: {},
 			gog_heroic: {}
 		}
-	}
+	};
 
 	static readonly defaultCache: CacheData = {
+		version: version,
 		modules: {
 			metadata: {
 				data: {},
@@ -334,7 +343,7 @@ export class Settings
 				hashes: {}
 			}
 		}
-	}
+	};
 
 	configData: ConfigData = merge({}, Settings.defaultConfig);
 	private readonly configMutex = new Mutex();
@@ -436,7 +445,12 @@ export class Settings
 				this.logger.error("Error while reading config", e);
 			}
 
-			this.configData = merge({}, Settings.defaultConfig, JSON.parse(buffer || "{}"));
+			let savedData: ConfigData = JSON.parse(buffer || "{}");
+
+			// Migrate versions if needed
+			savedData.version = version;
+
+			this.configData = merge({}, Settings.defaultConfig, savedData);
 			const end = systemClock.getTimeMs();
 			this.logger.debug("Read config in " + (end - start) + "ms", this.configData);
 
@@ -491,7 +505,41 @@ export class Settings
 				this.logger.error("Error while reading cache", e);
 			}
 
-			this.cacheData = merge({}, Settings.defaultCache, JSON.parse(buffer || "{}"));
+			let savedData: CacheData = JSON.parse(buffer || "{}");
+
+			// Migrate versions if needed
+			if(savedData.version != version){
+				// If we have no version we assume 4.0.0
+				if(!savedData.version)
+					savedData.version = "4.0.0";
+
+				// If we are lower than 4.1.0 we upgrade achievements cache to use sets
+				if(savedData.modules?.achievements?.data &&
+					savedData.version.localeCompare("4.1.0", undefined, { numeric: true }) < 0){
+
+					this.logger.debug("Migrating achievements cache to include achievement sets");
+
+					for(let appId in savedData.modules.achievements.data){
+						let oldData: EntryData & {
+							achievements: SteamAppAchievement[];
+						} | null = savedData.modules.achievements.data[appId] as any;
+						if(!oldData)
+							continue;
+
+						savedData.modules.achievements.data[appId] = {
+							id: oldData.id,
+							title: oldData.title,
+							groups: [{
+								name: '',
+								achievements: oldData.achievements
+							}]
+						};
+					}
+				}
+			}
+			savedData.version = version;
+
+			this.cacheData = merge({}, Settings.defaultCache, savedData);
 			const end = systemClock.getTimeMs();
 			this.logger.debug("Read cache in " + (end - start) + "ms", this.cacheData);
 

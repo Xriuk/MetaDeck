@@ -7,13 +7,21 @@ import { Module, type ModuleCache, type ModuleConfig } from "../Module";
 import type { AchievementsProvider } from "./AchievementsProvider";
 import { afterPatch, beforePatch, callOriginal, DialogControlsSection, Field, findModuleExport, replacePatch, Toggle, type Patch } from "@decky/ui";
 import type { AllAchievements, AppData, GlobalAchievements, Hook, SteamAppOverview } from "../../SteamTypes";
-import { stateTransaction } from "../../util";
+import { grayScaleIcon, stateTransaction } from "../../util";
 import { useMetaDeckState } from "../../MetaDeckState";
 import { useState } from "react";
 import React from "react";
 import { RetroAchievementsAchievementsProvider, type RetroAchievementsAchievementsProviderCache, type RetroAchievementsAchievementsProviderConfig } from "./providers/RetroAchievementsAchievementsProvider";
 import { RPCS3AchievementsProvider, type RPCS3AchievementsProviderCache, type RPCS3AchievementsProviderConfig } from "./providers/RPCS3AchievementsProvider";
 import { XeniaAchievementsProvider, type XeniaAchievementsProviderCache, type XeniaAchievementsProviderConfig } from "./providers/XeniaAchievementsProvider";
+
+type CacheEvent = {
+	type: "added" | "removed" | "updated";
+	query: {
+		queryKey: any[];
+		state: any;
+	};
+};
 
 // DEV: figure out what is bypassCounter in MetadataModule and if we can use that too (maybe it's to avoid multiple requests or ripples?)
 
@@ -45,14 +53,32 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 
 	logger: Logger = new Logger(this.identifier);
 
+	public hasAchievementSetsSupport = false;
+	private queryCache?: {
+		getQueryCache(): {
+			subscribe(callback: (event: CacheEvent) => void): () => void; // Returns function to call to unsubscribe
+			notify(event: CacheEvent): void;
+		};
+		invalidateQueries(params: {
+			queryKey: any[];
+			exact?: boolean;
+		}): any;
+	}
+
 	providers: AchievementsProvider<any>[] = [
 		new RetroAchievementsAchievementsProvider(this),
 		new RPCS3AchievementsProvider(this),
 		new XeniaAchievementsProvider(this)
 	];
 
-	override async removeCache(appId: number): Promise<void> {
+	override async removeCache(appId: number, onlyProgress = false): Promise<void> {
 		await super.removeCache(appId);
+
+		if(!onlyProgress && this.hasAchievementSetsSupport && this.queryCache){
+			this.queryCache.invalidateQueries({
+				queryKey: ["achievements", appId]
+			});
+		}
 
 		let appData = appDetailsStore.GetAppData(appId);
 		if (!appData?.details)
@@ -74,23 +100,32 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 	addMounts(mounts: Mounts): void {
 		const module = this;
 
+		async function replaceImages(achievements: AchievementsData['groups'][0]['achievements']){
+			for(let achievement of achievements){
+				achievement.strImage = achievement.strImageLocked
+					?? (achievement.strImage ? await grayScaleIcon(achievement.strImage) : achievement.strImage);
+			}
+		}
+
 		// DEV: What is this?
 		// Maybe use SteamClient.Apps.GetMyAchievementsForApp?
 		mounts.addPatchMount({
-			patch(): Patch
-			{
+			patch(): Patch{
 				const Achievements = findModuleExport(mProp => mProp?.m_mapMyAchievements);
 				module.logger.debug("Achievements", Achievements);
 
 				return replacePatch(
 					Achievements.__proto__,
 					"LoadMyAchievements",
-					args =>
-					{
+					args => {
 						if(!module.isValid || module.excludedApps.includes(args[0]))
 							return callOriginal;
 
-						if (appStore.GetAppOverviewByAppID(args[0])?.app_type === SteamAppTypeShortcut && !Achievements.m_mapGlobalAchievements.has(args[0])){
+						if (appStore.GetAppOverviewByAppID(args[0])?.app_type === SteamAppTypeShortcut &&
+							!Achievements.m_mapGlobalAchievements.has(args[0])){
+
+							module.logger.debug("LoadMyAchievements");
+								
 							const data = module.fetchData(args[0]);
 							if(data){
 								let user: AllAchievements['data'] = {
@@ -99,16 +134,29 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 									unachieved: {}
 								};
 								let global: GlobalAchievements['data'] = {};
-								for(let achievement of data.achievements){
-									if(achievement.bAchieved)
-										user.achieved[achievement.strID] = achievement;
-									else if(achievement.bHidden)
-										user.hidden[achievement.strID] = achievement;
-									else
-										user.unachieved[achievement.strID] = achievement;
+								for(let group of data.groups){
+									for(let achievement of group.achievements){
+										if(achievement.bAchieved)
+											user.achieved[achievement.strID] = achievement;
+										else{
+											// Replace the image with the locked one (we copy properties to avoid changing them),
+											// we'll run them in another promise below
+											achievement = { ...achievement };
 
-									global[achievement.strID] = achievement.flAchieved;
+											if(achievement.bHidden)
+												user.hidden[achievement.strID] = achievement;
+											else
+												user.unachieved[achievement.strID] = achievement;
+										}
+
+										global[achievement.strID] = achievement.flAchieved;
+									}
 								}
+								// Replace images with locked ones
+								let hiddenOrUnachieved = Object.values(user.hidden)
+									.concat(Object.values(user.unachieved));
+								if(hiddenOrUnachieved.length)
+									void replaceImages(hiddenOrUnachieved);
 
 								Achievements.m_mapMyAchievements.set(args[0], {
 									loading: false,
@@ -149,7 +197,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 
 							// @ts-ignore
 							const data = module.fetchData((this as SteamAppOverview).appid);
-							if (data?.achievements.length)
+							if (data?.groups.some(g => g.achievements.length))
 								return true;
 						}
 
@@ -161,7 +209,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 
 		// Patching appDetailsStore.GetAchievements retrieves them only on app details,
 		// while patching appDetailsStore.GetAppData retrieves them also on overlay
-		const achievementsAppData = (appId: number, appData: AppData) => {
+		function achievementsAppData(appId: number, appData: AppData){
 			if(!appData.details || appData.details.achievements?.nTotal ||
 				(appData.bLoadingAchievments && !module.hasCachedData(appId))){
 
@@ -174,12 +222,25 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			if(!module.hasCachedData(appId))
 				return;
 
-			let achieved = data?.achievements.filter(a => a.bAchieved);
+			let achievements = data?.groups.flatMap(g => g.achievements);
+			let achieved = achievements?.filter(a => a.bAchieved);
 			const nAchieved = achieved?.length ?? 0;
-			const nTotal = data?.achievements.length ?? 0;
-			const vecHighlight = achieved?.filter(a => a.bHidden !== true) ?? [];
-			const vecAchievedHidden = data?.achievements.filter(a => a.bHidden) ?? [];
-			const vecUnachieved = data?.achievements?.filter(a => !a.bAchieved) ?? [];
+			const nTotal = achievements?.length ?? 0;
+			const vecHighlight = (achieved?.filter(a => !a.bHidden) ?? [])
+				.slice(0, 12); // We limit highlighted achievements to 12
+			const vecAchievedHidden = achievements
+				?.filter(a => a.bAchieved && a.bHidden === true)
+				?? [];
+			// Replace the image with the locked one (we copy properties to avoid changing them),
+			// we'll run them in another promise below
+			const vecUnachieved = achievements
+				?.filter(a => !a.bAchieved)
+				.map(a => ({ ...a }))
+				?? [];
+			// Replace images with locked ones
+			if(vecUnachieved.length)
+				void replaceImages(vecUnachieved);
+
 			stateTransaction(() => {
 				appData.details!.achievements = {
 					nAchieved,
@@ -193,18 +254,20 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			});
 			appData.bLoadingAchievments = false;
 		}
+		// DEV: deprecated for future versions?
 		mounts.addPatchMount({
 			patch(): Patch{
 				return beforePatch(
 					appDetailsStore.__proto__,
 					"GetAchievements",
 					args => {
-						if(!module.isValid || module.overlayMenu || module.excludedApps.includes(args[0]))
-							return;
+						if(!module.isValid || module.overlayMenu || module.excludedApps.includes(args[0]) ||
+							appStore.GetAppOverviewByAppID(args[0]).app_type != SteamAppTypeShortcut){
 
-						const overview = appStore.GetAppOverviewByAppID(args[0]);
-						if(overview.app_type != SteamAppTypeShortcut)
 							return;
+						}
+
+						module.logger.debug("GetAchievements");
 
 						let appData = appDetailsStore.GetAppData(args[0]);
 						achievementsAppData(args[0], appData);
@@ -235,10 +298,9 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 
 		// Achievements section on app details page
 		mounts.addPatchMount({
-			patch(): Patch
-			{
+			patch(): Patch{
 				const AppDetailsSections = findModuleExport((mProp) => (
-					typeof mProp === 'function' &&
+					typeof mProp === 'function' && // class
 					typeof mProp.prototype?.GetSections === 'function'
 				));
 				module.logger.debug("AppDetailsSections", AppDetailsSections);
@@ -261,43 +323,387 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 		// clear cache and refetch
 		let appCloseLifetimeHook: Hook;
 		let overlayOpenLifetimeHook: Hook;
+		function clearProgressCache(appId: number){
+			void module.removeCache(appId, true);
+
+			if(module.hasAchievementSetsSupport && module.queryCache){
+				module.queryCache.invalidateQueries({
+					queryKey: ["achievements", appId, "user_achievements"],
+					exact: true
+				});
+			}
+
+			module.fetchData(appId);
+		}
 		mounts.addMount({
-			mount: function (): void
-			{
+			mount(){
 				overlayOpenLifetimeHook = SteamClient.Overlay.RegisterForOverlayActivated((_, appId, active) => {
 					if (!module.isValid || module.excludedApps.includes(appId))
 						return;
 
-					if(active && appStore.GetAppOverviewByAppID(appId).app_type == SteamAppTypeShortcut){
-						void module.removeCache(appId);
-						module.fetchData(appId);
-					}
+					if(active && appStore.GetAppOverviewByAppID(appId).app_type == SteamAppTypeShortcut)
+						clearProgressCache(appId);
 				});
-				appCloseLifetimeHook = SteamClient.GameSessions.RegisterForAppLifetimeNotifications(update =>
-				{
+				appCloseLifetimeHook = SteamClient.GameSessions.RegisterForAppLifetimeNotifications(update =>{
 					if (!module.isValid || module.excludedApps.includes(update.unAppID))
 						return;
 
-					if (!update.bRunning && appStore.GetAppOverviewByAppID(update.unAppID).app_type == SteamAppTypeShortcut){
-						void module.removeCache(update.unAppID);
-						module.fetchData(update.unAppID);
-					}
+					if (!update.bRunning && appStore.GetAppOverviewByAppID(update.unAppID).app_type == SteamAppTypeShortcut)
+						clearProgressCache(update.unAppID);
 				});
 			},
-			dismount: function (): void
-			{
+			dismount(){
 				overlayOpenLifetimeHook?.unregister();
 				appCloseLifetimeHook?.unregister();
 			}
 		});
+
+		// Support for achievement sets (now in beta)
+		// DEV: need to reset Steam query cache in resetCache
+		module.queryCache = findModuleExport((mProp) => (
+			typeof mProp === 'object' &&
+			typeof mProp.getQueryCache === 'function'
+		));
+		console.log("Cache", module.queryCache);
+		const MessagesModule = findModuleExport((mProp) => (
+			typeof mProp === 'object' &&
+			typeof mProp.GetGameAchievements === 'function'
+		));
+		console.log("MessagesModule", MessagesModule);
+		if(MessagesModule && module.queryCache && MessagesModule.GetGameAchievements &&
+			MessagesModule.GetGlobalAchievementPercentages &&
+			MessagesModule.GetUserAchievements){
+
+			module.hasAchievementSetsSupport = true;
+
+			// Retrieve achievements
+			type GetGameAchievementsType = {
+				achievements: {
+					internal_name: string; // Unique per game (not set)
+					localized_name: string;
+					localized_desc: string;
+					icon: string;
+					icon_gray: string;
+					hidden: boolean;
+					player_percent_unlocked: string; // ???
+					internal_key: number; // Unique per game (not set)
+					min_progress_int?: number;
+					max_progress_int?: number;
+					groupid?: number; // 0/undefined for base
+					archived: boolean; // Should be false for events/timed achievements(?)
+					progress_type: number; // Enum ???
+					min_progress_float?: number;
+					max_progress_float?: number;
+				}[];
+				schema_version: number; // Can be 0(?)
+				groups: {
+					groupid: number; // 0 is reserved for base game
+					localized_name: string; // Localized name of group, should be "Base Game" for group id 0
+					dlcappid: number; // 0 for none
+					archived: boolean; // Should be false
+					developeronly: boolean; // Should be false
+					order: number; // 0-based, base game should be 0, and others can be sorted
+					ispublic: boolean; // Should be true
+					total_achievements: number;
+					completion_achievements: number;
+				}[];
+				schema_hash: number; // Can be 0(?)
+			};
+			async function fetchGameAchievements(appId: number, ret: Promise<any>): Promise<any>{
+				let data = await module.fetchDataAsync(appId);
+
+				module.logger.debug("GetGameAchievements data", data);
+
+				let i = 0;
+				let j = 0;
+				let result: GetGameAchievementsType = {
+					achievements: [],
+					schema_version: 0,
+					groups: [],
+					schema_hash: 0
+				};
+
+				if(data?.groups){
+					for(let group of data.groups){
+						let groupId = i++;
+
+						if(groupId !== 0){
+							result.groups.push({
+								groupid: groupId,
+								localized_name: group.name,
+								dlcappid: 0,
+								archived: false,
+								developeronly: false,
+								order: groupId,
+								ispublic: true,
+								total_achievements: group.achievements.length,
+								completion_achievements: group.achievements.length
+							});
+						}
+
+						for(let achievement of group.achievements){
+							result.achievements.push({
+								internal_name: achievement.strID,
+								localized_name: achievement.strName,
+								localized_desc: achievement.strDescription,
+								icon: achievement.strImage,
+								icon_gray: achievement.strImageLocked
+									?? (achievement.strImage ? await grayScaleIcon(achievement.strImage) : achievement.strImage),
+								hidden: achievement.bHidden,
+								player_percent_unlocked: achievement.flAchieved.toString(),
+								internal_key: j++,
+								max_progress_int: achievement.flMaxProgress,
+								min_progress_int: achievement.flMinProgress,
+								groupid: groupId === 0 ? undefined : groupId,
+								archived: false,
+								progress_type: 0, // ???
+								max_progress_float: achievement.flMaxProgress,
+								min_progress_float: achievement.flMinProgress
+							});
+						}
+					}
+				}
+
+				module.logger.debug("GetGameAchievements result", result);
+
+				// Await promise to retrieve message class and message type, and re-create it with a new body
+				let response = await ret;
+				let newResponse = response.__proto__.constructor.InitFromObject(response.Body().__proto__.constructor, result);
+				newResponse.Hdr().set_eresult(1);
+
+				return newResponse;
+			}
+			mounts.addPatchMount({
+				patch(): Patch{
+					return afterPatch(MessagesModule, "GetGameAchievements", function(args: any[], ret: Promise<any>){
+						let appId = args[1]?.appid;
+						
+						if(!module.isValid || !appId || module.excludedApps.includes(appId))
+							return ret;
+
+						const overview = appStore.GetAppOverviewByAppID(appId);
+						if(overview.app_type != SteamAppTypeShortcut)
+							return ret;
+
+
+						return fetchGameAchievements(appId, ret);
+					});
+				}
+			});
+
+			// Retrieve rarity
+			type GetGlobalAchievementPercentagesType = {
+				achievements: {
+					internal_key: number;
+					player_percent_unlocked: number; // flAchieved Percentage of players who achieved (0-100), min should be 0.1 by default
+				}[];
+				groups: {
+					groupid: number;
+					player_percent_completed: number; // Min of flAchieved of achievements in group
+				}[];
+			};
+			async function fetchAchievementPercentages(appId: number, ret: Promise<any>): Promise<any>{
+				let data = await module.fetchDataAsync(appId);
+
+				module.logger.debug("GetGlobalAchievementPercentages data", data);
+
+				let i = 0;
+				let j = 0;
+				let result: GetGlobalAchievementPercentagesType = {
+					achievements: [],
+					groups: []
+				};
+				if(data){
+					for(let group of data.groups){
+						result.groups.push({
+							groupid: i++,
+							player_percent_completed: group.achievements.length ? Math.min(...group.achievements.map(a => a.flAchieved || 0.1)) : 0
+						});
+
+						for(let achievement of group.achievements){
+							result.achievements.push({
+								internal_key: j++,
+								player_percent_unlocked: achievement.flAchieved || 0.1
+							});
+						}
+					}
+				}
+
+				module.logger.debug("GetGlobalAchievementPercentages result", result);
+
+				// Await promise to retrieve message class and message type, and re-create it with a new body
+				let response = await ret;
+				let newResponse = response.__proto__.constructor.InitFromObject(response.Body().__proto__.constructor, result);
+				newResponse.Hdr().set_eresult(1);
+
+				return newResponse;
+			}
+			mounts.addPatchMount({
+				patch(): Patch{
+					return afterPatch(MessagesModule, "GetGlobalAchievementPercentages", function(args: any[], ret: Promise<any>){
+						let appId = args[1]?.appid;
+
+						if(!module.isValid || !appId || module.excludedApps.includes(args[1]))
+							return ret;
+
+						const overview = appStore.GetAppOverviewByAppID(args[1]);
+						if(overview.app_type != SteamAppTypeShortcut)
+							return ret;
+
+						return fetchAchievementPercentages(appId, ret);
+					});
+				}
+			});
+
+			// Retrieve progress
+			type GetUserAchievementsType = {
+				achievements: {
+					internal_key: number;
+					unlocked: boolean;
+					unlock_time: number;
+					progress_int?: number;
+					progress_float?: number;
+				}[];
+				schema_version: number;
+				schema_hash: number;
+				groups: {
+					groupid: number,
+					is_achievable: boolean, // Should be true
+					completed_achievements: number,
+					is_completed: boolean, // Should be true if all completed
+					time_completed: number; // Should be max unlock_time of all achievements in group
+				}[];
+			};
+			async function fetchUserAchievements(appId: number, ret: Promise<any>): Promise<any>{
+				let data = await module.fetchDataAsync(appId);
+
+				module.logger.debug("GetUserAchievements data", data);
+
+				let i = 0;
+				let j = 0;
+				let result: GetUserAchievementsType = {
+					achievements: [],
+					schema_version: 0,
+					schema_hash: 0,
+					groups: []
+				};
+				if(data){
+					for(let group of data.groups){
+						let completedAchievements = group.achievements.filter(a => a.bAchieved === true).length;
+						result.groups.push({
+							groupid: i++,
+							is_achievable: true,
+							completed_achievements: completedAchievements,
+							is_completed: completedAchievements === group.achievements.length,
+							time_completed: completedAchievements === group.achievements.length ?
+								Math.max(...group.achievements.map(a => a.rtUnlocked)) :
+								0
+						});
+
+						for(let achievement of group.achievements){
+							result.achievements.push({
+								internal_key: j++,
+								unlocked: achievement.bAchieved,
+								unlock_time: achievement.rtUnlocked,
+								progress_int: achievement.flCurrentProgress,
+								progress_float: achievement.flCurrentProgress
+							});
+						}
+					}
+				}
+
+				module.logger.debug("GetUserAchievements result", result);
+
+				// Await promise to retrieve message class and message type, and re-create it with a new body
+				let response = await ret;
+				let newResponse = response.__proto__.constructor.InitFromObject(response.Body().__proto__.constructor, result);
+				newResponse.Hdr().set_eresult(1);
+
+				return newResponse;
+			}
+			mounts.addPatchMount({
+				patch(): Patch{
+					return afterPatch(MessagesModule, "GetUserAchievements", function(args: any[], ret: Promise<any>){
+						let appId = args[1]?.appid;
+
+						if(!module.isValid || !appId || module.excludedApps.includes(appId))
+							return ret;
+
+						const overview = appStore.GetAppOverviewByAppID(appId);
+						if(overview.app_type != SteamAppTypeShortcut)
+							return ret;
+
+						return fetchUserAchievements(appId, ret);
+					});
+				}
+			});
+
+			// Fix achievement icons urls
+			type AchievementsSchemaType = {
+				appid: number;
+				groups: {
+					achievements: {
+						icon_achieved: string;
+						icon_unachieved: string;
+					}[];
+				}[];
+			};
+			let cacheFixSubscription: () => void;
+			const imageUrlRegex = /((?:https?:\/\/|data:image\/).+?)(?=https?:\/\/|data:image\/|$)/g;
+			function isUnpatched(url: string): boolean{
+				let match = url.match(imageUrlRegex);
+				return !!match?.length && match.length > 1;
+			}
+			function patch(url: string): string{
+				return url.match(imageUrlRegex)![1];
+			}
+			mounts.addMount({
+				mount(){
+					cacheFixSubscription = module.queryCache!.getQueryCache().subscribe(event => {
+						if((event.type !== 'added' && event.type !== 'updated') ||
+							event.query.queryKey.length < 3 || event.query.queryKey[0] !== "achievements" ||
+								event.query.queryKey[2] !== "schema" ||
+							!event.query.state.data ||
+							appStore.GetAppOverviewByAppID((event.query.state.data as AchievementsSchemaType).appid).app_type != SteamAppTypeShortcut ||
+							!(event.query.state.data as AchievementsSchemaType).groups
+								.some(g => g.achievements.some(a => isUnpatched(a.icon_achieved) || isUnpatched(a.icon_unachieved)))){
+
+							return;
+						}
+
+						// Patch the urls
+						for(let group of (event.query.state.data as AchievementsSchemaType).groups){
+							for(let achievement of group.achievements){
+								if(isUnpatched(achievement.icon_achieved))
+									achievement.icon_achieved = patch(achievement.icon_achieved);
+								if(isUnpatched(achievement.icon_unachieved))
+									achievement.icon_unachieved = patch(achievement.icon_unachieved);
+							}
+						}
+
+						// Send an update event, in case someone else is subscribed
+						setTimeout(() => module.queryCache!.getQueryCache().notify(event));
+					});
+				},
+				dismount() {
+					cacheFixSubscription();
+				}
+			});
+		}
 	}
 
 	progressDescription(data?: AchievementsData): string{
-		return t("foundAchievements").replace("{num}", (data?.achievements?.length ?? 0).toString());
+		if(data?.groups.length && data.groups.length > 1){
+			return t("foundAchievementsSets")
+				.replace("{num1}", data.groups.flatMap(g => g.achievements).length.toString())
+				.replace("{num2}", data.groups.length.toString());
+		}
+		else
+			return t("foundAchievements").replace("{num}", (data?.groups.flatMap(g => g.achievements).length ?? 0).toString());
 	}
 
 	isEmpty(data: AchievementsData): boolean {
-		return !data.achievements?.length;
+		return !data.groups.some(g => g.achievements.length);
 	}
 	
 	protected override cacheData(appId: number, data: AchievementsData | null): void {
@@ -386,6 +792,13 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			</>
 		);
 	};
+
+	public clearAchievementsSchema(appId: number){
+		this.queryCache?.invalidateQueries({
+			queryKey: ["achievements", appId, "schema"],
+			exact: true
+		});
+	}
 
 	// applyOverview and applyDetails not used apparently...
 }

@@ -5,7 +5,7 @@ import type { ProviderConfig, ProviderCache } from "../../Provider";
 import { AchievementsProvider } from "../AchievementsProvider";
 import type { AchievementsData } from "../../../Interfaces";
 import { getUserTrophiesEarnedForTitle, type AuthTokensResponse, type UserThinTrophy } from "psn-api";
-import { fetchNoCorsLegacyTimeout, getAppDetails, grayScaleIcon, toasterToast } from "../../../util";
+import { fetchNoCorsLegacyTimeout, getAppDetails, toasterToast } from "../../../util";
 import { getLaunchCommand, romRegex } from "../../../shortcuts";
 import { rpcs3RomPathRegex, type MultiIdRPCS3Resolver } from "../../resolvers/MultiId/MultiIdRPCS3Resolver";
 import { SiPlaystation3 } from "react-icons/si";
@@ -162,7 +162,6 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 	get trophySets(): boolean{
 		return this.config.trophy_sets;
 	}
-
 	set trophySets(data: boolean){
 		this.config.trophy_sets = data;
 		void this.saveConfig();
@@ -507,13 +506,52 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 				this.logger.debug(`${appId} (${trophyId}) no progress yet`);
 		}
 
+		// 1 set (trophySets=false, trophyCategories=false)
+		// 1 + 4 sets (trophySets=false, trophyCategories=true)
+		// 1 + 1 + ... + 1 sets (trophySets=true, trophyCategories=false)
+		// 1 + 4 + ... + 4 sets (trophySets=true, trophyCategories=true)
+		let multipleSets = (trophyIds.length > 1 && this.trophySets);
 		let result: AchievementsData = {
 			title: details.strDisplayName,
 			id: trophyIds.join(', '),
 
-			achievements: []
+			groups: [{
+				name: '',
+				achievements: []
+			}].concat(multipleSets || this.trophyCategories ? trophyIds.flatMap((trophyId, i) => {
+				if(multipleSets && !this.trophyCategories){
+					return [{
+						name: trophyId,
+						achievements: []
+					}];
+				}
+				else if(multipleSets || i === 0){
+					let baseName = (multipleSets ? `${trophyId} - ` : '');
+					return [
+						{
+							name: baseName + t("rpcs3TrophiesSetBronze"),
+							achievements: []
+						},
+						{
+							name: baseName + t("rpcs3TrophiesSetSilver"),
+							achievements: []
+						},
+						{
+							name: baseName + t("rpcs3TrophiesSetGold"),
+							achievements: []
+						},
+						{
+							name: baseName + t("rpcs3TrophiesSetPlatinum"),
+							achievements: []
+						}
+					]
+				}
+				else
+					return [];
+			}) : [])
 		};
 
+		let i = 0;
 		for(let trophyId of trophyIds){
 			for(let trophy of trophies[trophyId].trophies){
 				let achieved = trophies[trophyId].progress?.[trophy.id]?.unlocked === true;
@@ -521,45 +559,59 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 				let trophyIdInt = parseInt(trophy.id, 10);
 				let rate = trophies[trophyId].rarity?.find(t => t.trophyId === trophyIdInt)?.trophyEarnedRate;
 
+				let groupId = 0;
 				let trophyCategory: string | undefined = undefined;
 				if(this.trophyCategories){
 					switch(trophy.type){
 					case 'B':
-						trophyCategory = "🟧";
+						if(this.module.hasAchievementSetsSupport)
+							groupId = 1 + (multipleSets ? i * 4 : 0) + 0;
+						else
+							trophyCategory = "🟧";
 						break;
 					case 'S':
-						trophyCategory = "⬜";
+						if(this.module.hasAchievementSetsSupport)
+							groupId = 1 + (multipleSets ? i * 4 : 0) + 1;
+						else
+							trophyCategory = "⬜";
 						break;
 					case 'G':
-						trophyCategory = "🟨";
+						if(this.module.hasAchievementSetsSupport)
+							groupId = 1 + (multipleSets ? i * 4 : 0) + 2;
+						else
+							trophyCategory = "🟨";
 						break;
 					case 'P':
-						trophyCategory = "💎";
+						if(this.module.hasAchievementSetsSupport)
+							groupId = 1 + (multipleSets ? i * 4 : 0) + 3;
+						else
+							trophyCategory = "💎";
 						break;
 					}
 				}
+				else if(multipleSets)
+					groupId = 1 + i;
 
-				result.achievements.push({
+				result.groups[groupId].achievements.push({
 					bAchieved: achieved,
 					bHidden: trophy.hidden === true,
 					flAchieved: rate ? parseFloat(rate) : 0,
-					flCurrentProgress: achieved ? 1 : 0,
-					flMaxProgress: 1,
-					flMinProgress: 0,
 					rtUnlocked:
 						(achieved && trophies[trophyId].progress?.[trophy.id]?.unlock_time_utc) ?
 							trophies[trophyId].progress[trophy.id].unlock_time_utc! :
 							0,
 					strDescription: [
-						(this.trophySets && trophyIds.length > 1 ? trophyId : undefined),
+						((!this.module.hasAchievementSetsSupport && this.trophySets && trophyIds.length > 1) ? trophyId : undefined),
 						trophyCategory,
 						trophy.detail
 					].filter(d => d).join(' - '),
 					strID: trophyId + "_" + trophy.id,
-					strImage: achieved ? trophy.icon : await grayScaleIcon(trophy.icon),
+					strImage: trophy.icon,
 					strName: trophy.name
 				});
 			}
+
+			i++;
 		}
 
 		return result;
@@ -633,8 +685,8 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 
 				<DialogControlsSection>
 					<Field
-						label={t("rpcs3TrophiesCatPrefixes")}
-						description={t("rpcs3TrophiesCatPrefixesDesc")}>
+						label={(this.module.hasAchievementSetsSupport ? t("rpcs3TrophiesCatSets") : t("rpcs3TrophiesCatPrefixes"))}
+						description={(this.module.hasAchievementSetsSupport ? t("rpcs3TrophiesCatSetsDesc") : t("rpcs3TrophiesCatPrefixesDesc"))}>
 						<Toggle
 							value={trophyCategories}
 							onChange={(checked) => {
@@ -643,8 +695,8 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 							}}/>
 					</Field>
 					<Field
-						label={t("rpcs3TrophiesSetPrefixes")}
-						description={t("rpcs3TrophiesSetPrefixesDesc")}>
+						label={(this.module.hasAchievementSetsSupport ? t("rpcs3TrophiesSetSets") : t("rpcs3TrophiesSetPrefixes"))}
+						description={(this.module.hasAchievementSetsSupport ? t("rpcs3TrophiesSetSetsDesc") : t("rpcs3TrophiesSetPrefixesDesc"))}>
 						<Toggle
 							value={trophysetPrefix}
 							onChange={(checked) => {
