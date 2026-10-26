@@ -87,13 +87,11 @@ export class GOGMetadataProvider extends MetadataProvider<"gog">{
 	}
 
 	provide(appId: number): Promise<MetadataData | undefined>{
-		if(this.excludedApps.includes(appId))
-			return Promise.resolve(undefined);
-
 		return this.throttle<MetadataData | undefined>(async () => {
 			const details = await getAppDetails(appId);
 			if (!details)
 				return undefined;
+			
 			const resolved = await this.resolve(appId);
 			if (!resolved)
 				return undefined;
@@ -111,7 +109,7 @@ export class GOGMetadataProvider extends MetadataProvider<"gog">{
 
 					// If we have a steam id we query that first to get more accurate results
 					if(result.game.releases.some(r => r.platform_id === "steam") && this.steamProvider.enabled){
-						let steam = await this.steamProvider.getAppMetadata(parseInt(result.game.releases.find(r => r.platform_id === "steam")?.external_id ?? '0', 10), true);
+						let steam = await this.steamProvider.getAppMetadata(parseInt(result.game.releases.find(r => r.platform_id === "steam")?.external_id ?? '0', 10));
 						if(steam){
 							steam.release_date = Math.floor(new Date(result.game.first_release_date).getTime() / 1000);
 							steam.store_categories = [

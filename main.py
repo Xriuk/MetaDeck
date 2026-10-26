@@ -79,6 +79,9 @@ class Plugin:
 	config_packet_size: int = 1000
 
 	async def start_read_config(self, packet_size = 1000) -> int:
+		if Plugin.config_chunks != 0:
+			return -1
+
 		Plugin.config_buffer = ""
 		Plugin.config_chunks = 0
 		Plugin.config_packet_size = packet_size
@@ -102,9 +105,13 @@ class Plugin:
 			Plugin.config_buffer = ""
 			return config
 
-	async def start_write_config(self, chunks) -> None:
+	async def start_write_config(self, chunks) -> bool:
+		if Plugin.config_chunks != 0:
+			return False
+
 		Plugin.config_buffer = ""
 		Plugin.config_chunks = chunks
+		return True
 
 	async def write_config(self, chunk, data) -> None:
 		Plugin.config_buffer += data
@@ -121,6 +128,9 @@ class Plugin:
 	cache_packet_size: int = 1000
 
 	async def start_read_cache(self, packet_size = 1000) -> int:
+		if Plugin.cache_chunks != 0:
+			return -1
+
 		Plugin.cache_buffer = ""
 		Plugin.cache_chunks = 0
 		Plugin.cache_packet_size = packet_size
@@ -144,9 +154,13 @@ class Plugin:
 			Plugin.cache_buffer = ""
 			return cache
 
-	async def start_write_cache(self, chunks) -> None:
+	async def start_write_cache(self, chunks) -> bool:
+		if Plugin.cache_chunks != 0:
+			return False
+
 		Plugin.cache_buffer = ""
 		Plugin.cache_chunks = chunks
+		return True
 
 	async def write_cache(self, chunk, data) -> None:
 		Plugin.cache_buffer += data
@@ -246,14 +260,19 @@ class Plugin:
 				end += 1
 			return sfo_bytes[start:end].decode('utf-8', errors="ignore")
 
-	async def rpcs3_check_user_path(self, user_path: str) -> bool:
-		return os.path.isdir(user_path)
+	async def rpcs3_check_user_path(self, user_path: str) -> str | None:
+		user_path = user_path + "/localusername"
+		if not os.path.isfile(user_path):
+			return None
+
+		with open(user_path, 'r') as file:
+			return file.read()
 
 	async def rpcs3_check_hdd_path(self, hdd_path: str) -> bool:
 		return os.path.isdir(hdd_path)
 	
 	# REF: https://github.com/justin-delano/PlayniteAchievements/blob/24b1bcab770277a645ef93f52795823739e0ae0e/source/Providers/RPCS3/Rpcs3TrpArchiveReader.cs#L46
-	async def rpcs3_parse_trp_directory(self, trp_bytes: bytes) -> Dict[str, Tuple[int, int]]:
+	def rpcs3_parse_trp_directory(self, trp_bytes: bytes) -> Dict[str, Tuple[int, int]]:
 		magic = trp_bytes[0:4]
 		if magic != TROPHYTRP_MAGIC:
 			raise ValueError(f"Invalid TRP magic header: {magic.hex()}")
@@ -317,7 +336,7 @@ class Plugin:
 
 		return next(os.walk(dir))[1]
 	
-	async def rpcs3_get_all_trophies_file(self, file_bytes: bytes):
+	def rpcs3_get_all_trophies_file(self, file_bytes: bytes):
 		result = {'trophies': []}
 
 		trophyconf = xmltodict.parse(file_bytes)['trophyconf']
@@ -348,7 +367,7 @@ class Plugin:
 			return json.dumps(result)
 
 		with open(path, 'rb') as file:
-			return json.dumps(await Plugin.rpcs3_get_all_trophies_file(self, file.read()))
+			return json.dumps(Plugin.rpcs3_get_all_trophies_file(self, file.read()))
 	
 	async def rpcs3_get_all_trophies_game(self, trp_path: str, locale: str) -> str:
 		result = {'trophies': []}
@@ -358,29 +377,33 @@ class Plugin:
 		try:
 			with open(trp_path, 'rb') as file:
 				trp_bytes = file.read()
-				trp = await Plugin.rpcs3_parse_trp_directory(self, trp_bytes)
+				trp = Plugin.rpcs3_parse_trp_directory(self, trp_bytes)
 		except:
 			return json.dumps(result)
 
 		# Load info from TROPCONF.SFM
 		if 'TROPCONF.SFM' in trp:
 			entry = trp['TROPCONF.SFM']
-			result = await Plugin.rpcs3_get_all_trophies_file(self, trp_bytes[entry[0]:entry[0] + entry[1]])
+			result = Plugin.rpcs3_get_all_trophies_file(self, trp_bytes[entry[0]:entry[0] + entry[1]])
 
 		# Try retrieving in order: the requested language, English or default
 		if 'trophies' in result and len(result['trophies']) > 0:
 			lang_result = {'trophies': []}
 			if f'TROP_{locale}.SFM' in trp:
 				entry = trp[f'TROP_{locale}.SFM']
-				lang_result = await Plugin.rpcs3_get_all_trophies_file(self, trp_bytes[entry[0]:entry[0] + entry[1]])
+				lang_result = Plugin.rpcs3_get_all_trophies_file(self, trp_bytes[entry[0]:entry[0] + entry[1]])
 			elif 'TROP.SFM' in trp:
 				entry = trp['TROP.SFM']
-				lang_result = await Plugin.rpcs3_get_all_trophies_file(self, trp_bytes[entry[0]:entry[0] + entry[1]])
+				lang_result = Plugin.rpcs3_get_all_trophies_file(self, trp_bytes[entry[0]:entry[0] + entry[1]])
 
-			if 'game' in lang_result and 'game' in result:
+			if 'game' in lang_result:
 				if 'name' in lang_result['game']:
+					if not 'game' in result:
+						result['game'] = {} # type: ignore
 					result['game']['name'] = lang_result['game']['name'] # type: ignore
 				if 'detail' in lang_result['game']:
+					if not 'game' in result:
+						result['game'] = {} # type: ignore
 					result['game']['detail'] = lang_result['game']['detail'] # type: ignore
 
 			if 'trophies' in lang_result and len(lang_result['trophies']) > 0:
@@ -413,7 +436,7 @@ class Plugin:
 		try:
 			with open(trp_path, 'rb') as file:
 				trp_bytes = file.read()
-				trp = await Plugin.rpcs3_parse_trp_directory(self, trp_bytes)
+				trp = Plugin.rpcs3_parse_trp_directory(self, trp_bytes)
 		except:
 			return ''
 		
@@ -652,8 +675,31 @@ class Plugin:
 	async def xenia_check_user_path(self, user_path: str) -> bool:
 		return os.path.isfile(user_path + "/Account")
 
+	async def xenia_try_autodetect_user_path(self) -> str | None:
+		base_path = "/home/deck/Emulation/roms/xbox360/content"
+		if not os.path.isdir(base_path):
+			return None
+
+		# We can have either 1 or 2 children where 1 can be all zeroes
+		children = next(os.walk(base_path))[1]
+		if len(children) != 1 and len(children) != 2:
+			return None
+
+		# Check that at least one child is not all zeroes
+		for child in children:
+			for char in child:
+				if char != '0':
+					base_path = base_path + "/" + child + "/FFFE07D1/00010000/" + child
+					if await Plugin.xenia_check_user_path(self, base_path):
+						return base_path
+					else:
+						return None
+
+		return None
+
+
 	# https://github.com/Xriuk/Emuchievements/blob/f35826e78c095c843597a228859d2a1e5fa2dbc1/src/py/main.py#L453-L552
-	async def xenia_get_defaultxex(self, iso_path: str) -> bytes | None:
+	def xenia_get_defaultxex(self, iso_path: str) -> bytes | None:
 		with open(iso_path, "rb") as f:
 			# https://github.com/xenia-manager/xenia-manager/blob/7704851bec096371e18d1394ed98f166469193db/source/XeniaManager.Core/Models/Files/Iso/IsoSectorReader.cs#L29
 			header_offset = None
@@ -717,7 +763,7 @@ class Plugin:
 		return None
 
 	# headers_predicate receives (xex_bytes, key, value) and if returns not None it will be the returned result
-	async def xenia_parse_xex(self, xex_bytes: bytes, headers_predicate):
+	def xenia_parse_xex(self, xex_bytes: bytes, headers_predicate):
 		if len(xex_bytes) < 24 or xex_bytes[:4] != b"XEX2":
 			raise ValueError("Not a valid XEX2 file.")
 
@@ -749,17 +795,17 @@ class Plugin:
 			else:
 				return None
 
-		xex_bytes = await Plugin.xenia_get_defaultxex(self, iso_path)
+		xex_bytes = Plugin.xenia_get_defaultxex(self, iso_path)
 		if xex_bytes is None:
 			return None
-		return await Plugin.xenia_parse_xex(self, xex_bytes, titleid_filter)
+		return Plugin.xenia_parse_xex(self, xex_bytes, titleid_filter)
 
 	# entry_namespace:
 	# 1 Metadata (check id = 1480672072 / XACH)
 	# 2 Image
 	# 3 String Tables (localization)
-	async def xenia_get_spaxdbf(self, iso_path: str, title_id: str) -> bytes | None:
-		xex_bytes = await Plugin.xenia_get_defaultxex(self, iso_path)
+	def xenia_get_spaxdbf(self, iso_path: str, title_id: str) -> bytes | None:
+		xex_bytes = Plugin.xenia_get_defaultxex(self, iso_path)
 		if xex_bytes is None:
 			return None
 
@@ -797,7 +843,7 @@ class Plugin:
 
 	# entry_predicate receives (xdbf_bytes, entry_namespace, entry_id, entry_offset, entry_size) and if returns not None it will be added to the returned result list
 	# entry_offset: offset by start_pos
-	async def xenia_parse_xdbf_all(self, xdbf_bytes: bytes, entry_predicate):
+	def xenia_parse_xdbf_all(self, xdbf_bytes: bytes, entry_predicate):
 		if len(xdbf_bytes) < 4 or xdbf_bytes[:4] != b"XDBF":
 			raise ValueError("Not a valid XDBF file.")
 		
@@ -819,14 +865,14 @@ class Plugin:
 
 		return result_list	
 
-	async def xenia_parse_xdbf(self, xdbf_bytes: bytes, entry_predicate):
-		result = await Plugin.xenia_parse_xdbf_all(self, xdbf_bytes, entry_predicate)
+	def xenia_parse_xdbf(self, xdbf_bytes: bytes, entry_predicate):
+		result = Plugin.xenia_parse_xdbf_all(self, xdbf_bytes, entry_predicate)
 		if len(result) > 0:
 			return result[0]
 		else:
 			return None
 
-	async def xenia_get_localization(self, xdbf_bytes: bytes, locale: int) -> Dict[int, str] | None:
+	def xenia_get_localization(self, xdbf_bytes: bytes, locale: int) -> Dict[int, str] | None:
 		def xstr_predicate(xdbf_bytes, ns, id, offset, size):
 			if ns == 3 and id == locale:
 				return xdbf_bytes[offset:offset + size]
@@ -835,7 +881,7 @@ class Plugin:
 
 		localization = {}
 
-		xstr_bytes = await Plugin.xenia_parse_xdbf(self, xdbf_bytes, xstr_predicate)
+		xstr_bytes = Plugin.xenia_parse_xdbf(self, xdbf_bytes, xstr_predicate)
 		if xstr_bytes is None or len(xstr_bytes) < 4 or xstr_bytes[:4] != b"XSTR":
 			return None
 
@@ -896,20 +942,20 @@ class Plugin:
 
 		result = {'achievements': []}
 
-		xdbf_bytes = await Plugin.xenia_get_spaxdbf(self, iso_path, title_id)
+		xdbf_bytes = Plugin.xenia_get_spaxdbf(self, iso_path, title_id)
 		if xdbf_bytes is None:
 			return json.dumps(result)
 
 		# Retrieve achievements
-		xach_bytes = await Plugin.xenia_parse_xdbf(self, xdbf_bytes, xach_predicate)
+		xach_bytes = Plugin.xenia_parse_xdbf(self, xdbf_bytes, xach_predicate)
 		if xach_bytes is None or len(xach_bytes) < 4 or xach_bytes[:4] != b"XACH":
 			return json.dumps(result)
 
 		# Retrieve localization, default to english
-		localization_lang = await Plugin.xenia_get_localization(self, xdbf_bytes, locale)
+		localization_lang = Plugin.xenia_get_localization(self, xdbf_bytes, locale)
 		localization_en = None
 		if locale != 1:
-			localization_en = await Plugin.xenia_get_localization(self, xdbf_bytes, 1)
+			localization_en = Plugin.xenia_get_localization(self, xdbf_bytes, 1)
 		
 		if localization_lang is None and localization_en is None:
 			return json.dumps(result)
@@ -933,7 +979,7 @@ class Plugin:
 
 		return json.dumps(result)
 
-	async def xenia_get_achievement_icon_xdbf(self, xdbf_bytes: bytes, icon_id: int) -> str:
+	def xenia_get_achievement_icon_xdbf(self, xdbf_bytes: bytes, icon_id: int) -> str:
 		def icon_predicate(xdbf_bytes, ns, id, offset, size):
 			if ns == 2 and id == icon_id:
 				return xdbf_bytes[offset:offset + size]
@@ -943,7 +989,7 @@ class Plugin:
 		if xdbf_bytes is None:
 			return ''
 
-		icon_bytes = await Plugin.xenia_parse_xdbf(self, xdbf_bytes, icon_predicate)
+		icon_bytes = Plugin.xenia_parse_xdbf(self, xdbf_bytes, icon_predicate)
 		if icon_bytes is None:
 			return ''
 		else:
@@ -951,10 +997,10 @@ class Plugin:
 			return "data:image/png;base64," + encoded_string
 
 	async def xenia_get_achievement_icon_user(self, user_path: str, title_id: str, icon_id: int) -> str:		
-		return await Plugin.xenia_get_achievement_icon_xdbf(self, await Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id), icon_id) # type: ignore
+		return Plugin.xenia_get_achievement_icon_xdbf(self, Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id), icon_id) # type: ignore
 
 	async def xenia_get_achievement_icon_game(self, iso_path: str, title_id: str, icon_id: int) -> str:
-		return await Plugin.xenia_get_achievement_icon_xdbf(self,  await Plugin.xenia_get_spaxdbf(self, iso_path, title_id), icon_id) # type: ignore
+		return Plugin.xenia_get_achievement_icon_xdbf(self,  Plugin.xenia_get_spaxdbf(self, iso_path, title_id), icon_id) # type: ignore
 
 	# entry_namespace:
 	# 1 Achievement
@@ -964,7 +1010,7 @@ class Plugin:
 	# 5 String
 	# 6 Achievement Security (created by GFWL for offline unlocked achievements?)
 	#   Avatar Award (360 only, this is only stored with in the PEC)
-	async def xenia_get_game_gpdxbdf(self, user_path: str, title_id: str) -> bytes | None:
+	def xenia_get_game_gpdxbdf(self, user_path: str, title_id: str) -> bytes | None:
 		path = user_path + "/" + title_id + ".gpd"
 		if not os.path.isfile(path):
 			return None
@@ -1013,12 +1059,12 @@ class Plugin:
 		
 		parsed_states = {}
 		
-		xdbf_bytes = await Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id)
+		xdbf_bytes = Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id)
 		if xdbf_bytes is None:
 			return json.dumps(parsed_states)
 
 		# Retrieve achievements data
-		achievements = await Plugin.xenia_parse_xdbf_all(self, xdbf_bytes, achievements_predicate)
+		achievements = Plugin.xenia_parse_xdbf_all(self, xdbf_bytes, achievements_predicate)
 		if len(achievements) > 0:
 			for achievement in achievements:
 				if 'id' in achievement:

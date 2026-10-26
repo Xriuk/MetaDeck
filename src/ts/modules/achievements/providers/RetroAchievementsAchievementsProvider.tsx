@@ -1,10 +1,10 @@
 import type { AchievementsData, ID } from "../../../Interfaces"
 import { t } from "../../../useTranslations"
-import { fetchNoCorsLegacyTimeout, getAppDetails, toasterToast } from "../../../util"
+import { copyToClipboard, fetchNoCorsLegacyTimeout, getAppDetails, toasterToast } from "../../../util"
 import type { ProviderCache, ProviderConfig } from "../../Provider"
 import { AchievementsProvider } from "../AchievementsProvider"
 import Logger from "../../../logger"
-import { DialogControlsSection, Field, sleep, TextField, Toggle } from "@decky/ui"
+import { DialogButton, DialogControlsSection, Field, sleep, TextField, Toggle } from "@decky/ui"
 import { GetGameInfoAndUserProgressResponse } from "@retroachievements/api";
 import { FaGamepad } from "react-icons/fa"
 import { useMetaDeckState } from "../../../MetaDeckState"
@@ -37,6 +37,10 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 	logger = new Logger(this.identifier);
 
 	private parentSubsets: Record<ID, ID[]> = {}; // Parent ID, subset IDs
+
+	override get isValid(): boolean {
+		return super.isValid && !!this.username && !!this.apiKey;
+	}
 
 	get username(): string{
 		return this.config.username;
@@ -137,16 +141,47 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		return this.cache.game_info;
 	}
 
+	private async raRequest(url: string): Promise<Response>{
+		let retry = 0;
+		let sleep_ms = 2000;
+		while (retry < 5){
+			if (retry > 0){
+				await sleep(sleep_ms);
+				sleep_ms *= 2;
+			}
+
+			const response = await this.throttle(() => fetchNoCorsLegacyTimeout(url, 'GET'));
+			if (response.status == 429 || response.status == 504 || response.status == 500){
+				this.logger.debug(`Response status was ${response.status}, retrying`, retry);
+				retry++;
+			}
+			else if (response.status == 200)
+				return response;
+			else{
+				// Clear to avoid errors
+				if(response.status == 403){
+					toasterToast(t("apiKeyError"), this);
+
+					this.apiKey = '';
+				}
+
+				this.logger.debug(`Response status was ${response.status}`);
+				throw new Error(`${response.status}`);
+			}
+		}
+
+		throw new Error("Maximum retries exceeded");
+	}
+
 	override async mount(): Promise<void> {
 		let init = false;
 		try{
 			// Retrieve consoles list
-			let response = await fetchNoCorsLegacyTimeout(
-				`https://retroachievements.org/API/API_GetConsoleIDs.php?` + new URLSearchParams({
+			let response = await this.raRequest(`https://retroachievements.org/API/API_GetConsoleIDs.php?` + new URLSearchParams({
 					y: this.apiKey,
 					a: '1',
 					g: '1'
-				}).toString(), 'GET');
+				}).toString());
 			if(!response.ok)
 				return;
 
@@ -156,14 +191,14 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 			// For each console retrieve all games
 			for(let console of consoles){
-				let response = await fetchNoCorsLegacyTimeout(
+				let response = await this.raRequest(
 				`https://retroachievements.org/API/API_GetGameList.php?` + new URLSearchParams({
 					y: this.apiKey,
 					i: console.ID.toString(),
 					f: '1',
 					h: '1',
 					c: '0' // Retrieve all
-				}).toString(), 'GET');
+				}).toString());
 				if(!response.ok)
 					return;
 
@@ -172,13 +207,17 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 					ID: number;
 				}[] = await response.json();
 				for(let game of games){
-					let matchingGames = games.filter(g => g.Title.startsWith(game.Title) && g.ID !== game.ID);
+					let matchingGames = games.filter(g => g.ID !== game.ID && g.Title.startsWith(game.Title) && g.Title.toLowerCase().includes("subset"));
 					if(!matchingGames.length)
 						continue;
 
 					this.parentSubsets[game.ID] = matchingGames.map(g => g.ID);
 				}
 			}
+
+			this.logger.debug("Parent/subsets", this.parentSubsets);
+			
+			init = true;
 		}
 		finally{
 			if(!init)
@@ -186,17 +225,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		}
 	}
 
-	override test(appId: number, external = false): Promise<boolean> {
-		if(!this.username || !this.apiKey)
-			return Promise.resolve(false);
-
-		return super.test(appId, external);
-	}
-
 	provide(appId: number): Promise<AchievementsData | undefined> {
-		if(!this.username || !this.apiKey || this.excludedApps.includes(appId))
-			return Promise.resolve(undefined);
-
 		return this.throttle(async () => {
 			let game = await this.getGameInfoAndProgress(appId);
 
@@ -257,7 +286,8 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 					let isBase = game.ID === parentGame.ID;
 					let isParent = !isBase && parents[game.ID];
-					if(!isBase && !(isParent ? multipleParents : multipleSubsets))
+					let multipleSets = (isParent ? multipleParents : multipleSubsets);
+					if(!multipleSets && !isBase)
 						return [];
 
 					let subsetTitle = isBase ?
@@ -272,9 +302,9 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 						}];
 					}
 					else{
-						if(isBase)
+						if(multipleSets && isBase)
 							subsetTitle = t("defaultAchievementSet");
-						let baseName = `${subsetTitle} - `;
+						let baseName = (multipleSets ? `${subsetTitle} - ` : "");
 						return [
 							{
 								name: subsetTitle,
@@ -307,6 +337,11 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 				let isBase = game.ID === parentGame.ID;
 				let isParent = !isBase && parents[game.ID];
 				let isBaseGroup = !isBase && !(isParent ? multipleParents : multipleSubsets); // Base does not default to 0 group, but it is 0 group
+
+				let subsetTitle = ((!this.module.hasAchievementSetsSupport && (multipleParents || multipleSubsets) && !isBase && !isBaseGroup) ? 
+					(game.Title.match(/\[subset\s*-\s*(.+)\s*\]/i)?.[1]
+						?? game.Title) : 
+					undefined);
 
 				for(let achievement of Object.values(game.Achievements)
 					.sort((a, b) => Number(a.DisplayOrder) - Number(b.DisplayOrder))){
@@ -348,7 +383,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								0) :
 							0,
 						strDescription: [
-							((!this.module.hasAchievementSetsSupport && (multipleParents || multipleSubsets) && !isBase && !isBaseGroup) ? game.ID.toString() : undefined),
+							subsetTitle,
 							(this.points ? `${achievement.Points} CP` : undefined),
 							achievementType,
 							achievement.Description
@@ -380,6 +415,8 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		const [parentSets, setParentSets] = useState(this.parentSets);
 		const [subsetsSets, setSubsetsSets] = useState(this.subsetsSets);
 
+		const authUrl = "https://retroachievements.org/controlpanel.php";
+
 		return (
 			<>
 				<DialogControlsSection>
@@ -406,7 +443,14 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								}}/>
 						} />
 					<Field description={
-						<Markdown>{t("raApiKeyInstructionsMD").replace("{raUrl}", "[retroachievements.org](https://retroachievements.org/controlpanel.php)")}</Markdown>
+						<>
+							<Markdown>{t("raApiKeyInstructionsMD")
+								.replace("{raUrl}", `[retroachievements.org](${authUrl})`)}</Markdown>
+							<DialogButton
+								onClick={() => void copyToClipboard(authUrl)}>
+								{t("copyAuthUrl")}
+							</DialogButton>
+						</>
 					} />
 				</DialogControlsSection>
 
@@ -488,52 +532,19 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		game = undefined;
 		delete this.gameInfo[raId];
 
-		// Retry because of RetroAchievements throttling
-		let retry = 0;
-		let sleep_ms = 2000;
-		while (!game && retry < 5){
-			if (retry > 0){
-				await sleep(sleep_ms);
-				sleep_ms *= 2;
-			}
-
-			if(!game){
-				const response = await fetchNoCorsLegacyTimeout(
-					`https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?` + new URLSearchParams({
-						y: this.apiKey,
-						u: this.username,
-						g: raId.toString(),
-					}).toString(), 'GET');
-				if (response.status == 429 || response.status == 504 || response.status == 500){
-					this.logger.debug(`Response status for RA id: ${raId} was ${response.status}, retrying`, retry);
-					retry++;
-				}
-				else if (response.status == 200){
-					game = await response.json();
-					if(game)
-						game.retrieved = new Date().getTime();
-
-					if(game)
-						this.gameInfo[raId] = game;
-
-					return game;
-				}
-				else
-				{
-					// Clear to avoid errors
-					if(response.status == 403){
-						toasterToast(t("apiKeyError"), this);
-
-						this.apiKey = '';
-					}
-
-					this.logger.debug(`Response status for RA id: ${raId} ${response.status}`);
-					throw new Error(`${response.status}`);
-				}
-			}
+		const response = await this.raRequest(
+			`https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?` + new URLSearchParams({
+				y: this.apiKey,
+				u: this.username,
+				g: raId.toString()
+			}).toString());
+		game = await response.json();
+		if(game){
+			game.retrieved = new Date().getTime();
+			this.gameInfo[raId] = game;
 		}
 
-		throw new Error("Maximum retries exceeded");
+		return game;
 	}
 
 	public async getGameInfoAndProgress(appId: number): Promise<GetGameInfoAndUserProgressResponse | undefined>{

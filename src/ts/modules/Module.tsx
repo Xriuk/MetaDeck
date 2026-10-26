@@ -151,8 +151,7 @@ export abstract class Module<
 		this._unmetDependency = value;
 	}
 
-	get isValid(): boolean
-	{
+	get isValid(): boolean{
 		return !this.unmetDependency && this.enabled;
 	}
 
@@ -300,7 +299,7 @@ export abstract class Module<
 
 	protected async fetchDataProviders(appId: number): Promise<[ProviderIdentifier<Module<Identifier, Prov>>, Data] | undefined>{
 		for (const provider of this.providers){
-			if(!provider.enabled || !await provider.test(appId))
+			if(!provider.isValid || provider.excludedAppsSelf.includes(appId) || !await provider.test(appId))
 				continue;
 			
 			const data = await provider.provide(appId);
@@ -325,7 +324,7 @@ export abstract class Module<
 					if(this.dataProviders[appId] || this.providerOverrides[appId]){
 						let providerId = this.dataProviders[appId] ?? this.providerOverrides[appId];
 						const provider = this.providers.find(p => p.identifier === providerId);
-						if(provider?.enabled && await provider.test(appId)){
+						if(provider?.isValid && !provider.excludedAppsSelf.includes(appId) && await provider.test(appId)){
 							const data = await provider.provide(appId);
 							if(data && !this.isEmpty(data)){
 								// DEV: merge with below
@@ -414,15 +413,12 @@ export abstract class Module<
 	}
 
 	private async refreshDataForApp(appId: number): Promise<void>{
-		if(this.excludedApps.includes(appId))
-			return undefined;
-
-		const overview = appStore.GetAppOverviewByAppID(appId);
-		const data = await this.fetchDataAsync(appId)
+		const data = await this.fetchDataAsync(appId);
 		this.logger.debug(`Refreshed ${this.identifier} for ${appId}: `, data);
 		if(!this.state.loadingData.currentModule)
 			return;
 		
+		const overview = appStore.GetAppOverviewByAppID(appId);
 		this.state.loadingData.currentModule.game = overview.display_name;
 		if (overview && data)
 			this.state.loadingData.currentModule.description = !!data ? this.progressDescription(data) : this.missingDescription;
@@ -498,7 +494,7 @@ export abstract class Module<
 			return undefined;
 
 		for (const provider of this.providers){
-			if (provider.enabled && await provider.test(appId)){
+			if (provider.isValid && !provider.excludedAppsSelf.includes(appId) && await provider.test(appId)){
 				await provider.apply(appId, data);
 				return;
 			}

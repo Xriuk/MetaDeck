@@ -33,7 +33,7 @@ export const SettingsComponent: FC = () => {
 		pages.push({
 			title: module.title,
 			icon: module.icon,
-			content: <ModuleSettingsComponent module={module} providers={module.providers} />
+			content: <ModuleSettingsComponent module={module} />
 		});
 	}
 

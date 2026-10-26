@@ -105,6 +105,10 @@ export abstract class Provider<
 		void this.saveConfig();
 	}
 
+	get isValid(): boolean{
+		return this.enabled;
+	}
+
 	get overviews(): SteamAppOverview[]
 	{
 		return this.module.overviews

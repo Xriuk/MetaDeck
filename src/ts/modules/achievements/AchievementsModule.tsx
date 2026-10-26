@@ -14,6 +14,7 @@ import React from "react";
 import { RetroAchievementsAchievementsProvider, type RetroAchievementsAchievementsProviderCache, type RetroAchievementsAchievementsProviderConfig } from "./providers/RetroAchievementsAchievementsProvider";
 import { RPCS3AchievementsProvider, type RPCS3AchievementsProviderCache, type RPCS3AchievementsProviderConfig } from "./providers/RPCS3AchievementsProvider";
 import { XeniaAchievementsProvider, type XeniaAchievementsProviderCache, type XeniaAchievementsProviderConfig } from "./providers/XeniaAchievementsProvider";
+import { GOGAchievementsProvider, type GOGAchievementsProviderCache, type GOGAchievementsProviderConfig } from "./providers/GOGAchievementsProvider";
 
 type CacheEvent = {
 	type: "added" | "removed" | "updated";
@@ -39,12 +40,14 @@ export interface AchievementsProviderConfigs{
 	ra: RetroAchievementsAchievementsProviderConfig;
 	rpcs3: RPCS3AchievementsProviderConfig;
 	xenia: XeniaAchievementsProviderConfig;
+	gog: GOGAchievementsProviderConfig;
 }
 
 export interface AchievementsProviderCaches{
 	ra: RetroAchievementsAchievementsProviderCache;
 	rpcs3: RPCS3AchievementsProviderCache;
 	xenia: XeniaAchievementsProviderCache;
+	gog: GOGAchievementsProviderCache;
 }
 
 export class AchievementsModule extends Module<"achievements", AchievementsProvider<any>>{
@@ -53,7 +56,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 
 	logger: Logger = new Logger(this.identifier);
 
-	public hasAchievementSetsSupport = false;
+	public hasAchievementSetsSupport!: boolean; // Assigned in addMounts, not assigning because overrides addMounts otherwise
 	private queryCache?: {
 		getQueryCache(): {
 			subscribe(callback: (event: CacheEvent) => void): () => void; // Returns function to call to unsubscribe
@@ -68,7 +71,8 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 	providers: AchievementsProvider<any>[] = [
 		new RetroAchievementsAchievementsProvider(this),
 		new RPCS3AchievementsProvider(this),
-		new XeniaAchievementsProvider(this)
+		new XeniaAchievementsProvider(this),
+		new GOGAchievementsProvider(this)
 	];
 
 	override async removeCache(appId: number, onlyProgress = false): Promise<void> {
@@ -323,8 +327,8 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 		// clear cache and refetch
 		let appCloseLifetimeHook: Hook;
 		let overlayOpenLifetimeHook: Hook;
-		function clearProgressCache(appId: number){
-			void module.removeCache(appId, true);
+		async function clearProgressCache(appId: number){
+			await module.removeCache(appId, true);
 
 			if(module.hasAchievementSetsSupport && module.queryCache){
 				module.queryCache.invalidateQueries({
@@ -333,7 +337,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 				});
 			}
 
-			module.fetchData(appId);
+			await module.fetchDataAsync(appId);
 		}
 		mounts.addMount({
 			mount(){
@@ -341,15 +345,16 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 					if (!module.isValid || module.excludedApps.includes(appId))
 						return;
 
-					if(active && appStore.GetAppOverviewByAppID(appId).app_type == SteamAppTypeShortcut)
-						clearProgressCache(appId);
+					if(active && appStore.GetAppOverviewByAppID(appId).app_type == SteamAppTypeShortcut){
+						setTimeout(() => void clearProgressCache(appId)); // Clear at the end of frame to avoid hiding the Achievements button
+					}
 				});
 				appCloseLifetimeHook = SteamClient.GameSessions.RegisterForAppLifetimeNotifications(update =>{
 					if (!module.isValid || module.excludedApps.includes(update.unAppID))
 						return;
 
 					if (!update.bRunning && appStore.GetAppOverviewByAppID(update.unAppID).app_type == SteamAppTypeShortcut)
-						clearProgressCache(update.unAppID);
+						void clearProgressCache(update.unAppID);
 				});
 			},
 			dismount(){
@@ -364,15 +369,21 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			typeof mProp === 'object' &&
 			typeof mProp.getQueryCache === 'function'
 		));
+		(window as any).queryCache = module.queryCache;
 		console.log("Cache", module.queryCache);
-		const MessagesModule = findModuleExport((mProp) => (
+		const PlayerModule = findModuleExport((mProp) => (
 			typeof mProp === 'object' &&
 			typeof mProp.GetGameAchievements === 'function'
 		));
-		console.log("MessagesModule", MessagesModule);
-		if(MessagesModule && module.queryCache && MessagesModule.GetGameAchievements &&
-			MessagesModule.GetGlobalAchievementPercentages &&
-			MessagesModule.GetUserAchievements){
+		console.log("PlayerModule", PlayerModule);
+		const AppInfo = findModuleExport((mProp) => (
+			typeof mProp === 'object' &&
+			typeof mProp.LoadAppInfoBatchFromLocalCache === 'function'
+		));
+		console.log("AppInfo", AppInfo, AppInfo.__proto__);
+		if(PlayerModule && module.queryCache && PlayerModule.GetGameAchievements &&
+			PlayerModule.GetGlobalAchievementPercentages &&
+			PlayerModule.GetUserAchievements && AppInfo){
 
 			module.hasAchievementSetsSupport = true;
 
@@ -475,7 +486,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			}
 			mounts.addPatchMount({
 				patch(): Patch{
-					return afterPatch(MessagesModule, "GetGameAchievements", function(args: any[], ret: Promise<any>){
+					return afterPatch(PlayerModule, "GetGameAchievements", function(args: any[], ret: Promise<any>){
 						let appId = args[1]?.appid;
 						
 						if(!module.isValid || !appId || module.excludedApps.includes(appId))
@@ -540,7 +551,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			}
 			mounts.addPatchMount({
 				patch(): Patch{
-					return afterPatch(MessagesModule, "GetGlobalAchievementPercentages", function(args: any[], ret: Promise<any>){
+					return afterPatch(PlayerModule, "GetGlobalAchievementPercentages", function(args: any[], ret: Promise<any>){
 						let appId = args[1]?.appid;
 
 						if(!module.isValid || !appId || module.excludedApps.includes(args[1]))
@@ -623,7 +634,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			}
 			mounts.addPatchMount({
 				patch(): Patch{
-					return afterPatch(MessagesModule, "GetUserAchievements", function(args: any[], ret: Promise<any>){
+					return afterPatch(PlayerModule, "GetUserAchievements", function(args: any[], ret: Promise<any>){
 						let appId = args[1]?.appid;
 
 						if(!module.isValid || !appId || module.excludedApps.includes(appId))
@@ -689,7 +700,22 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 					cacheFixSubscription();
 				}
 			});
+
+			// Prevent retrieving info about shortcuts, since their appid might break serialization
+			// jspb.BinaryConstants.TWO_TO_3
+			mounts.addPatchMount({
+				patch(): Patch{
+					return replacePatch(AppInfo.__proto__, "LoadAppInfoBatchFromLocalCache", function(args: any[]){
+						if(args.length && Array.isArray(args[0]) && args[0].some(a => a >= 2147483648))
+							return Promise.resolve([]);
+						else
+							return callOriginal;
+					});
+				}
+			});
 		}
+		else
+			module.hasAchievementSetsSupport = false;
 	}
 
 	progressDescription(data?: AchievementsData): string{

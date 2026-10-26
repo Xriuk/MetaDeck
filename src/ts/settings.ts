@@ -9,6 +9,7 @@ import type { ResolverConfigs, ResolverCaches } from "./modules/Resolver";
 import { version } from "@decky/pkg";
 import type { EntryData } from "./Interfaces";
 import type { SteamAppAchievement } from "./SteamTypes";
+import { sleep } from "@decky/ui";
 
 export type ConfigData = {
 	version: string; // Plugin version
@@ -234,7 +235,7 @@ export class Settings
 					},
 					xenia: {
 						enabled: true,
-						user_path: '',
+						user_path: null, // Will try auto-detecting
 						language: null,
 						gamerscore: true,
 						description_locked: null,
@@ -242,6 +243,24 @@ export class Settings
 						excluded_apps: [],
 						resolvers: {
 							xenia: {
+								enabled: true
+							}
+						}
+					},
+					gog: {
+						enabled: true,
+						auth_code: '',
+						language_set: true,
+						rarity_levels: true,
+						excluded_apps: [],
+						resolvers: {
+							gog_junk: {
+								enabled: true
+							},
+							gog_nsl: {
+								enabled: true
+							},
+							gog_heroic: {
 								enabled: true
 							}
 						}
@@ -307,7 +326,8 @@ export class Settings
 					},
 					xenia: {
 						game_achievements: {}
-					}
+					},
+					gog: {}
 				}
 			}
 		},
@@ -438,7 +458,23 @@ export class Settings
 
 			let buffer = "";
 			try{
-				const length = await call<[number], number>("start_read_config", this.packet_size);
+				// If length -1 is returned we are already reading or writing (probably a plugin reload)
+				let retry = 0;
+				let sleep_ms = 2000;
+				let length: number;
+				do{
+					length = await call<[number], number>("start_read_config", this.packet_size);
+					if(length < 0){
+						this.logger.debug("Config read/write already in progress, retrying", retry);
+						retry++;
+						await sleep(sleep_ms);
+						sleep_ms *= 2;
+					}
+				}
+				while(length < 0 && retry < 5);
+				if(length < 0)
+					throw new Error("Could not read config, maximum retries exceeded");
+
 				for (let i = 0; i < length; i++){
 					buffer += await call<[number], string>("read_config", i);
 				}
@@ -475,7 +511,20 @@ export class Settings
 
 			const buffer = JSON.stringify(this.configData);
 			const chunks = Math.ceil(buffer.length / this.packet_size);
-			await call<[number], void>("start_write_config", chunks);
+
+			// If false is returned we are already reading or writing (probably a plugin reload)
+			let retry = 0;
+			let sleep_ms = 2000;
+			while(!await call<[number], boolean>("start_write_config", chunks)){
+				if(retry >= 5)
+					throw new Error("Could not write config, maximum retries exceeded");
+
+				this.logger.debug("Config read/write already in progress, retrying", retry);
+				retry++;
+				await sleep(sleep_ms);
+				sleep_ms *= 2;
+			}
+
 			for (let i = 0; i < chunks; i++){
 				const data = buffer.slice(i * this.packet_size, (i + 1) * this.packet_size);
 				await call<[number, string], void>("write_config", i, data);
@@ -498,7 +547,23 @@ export class Settings
 
 			let buffer = "";
 			try{
-				const length = await call<[number], number>("start_read_cache", this.packet_size);
+				// If length -1 is returned we are already reading or writing (probably a plugin reload)
+				let retry = 0;
+				let sleep_ms = 2000;
+				let length: number;
+				do{
+					length = await call<[number], number>("start_read_cache", this.packet_size);
+					if(length < 0){
+						this.logger.debug("Cache read/write already in progress, retrying", retry);
+						retry++;
+						await sleep(sleep_ms);
+						sleep_ms *= 2;
+					}
+				}
+				while(length < 0 && retry < 5);
+				if(length < 0)
+					throw new Error("Could not read cache, maximum retries exceeded");
+
 				for (let i = 0; i < length; i++){
 					buffer += await call<[number], string>("read_cache", i);
 				}
@@ -564,7 +629,20 @@ export class Settings
 
 			const buffer = JSON.stringify(this.cacheData);
 			const chunks = Math.ceil(buffer.length / this.packet_size);
-			await call<[number], void>("start_write_cache", chunks);
+
+			// If false is returned we are already reading or writing (probably a plugin reload)
+			let retry = 0;
+			let sleep_ms = 2000;
+			while(!await call<[number], boolean>("start_write_cache", chunks)){
+				if(retry >= 5)
+					throw new Error("Could not write cache, maximum retries exceeded");
+
+				this.logger.debug("Cache read/write already in progress, retrying", retry);
+				retry++;
+				await sleep(sleep_ms);
+				sleep_ms *= 2;
+			}
+
 			for (let i = 0; i < chunks; i++){
 				const data = buffer.slice(i * this.packet_size, (i + 1) * this.packet_size);
 				await call<[number, string], void>("write_cache", i, data);

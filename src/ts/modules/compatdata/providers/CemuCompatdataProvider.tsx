@@ -37,7 +37,7 @@ export class CemuCompatdataProvider extends FuzzySearchCompatdataProvider<"cemu"
 	}
 
 	async test(appId: number): Promise<boolean>{
-		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);

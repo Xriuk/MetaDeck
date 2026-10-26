@@ -140,7 +140,7 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		// If we have a steam id we query that first to get more accurate results
 		if(gameR.external_games?.some(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) && this.steamProvider.enabled){
 			let steam = await this.steamProvider.getAppMetadata(
-				parseInt((gameR.external_games?.find(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) as ExternalGame)?.uid ?? '0', 10), true);
+				parseInt((gameR.external_games?.find(g => typeof g !== 'number' && (g as any).external_game_source?.id === 1) as ExternalGame)?.uid ?? '0', 10));
 			if(steam){
 				steam.release_date = game.release_date;
 

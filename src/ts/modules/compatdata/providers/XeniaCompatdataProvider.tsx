@@ -45,9 +45,6 @@ export class XeniaCompatdataProvider extends CompatdataProvider<any>{
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{
-		if (this.excludedApps.includes(appId))
-			return undefined;
-		
 		const titleId = (await this.resolve(appId))?.toString().toUpperCase();
 		if(!titleId || !this.compatData[titleId])
 			return undefined;

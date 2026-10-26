@@ -177,6 +177,10 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 		const [language, setLanguage] = useState(this.config.language);
 
 		const languageTitle = (language: string) => {
+			// getDefaultLanguage can return undefined if no language was loaded
+			if(!language)
+				return '';
+
 			let [country, lang]: [string, Language] = language.split('.') as any;
 			let finalLanguage;
 			if(lang === "es" && country !== "ES")

@@ -38,7 +38,7 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 	}
 
 	async test(appId: number): Promise<boolean>{
-		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -254,7 +254,7 @@ export class DolphinCompatdataProvider extends FuzzySearchCompatdataProvider<"do
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{
-		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.overrides[appId] === 0)
 			return undefined;
 
 		// Dolphin groups the title id for different regions

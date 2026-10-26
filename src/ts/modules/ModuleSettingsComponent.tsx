@@ -16,7 +16,6 @@ import { IdOverrideComponent } from "./IdOverrideComponent";
 
 export interface ModuleSettingsProps{
 	module: Module<any, Provider<any, any>>;
-	providers: Provider<any, any>[];
 }
 
 export const ModuleSettingsComponent: FC<ModuleSettingsProps> = ({module}) => {

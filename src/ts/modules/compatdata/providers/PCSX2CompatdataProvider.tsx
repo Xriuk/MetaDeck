@@ -106,9 +106,6 @@ export class PCSX2CompatdataProvider extends CompatdataProvider<"pcsx2">{
 	}
 
 	async provide(appId: number): Promise<CompatdataData | undefined>{
-		if (this.excludedApps.includes(appId))
-			return undefined;
-
 		// We retrieve compatibility for any matching id
 		const titleIds = (await this.resolve(appId))?.toString()
 			.split(separator);

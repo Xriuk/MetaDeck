@@ -311,7 +311,18 @@ export function inheritSettings(provider: Provider<any, any>){
 							</Markdown>
 						} />
 				</DialogControlsSection>
+				
 				{settings}
+
+				<DialogControlsSection>
+					<Field description={
+							<Markdown>
+								{t("settingsInheritedEnd")
+									.replace("{provider}", provider.title)
+									.replace("{module}", provider.module.title)}
+							</Markdown>
+						} />
+				</DialogControlsSection>
 			</>);
 		}
 	}

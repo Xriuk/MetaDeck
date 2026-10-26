@@ -44,7 +44,7 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 	}
 
 	override async test(appId: number): Promise<boolean>{
-		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.overrides[appId] === 0)
 			return false;
 
 		// We return true to not double search, as we'll do it inside provide
@@ -52,7 +52,7 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 	}
 
 	provide(appId: number): Promise<CompatdataData | undefined>{
-		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if(this.overrides[appId] === 0)
 			return Promise.resolve(undefined);
 
 		return this.throttle(() => this.getCompatdataForGame(appId));
@@ -77,10 +77,7 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 		return results.filter(value => value.title === closest_name);
 	}
 
-	protected async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>{
-		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
-			return undefined;
-
+	private async getCompatdataForGame(appId: number): Promise<CompatdataData | undefined>{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return undefined;
@@ -115,7 +112,7 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 	}
 
 	protected async getAllCompatdataForGame(appId: number): Promise<CompatdataData[]>{
-		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if(this.overrides[appId] === 0)
 			return [];
 
 		const details = await getAppDetails(appId);

@@ -91,7 +91,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider<"em
 	}
 
 	override async test(appId: number): Promise<boolean>{
-		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.overrides[appId] === 0)
 			return false;
 
 		const details = await getAppDetails(appId);
@@ -283,7 +283,7 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider<"em
 	}
 
 	protected override async getAllCompatdataForGame(appId: number): Promise<CompatdataData[]>{
-		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.overrides[appId] === 0)
 			return [];
 
 		const details = await getAppDetails(appId);

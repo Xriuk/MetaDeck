@@ -1,4 +1,4 @@
-import { DialogControlsSection, Field, SliderField, TextField } from "@decky/ui";
+import { DialogButton, DialogControlsSection, Field, SliderField, TextField } from "@decky/ui";
 import { useState } from "react";
 import { StoreCategory, type MetadataData } from "../../../Interfaces";
 import Logger from "../../../logger";
@@ -11,7 +11,7 @@ import {
 	isRyujinxGame
 } from "../../../shortcuts";
 import { getCurrentLanguage, t } from "../../../useTranslations";
-import { getAppDetails, fetchNoCorsLegacyTimeout, toasterToast } from "../../../util";
+import { getAppDetails, fetchNoCorsLegacyTimeout, toasterToast, copyToClipboard } from "../../../util";
 import { Markdown } from "../../../markdown";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import React from "react";
@@ -38,6 +38,10 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 	title = t("providerMetadataRAWG");
 
 	logger = new Logger(this.identifier);
+
+	override get isValid(): boolean {
+		return super.isValid && !!this.apiKey;
+	}
 
 	get apiKey(): string{
 		return this.config.api_key;
@@ -106,9 +110,6 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 
 	protected async search(title: string, platformIds?: string | undefined): Promise<MetadataData[]>
 	{
-		if(!this.apiKey)
-			return [];
-
 		let params: Record<string, string> = {
 			key: this.apiKey,
 			search: title,
@@ -223,10 +224,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 		game.publishers = gameR.publishers?.map(p => ({ name: p.name, url: '' }));
 	}
 
-	protected override async getAllMetadataForGame(appId: number, external = false): Promise<MetadataData[]>{
-		if(!external && this.excludedApps.includes(appId))
-			return [];
-
+	protected override async getAllMetadataForGame(appId: number): Promise<MetadataData[]>{
 		const details = await getAppDetails(appId);
 		if(!details)
 			return [];
@@ -243,6 +241,9 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 		const [apiKey, setApiKey] = useState(this.apiKey);
 		const [fuzziness, setFuzziness] = useState(this.fuzziness);
 		const [overrides, setOverrides] = useState(this.overrides);
+
+		const authUrl = "https://rawg.io/login/?forward=developer";
+
 		return (
 			<>
 				<DialogControlsSection>
@@ -258,7 +259,15 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 								}}/>
 						} />
 					<Field description={
-						<Markdown>{t("rawgApiKeyInstructionsMD").replace("{rawgUrl}", "[rawg.io](https://rawg.io/login/?forward=developer)")}</Markdown>
+						<>
+							<Markdown>{t("rawgApiKeyInstructionsMD")
+								.replace("{rawgUrl}", `[rawg.io](${authUrl})`)
+								.replace("{rawgUse}", "\"Extract games metadata for emulation purposes\"")}</Markdown>
+							<DialogButton
+								onClick={() => void copyToClipboard(authUrl)}>
+								{t("copyAuthUrl")}
+							</DialogButton>
+						</>
 					} />
 				</DialogControlsSection>
 
@@ -301,7 +310,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 
 
 	public async getAchievementsForGame(appId: number): Promise<RAWGAchievement[] | undefined>{
-		const metadata = await this.getMetadataForGame(appId, true);
+		const metadata = await this.getMetadataForGame(appId);
 		if(!metadata)
 			return undefined;
 

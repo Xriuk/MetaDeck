@@ -45,7 +45,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 	}
 
 	override async test(appId: number): Promise<boolean>{
-		if (this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if (this.overrides[appId] === 0)
 			return false;
 
 		// We return true to not double search, as we'll do it inside provide
@@ -53,7 +53,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 	}
 
 	provide(appId: number): Promise<MetadataData | undefined>{
-		if(this.excludedApps.includes(appId) || this.overrides[appId] === 0)
+		if(this.overrides[appId] === 0)
 			return Promise.resolve(undefined);
 
 		return this.throttle(() => this.getMetadataForGame(appId));
@@ -78,8 +78,8 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 		return results.filter(value => value.title === closest_name);
 	}
 
-	protected async getMetadataForGame(appId: number, external = false): Promise<MetadataData | undefined>{
-		if((!external && this.excludedApps.includes(appId)) || this.overrides[appId] === 0)
+	protected async getMetadataForGame(appId: number): Promise<MetadataData | undefined>{
+		if(this.overrides[appId] === 0)
 			return undefined;
 
 		const details = await getAppDetails(appId);
@@ -88,7 +88,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 
 		this.logger.debug(`Fetching metadata for game ${appId}`);
 
-		const results = await this.getAllMetadataForGame(appId, external);
+		const results = await this.getAllMetadataForGame(appId);
 		if (!results.length)
 			return undefined;
 
@@ -118,8 +118,8 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 		return game;
 	}
 
-	protected async getAllMetadataForGame(appId: number, external = false): Promise<MetadataData[]>{
-		if((!external && this.excludedApps.includes(appId)) || this.overrides[appId] === 0)
+	protected async getAllMetadataForGame(appId: number): Promise<MetadataData[]>{
+		if(this.overrides[appId] === 0)
 			return [];
 
 		const details = await getAppDetails(appId);
@@ -134,9 +134,6 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 	private file_date: (path: string) => Promise<number> = callable("file_date");
 
 	override async apply(appId: number, data: MetadataData): Promise<void>{
-		if(this.excludedApps.includes(appId))
-			return;
-
 		const details = await getAppDetails(appId);
 		if(!details)
 			return;

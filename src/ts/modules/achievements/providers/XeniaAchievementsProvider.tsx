@@ -62,7 +62,7 @@ type XeniaGameAchievementsStats = XeniaGameAchievements & {
 
 export interface XeniaAchievementsProviderConfig extends ProviderConfig<'xenia'>{
 	// Like /home/deck/Emulation/roms/xbox360/content/<A010000011AA1111>/FFFE07D1/00010000/<A010000011AA1111>
-	user_path: string;
+	user_path: string | null;
 	// https://github.com/xenia-project/xenia/blob/95a5c3ee250f80c3b9d139658649d9ffb6db3eec/src/xenia/xbox.h#L327-L346
 	// https://github.com/XboxChef/XeXtractor/blob/5fb6d8b17e5d38a6100590ce43962fb0df07770b/XDBF.cs#L126
 	language: number | null; // null will try to guess or fallback to english
@@ -94,7 +94,11 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		return this._rawgProvider;
 	}
 
-	get userPath(): string
+	override get isValid(): boolean {
+		return super.isValid && !!this.userPath;
+	}
+
+	get userPath(): string | null
 	{
 		return this.config.user_path;
 	}
@@ -171,6 +175,10 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 	}
 
 	override async mount(): Promise<void> {
+		// Try auto-detecting
+		if(this.userPath == null)
+			this.userPath = await call<[], string | null>("xenia_try_autodetect_user_path") ?? '';
+
 		if(this.userPath){
 			try{
 				if(!await call<[string], boolean>("xenia_check_user_path", this.userPath))
@@ -185,9 +193,6 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 	}
 
 	override async provide(appId: number): Promise<AchievementsData | undefined> {
-		if(!this.userPath || this.excludedApps.includes(appId))
-			return undefined;
-
 		if(this.gameAchievements[appId] === null)
 			return undefined;
 
@@ -220,7 +225,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			achievements = { } as any;
 
 			// Retrieve progress, and maybe achievements
-			let result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath, titleId.toString()) ?? null;
+			let result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath ?? '', titleId.toString()) ?? null;
 			achievements.progress = JSON.parse(result ?? '{}') as Record<number, XeniaAchievement>;
 			progressRetrieved = true;
 
@@ -314,7 +319,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			if(!achievement.icon){
 				// Retrieve icon from user profile GPD first
 				if(achievementsFromUser)
-					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath, titleId.toString(), achievement.icon_id) ?? '';
+					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath ?? '', titleId.toString(), achievement.icon_id) ?? '';
 				
 				// If not found retrieve from game ROM
 				if(!achievement.icon && rom)
@@ -324,7 +329,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 		// Retrieve progress if using cached data
 		if(!progressRetrieved && achievementsFromUser){
-			let result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath, titleId.toString()) ?? null;
+			let result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath ?? '', titleId.toString()) ?? null;
 			achievements.progress = JSON.parse(result ?? '{}') as Record<number, XeniaAchievement>;
 			this.logger.debug(`${appId} progress: `, achievements.progress);
 		}
@@ -448,7 +453,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 	override settingsComponent = () => {
 		const { loadingData } = useMetaDeckState();
-		const [userPath, setUserPath] = useState(this.userPath);
+		const [userPath, setUserPath] = useState(this.userPath ?? '');
 		const [language, setLanguage] = useState(this.config.language);
 		const [gamerscore, setGamerscore] = useState(this.gamerscore);
 		const [descriptionLocked, setDescriptionLocked] = useState(this.descriptionLocked);

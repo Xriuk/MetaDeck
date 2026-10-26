@@ -22,6 +22,10 @@ export class RetroAchievementsMetadataProvider extends MetadataProvider<"ra">{
 
 	logger = new Logger(this.identifier);
 
+	override get isValid(): boolean {
+		return super.isValid && this.raProvider.isValid;
+	}
+
 	private _raProvider?: RetroAchievementsAchievementsProvider;
 	get raProvider(): RetroAchievementsAchievementsProvider{
 		if(!this._raProvider){

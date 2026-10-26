@@ -151,9 +151,6 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 	}
 
 	async provide(appId: number): Promise<MetadataData | undefined>{
-		if(this.excludedApps.includes(appId))
-			return undefined;
-
 		const details = await getAppDetails(appId);
 		if (!details)
 			return undefined;
@@ -279,8 +276,7 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 			</DialogControlsSection>
 		);
 	}
-
-	// Here we do not check excludedApps because this might be used externally
+	
 	private async getGameEntries(appId: number, url: string): Promise<GameTDBGame[]>{
 		const resolved = await this.resolve(appId, true);
 		if (!resolved)

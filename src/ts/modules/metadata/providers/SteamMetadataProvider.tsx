@@ -230,10 +230,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 	}
 
 	// Missing release_date
-	public async getAppMetadata(appId: number, external = false): Promise<MetadataData | undefined>{
-		if(!external && this.excludedApps.includes(appId))
-			return undefined;
-
+	public async getAppMetadata(appId: number): Promise<MetadataData | undefined>{
 		// Currency code is required otherwise some entries are not returned successfully for some languages...
 		let response = await fetchNoCorsLegacyTimeout(
 			"https://store.steampowered.com/api/appdetails?appids={0}&l={1}&cc=EUR"
