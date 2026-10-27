@@ -702,7 +702,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 			});
 
 			// Prevent retrieving info about shortcuts, since their appid might break serialization
-			// jspb.BinaryConstants.TWO_TO_3
+			// jspb.BinaryConstants.TWO_TO_32
 			mounts.addPatchMount({
 				patch(): Patch{
 					return replacePatch(AppInfo.__proto__, "LoadAppInfoBatchFromLocalCache", function(args: any[]){
