@@ -157,7 +157,17 @@ type SteamAppDetails = {
 	strSteamDeckBlogURL: string,
 	unAppID: number,
 	vecBetas: any[],
-	vecDLC: any[],
+	vecDLC: {
+		bAvailableOnStore: boolean;
+		bEnabled: boolean;
+		lDiskUsageBytes: number;
+		rtPurchaseDate: number;
+		rtStoreAssetModifyType: number;
+		strHeaderFilename: string;
+		strName: string;
+		strState: 'installed' | 'notinstalled';
+		unAppID: number;
+	}[],
 	vecDeckCompatTestResults?: SteamTest[],
 	vecSteamOSCompatTestResults?: SteamTest[],
 	vecSteamMachineCompatTestResults?: SteamTest[],
@@ -243,6 +253,7 @@ type SteamAppOverview = {
 	vr_supported: boolean | undefined,
 	BHasStoreTag: (number) => boolean,
 	BHasStoreCategory: (number) => boolean,
+	BHasCustomImages: () => boolean,
 	active_beta: number | string | undefined,
 	display_status: number,
 	installed: boolean,
@@ -328,6 +339,7 @@ type AppDetailsStore = {
 	RegisterForAppData(app_id: any, callback: (data: SteamAppDetails) => void): Hook
 	GetAchievements(app_id: number): SteamAppAchievements;
 	GetAppData(app_id: number): AppData;
+	GetHeaderImages(overview: SteamAppOverview): string[];
 }
 
 type AppStore = {

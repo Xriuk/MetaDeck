@@ -48,11 +48,16 @@ export interface CompatdataData extends EntryData{
 export interface AchievementsData extends EntryData{
 	// First group is base game
 	groups: {
-		// DEV: add info for DLCs?
 		name: string; // Should be empty for base game
+		dlc?: number; // DLC index
 		achievements: (SteamAppAchievement & {
 			strImageLocked?: string;
 		})[]; // Can be empty if base game
+	}[];
+	dlcs?: {
+		name: string;
+		image?: string; // Base 64
+		owned?: boolean; // Defaults to true
 	}[];
 }
 

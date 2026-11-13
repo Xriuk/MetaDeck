@@ -108,8 +108,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 			return response;
 	}
 
-	protected async search(title: string, platformIds?: string | undefined): Promise<MetadataData[]>
-	{
+	protected async search(title: string, platformIds?: string | undefined): Promise<MetadataData[]>{
 		let params: Record<string, string> = {
 			key: this.apiKey,
 			search: title,
@@ -118,8 +117,7 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 		if(platformIds)
 			params.platforms = platformIds;
 		const response = await this.fetchNoCorsWithRetry("https://api.rawg.io/api/games?" + new URLSearchParams(params).toString());
-		if (response.ok)
-		{
+		if (response.ok){
 			let games: {
 				results?: {
 					slug: string;
@@ -259,16 +257,15 @@ export class RAWGMetadataProvider extends FuzzySearchMetadataProvider<"rawg">{
 								}}/>
 						} />
 					<Field description={
-						<>
-							<Markdown>{t("rawgApiKeyInstructionsMD")
-								.replace("{rawgUrl}", `[rawg.io](${authUrl})`)
-								.replace("{rawgUse}", "\"Extract games metadata for emulation purposes\"")}</Markdown>
-							<DialogButton
-								onClick={() => void copyToClipboard(authUrl)}>
-								{t("copyAuthUrl")}
-							</DialogButton>
-						</>
-					} />
+						<Markdown>{t("rawgApiKeyInstructions")
+							.replace("{rawgUrl}", `[rawg.io](${authUrl})`)
+							.replace("{rawgUse}", "\"Extract games metadata for emulation purposes\"")}</Markdown>
+					}>
+						<DialogButton
+							onClick={() => void copyToClipboard(authUrl)}>
+							{t("copyAuthUrl")}
+						</DialogButton>
+					</Field>
 				</DialogControlsSection>
 
 				<DialogControlsSection>

@@ -47,7 +47,7 @@ export abstract class Module<
 	Identifier extends ModuleIdentifier,
 	Prov extends Provider<any, any>,
 
-	Data = ModuleCaches[Identifier]['data'][number]
+	Data = NonNullable<ModuleCaches[Identifier]['data'][number]>
 > implements AsyncMountable{
 	private readonly _state: MetaDeckState;
 	get state(): MetaDeckState{
@@ -174,6 +174,7 @@ export abstract class Module<
 			await this.applyApp(overview, await getAppDetails(appId));
 	}
 
+	// Must only use cachedData to avoid loops
 	async applyApp(overview: SteamAppOverview, details: SteamAppDetails | null){
 		if(this.excludedApps.includes(overview.appid))
 			return;
@@ -181,9 +182,11 @@ export abstract class Module<
 		try{
 			if (overview.app_type == SteamAppTypeShortcut){
 				await this.applyOverview(overview);
-				await stateTransaction(async () => {
+				await stateTransaction(() => {
 					if(details)
-						await this.applyDetails(details)
+						return this.applyDetails(details);
+					else
+						return Promise.resolve();
 				});
 			}
 		}
@@ -193,10 +196,12 @@ export abstract class Module<
 
 	}
 
+	// Must only use cachedData to avoid loops
 	applyOverview(_overview: SteamAppOverview): Promise<void>{
 		return Promise.resolve();
 	}
 
+	// Must only use cachedData to avoid loops
 	applyDetails(_details: SteamAppDetails): Promise<void>{
 		return Promise.resolve();
 	}
@@ -272,7 +277,7 @@ export abstract class Module<
 			this.notCachedData[appId] = data;
 	}
 
-	protected getCachedData(appId: number){
+	protected getCachedData(appId: number): Data | undefined{
 		return this.data[appId]
 			?? this.notCachedData[appId]
 			?? undefined;
@@ -379,12 +384,13 @@ export abstract class Module<
 			else
 				this.logger.debug(`Loading cached ${this.identifier} for ${appId}: `, this.getCachedData(appId), this.dataProviders[appId]);
 
-			void this.apply(appId);
+			await this.apply(appId);
 
 			return this.getCachedData(appId);
 		}
 		catch (e: any){
 			this.handleError(e);
+			return undefined;
 		}
 	}
 

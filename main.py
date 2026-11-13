@@ -13,14 +13,11 @@ import mmap
 import re
 import logging
 import math
-import sys
 import base64
-import hashlib
-import io
 import shutil
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 from helpers import get_ssl_context # type: ignore
 
 logging.basicConfig(
@@ -67,12 +64,10 @@ class Plugin:
 	egs_nsl: Dict[str, Dict[str, any]] | None = None # type: ignore
 	gog_nsl: Dict[int, Dict[str, any]] | None = None # type: ignore
 
+
 	egs_her: Dict[str, Dict[str, any]] | None = None # type: ignore
 	gog_her: Dict[int, Dict[str, any]] | None = None # type: ignore
 
-	gametdb = {} # url: { id: { game } }
-
-	titledb = {} # language: { id: { game } }
 
 	config_buffer: str = ""
 	config_chunks: int = 0
@@ -339,7 +334,7 @@ class Plugin:
 	def rpcs3_get_all_trophies_file(self, file_bytes: bytes):
 		result = {'trophies': []}
 
-		trophyconf = xmltodict.parse(file_bytes)['trophyconf']
+		trophyconf = xmltodict.parse(file_bytes, force_list=['group'])['trophyconf']
 		if 'title-name' in trophyconf:
 			if not 'game' in result:
 				result['game'] = {} # type: ignore
@@ -348,6 +343,15 @@ class Plugin:
 			if not 'game' in result:
 				result['game'] = {} # type: ignore
 			result['game']['detail'] = trophyconf['title-detail'] # type: ignore
+		if 'group' in trophyconf:
+			for group in trophyconf['group']:
+				if not 'groups' in result:
+					result['groups'] = [] # type: ignore
+				result['groups'].append({
+					'id': group['@id'],
+					'name': group['name'] if 'name' in group else None,
+					'detail': group['detail'] if 'detail' in group else None
+				})
 		if 'trophy' in trophyconf:
 			for trophy in trophyconf['trophy']:
 				result['trophies'].append({
@@ -355,7 +359,9 @@ class Plugin:
 					'hidden': trophy['@hidden'] != 'no' if '@hidden' in trophy else None,
 					'type': trophy['@ttype'],
 					'name':  trophy['name'] if 'name' in trophy else '',
-					'detail':  trophy['detail'] if 'detail' in trophy else ''
+					'detail':  trophy['detail'] if 'detail' in trophy else '',
+					'pid': trophy['@pid'] if '@pid' in trophy else None, # Platinum is pid -1 with id 000, main game is pid 000, dlcs are not
+					'gid': trophy['@gid'] if '@gid' in trophy else None
 				})
 
 		return result
@@ -421,8 +427,8 @@ class Plugin:
 
 		return json.dumps(result)
 
-	async def rpcs3_get_trophy_icon_user(self, user_path: str, trophy_id: str, id: str) -> str:
-		path = user_path + "/trophy/" + trophy_id + "/TROP" + id + ".PNG"
+	def rpcs3_get_icon_user(self, user_path: str, trophy_id: str, type: str, id: str) -> str:
+		path = user_path + "/trophy/" + trophy_id + "/" + type + id + ".PNG"
 		if not os.path.isfile(path):
 			return ''
 		
@@ -430,7 +436,10 @@ class Plugin:
 			encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
 			return "data:image/png;base64," + encoded_string
 
-	async def rpcs3_get_trophy_icon_game(self, trp_path: str, id: str) -> str:
+	async def rpcs3_get_trophy_icon_user(self, user_path: str, trophy_id: str, id: str) -> str:
+		return Plugin.rpcs3_get_icon_user(self, user_path, trophy_id, 'TROP', id)
+
+	def rpcs3_get_icon_game(self, trp_path: str, type: str, id: str) -> str:
 		trp_bytes = None
 		trp = {}
 		try:
@@ -440,12 +449,21 @@ class Plugin:
 		except:
 			return ''
 		
-		if f'TROP{id}.PNG' in trp:
-			entry = trp[f'TROP{id}.PNG']
+		if f'{type}{id}.PNG' in trp:
+			entry = trp[f'{type}{id}.PNG']
 			encoded_string = base64.b64encode(trp_bytes[entry[0]:entry[0] + entry[1]]).decode('utf-8')
 			return "data:image/png;base64," + encoded_string
 		else:
 			return ''
+
+	async def rpcs3_get_trophy_icon_game(self, trp_path: str, id: str) -> str:
+		return Plugin.rpcs3_get_icon_game(self, trp_path, 'TROP', id)
+
+	async def rpcs3_get_group_icon_user(self, user_path: str, trophy_id: str, id: str) -> str:
+		return Plugin.rpcs3_get_icon_user(self, user_path, trophy_id, 'GR', id)
+	
+	async def rpcs3_get_group_icon_game(self, trp_path: str, id: str) -> str:
+		return Plugin.rpcs3_get_icon_game(self, trp_path, 'GR', id)
 
 	async def rpcs3_get_all_trophies_status(self, user_path: str, trophy_id: str) -> str:
 		parsed_states = {}
@@ -543,6 +561,9 @@ class Plugin:
 			raise ValueError("trophy-state table is missing")
 
 		return json.dumps(parsed_states)
+
+	async def rpcs3_check_rap_file(self, user_path: str, content_id: str) -> bool:
+		return os.path.isfile(user_path + "/exdata/" + content_id + ".rap")
 
 
 	# Inspired by https://github.com/valters-tomsons/PS2-Game-Title-Finder/tree/master
@@ -804,7 +825,7 @@ class Plugin:
 	# 1 Metadata (check id = 1480672072 / XACH)
 	# 2 Image
 	# 3 String Tables (localization)
-	def xenia_get_spaxdbf(self, iso_path: str, title_id: str) -> bytes | None:
+	def xenia_get_spaxdbf_iso(self, iso_path: str, title_id: str) -> bytes | None:
 		xex_bytes = Plugin.xenia_get_defaultxex(self, iso_path)
 		if xex_bytes is None:
 			return None
@@ -813,20 +834,28 @@ class Plugin:
 		temp_xex_path = os.path.join("/tmp", f"{title_id}.xex")
 		with open(temp_xex_path, "wb") as temp_xex_file:
 			temp_xex_file.write(xex_bytes)
-		
-		# Run xextool with Wine
+
+		spa_bytes = Plugin.xenia_get_spaxdbf_file(self, temp_xex_path, title_id)
+
+		# Remove default.xex
+		os.remove(temp_xex_path)
+
+		return spa_bytes
+
+	def xenia_get_spaxdbf_file(self, default_xex: str, title_id: str) -> bytes | None:
+		if not os.path.isfile(default_xex):
+			return None
+
+		# Run xextool with Wine to dump the resources
 		temp_res_path = os.path.join("/tmp", f"{title_id}_spa")
 		shutil.rmtree(temp_res_path, ignore_errors=True)
 		cmd = [
 			os.path.join(decky.HOME, ".local/share/Steam/steamapps/common/Proton - Experimental/files/bin/wine"),
 			os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "XexTool.exe"),
 			"-d", temp_res_path,
-			temp_xex_path
+			default_xex
 		]
 		subprocess.run(cmd)
-
-		# Remove default.xex
-		os.remove(temp_xex_path)
 
 		# Check if we have a file in the resource directory
 		temp_spa_path = os.path.join(temp_res_path, title_id)
@@ -841,13 +870,33 @@ class Plugin:
 
 			return spa_bytes
 
+	def xenia_get_spaxdbf_patch(self, default_xex: str, default_xexp: str, title_id: str) -> bytes | None:
+		# Run xextool with Wine to patch the xexp file into the xex file
+		temp_xex_path = os.path.join("/tmp", f"{title_id}.xex")
+		os.remove(temp_xex_path)
+		cmd = [
+			os.path.join(decky.HOME, ".local/share/Steam/steamapps/common/Proton - Experimental/files/bin/wine"),
+			os.path.join(decky.DECKY_PLUGIN_DIR, "py_modules", "bin", "XexTool.exe"),
+			"-p", default_xexp,
+			"-o", temp_xex_path,
+			default_xex
+		]
+		subprocess.run(cmd)
+
+		spa_bytes = Plugin.xenia_get_spaxdbf_file(self, temp_xex_path, title_id)
+
+		# Remove default.xex
+		os.remove(temp_xex_path)
+
+		return spa_bytes
+
 	# entry_predicate receives (xdbf_bytes, entry_namespace, entry_id, entry_offset, entry_size) and if returns not None it will be added to the returned result list
 	# entry_offset: offset by start_pos
 	def xenia_parse_xdbf_all(self, xdbf_bytes: bytes, entry_predicate):
 		if len(xdbf_bytes) < 4 or xdbf_bytes[:4] != b"XDBF":
 			raise ValueError("Not a valid XDBF file.")
 		
-		entry_max, entry_current, free_max, free_current = struct.unpack(">IIII", xdbf_bytes[8:24])
+		entry_max, _, free_max, _ = struct.unpack(">IIII", xdbf_bytes[8:24])
 		entries_offset = 24
 
 		# https://free60.org/System-Software/Formats/XDBF/#entry-data-offset
@@ -933,23 +982,19 @@ class Plugin:
 			'edited': (flags & 1048576) != 0
 		}
 
-	async def xenia_get_all_achievements_game(self, iso_path: str, title_id: str, locale: int) -> str:
+	def xenia_get_all_achievements(self, xdbf_bytes: bytes, locale: int):
 		def xach_predicate(xdbf_bytes, ns, id, offset, size):
 			if ns == 1 and id == 1480672072:
 				return xdbf_bytes[offset:offset + size]
 			else:
 				return None
 
-		result = {'achievements': []}
-
-		xdbf_bytes = Plugin.xenia_get_spaxdbf(self, iso_path, title_id)
-		if xdbf_bytes is None:
-			return json.dumps(result)
-
+		result = []
+		
 		# Retrieve achievements
 		xach_bytes = Plugin.xenia_parse_xdbf(self, xdbf_bytes, xach_predicate)
 		if xach_bytes is None or len(xach_bytes) < 4 or xach_bytes[:4] != b"XACH":
-			return json.dumps(result)
+			return result
 
 		# Retrieve localization, default to english
 		localization_lang = Plugin.xenia_get_localization(self, xdbf_bytes, locale)
@@ -958,7 +1003,7 @@ class Plugin:
 			localization_en = Plugin.xenia_get_localization(self, xdbf_bytes, 1)
 		
 		if localization_lang is None and localization_en is None:
-			return json.dumps(result)
+			return result
 
 		# Populate achievements
 		achievement_count = struct.unpack(">H", xach_bytes[12:14])[0]
@@ -967,7 +1012,7 @@ class Plugin:
 			id, name_id, description_achieved_id, description_unachieved_id, icon_id, gamerscore, _, flags = struct.unpack(">HHHHIHHI", xach_bytes[achievement_offset:achievement_offset+20])
 			achievement_offset += 36
 
-			result['achievements'].append({
+			result.append({
 				'id': id,
 				'name': localization_lang[name_id] if localization_lang and name_id in localization_lang else localization_en[name_id] if localization_en and name_id in localization_en else '',
 				'description_achieved': localization_lang[description_achieved_id] if localization_lang and description_achieved_id in localization_lang else localization_en[description_achieved_id] if localization_en and description_achieved_id in localization_en else '',
@@ -977,7 +1022,14 @@ class Plugin:
 				'flags': Plugin.xenia_parse_achievement_flags(self, flags)
 			})
 
-		return json.dumps(result)
+		return result
+
+	async def xenia_get_all_achievements_game(self, iso_path: str, title_id: str, locale: int) -> str:
+		xdbf_bytes = Plugin.xenia_get_spaxdbf_iso(self, iso_path, title_id)
+		if xdbf_bytes is None:
+			return json.dumps([])
+
+		return json.dumps(Plugin.xenia_get_all_achievements(self, xdbf_bytes, locale))
 
 	def xenia_get_achievement_icon_xdbf(self, xdbf_bytes: bytes, icon_id: int) -> str:
 		def icon_predicate(xdbf_bytes, ns, id, offset, size):
@@ -1000,7 +1052,7 @@ class Plugin:
 		return Plugin.xenia_get_achievement_icon_xdbf(self, Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id), icon_id) # type: ignore
 
 	async def xenia_get_achievement_icon_game(self, iso_path: str, title_id: str, icon_id: int) -> str:
-		return Plugin.xenia_get_achievement_icon_xdbf(self,  Plugin.xenia_get_spaxdbf(self, iso_path, title_id), icon_id) # type: ignore
+		return Plugin.xenia_get_achievement_icon_xdbf(self,  Plugin.xenia_get_spaxdbf_iso(self, iso_path, title_id), icon_id) # type: ignore
 
 	# entry_namespace:
 	# 1 Achievement
@@ -1072,6 +1124,130 @@ class Plugin:
 		
 		return json.dumps(parsed_states)
 
+	def xenia_get_dlcs(self, user_path: str, title_id: str) -> list[str]:
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/00000002"
+		if not os.path.isdir(base_path):
+			return []
+
+		return next(os.walk(base_path))[1]
+
+	def xenia_get_title_updates(self, user_path: str, title_id: str) -> list[str]:
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/000B0000"
+		if not os.path.isdir(base_path):
+			return []
+
+		return next(os.walk(base_path))[1]
+
+	async def xenia_get_all_achievements_dlcs_title_updates(self, user_path: str, iso_path: str, title_id: str, locale: int) -> str:
+		result = {
+			'achievements': [],
+			'achievements_en': [],
+			'has_dlc': False,
+			'has_tu': False
+		}
+
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/00000002/"
+		dlcs = Plugin.xenia_get_dlcs(self, user_path, title_id)
+		for dlc in dlcs:
+			path = base_path + dlc + "/spa.bin"		
+			if os.path.isfile(path):
+				xdbf_bytes = None
+				with open(path, "rb") as spa_file:
+					xdbf_bytes = spa_file.read()
+				if not xdbf_bytes is None:
+					achievements = Plugin.xenia_get_all_achievements(self, xdbf_bytes, locale)
+					if len(achievements) > 0:
+						result['has_dlc'] = True
+						if len(achievements) > len(result['achievements']):
+							result['achievements'] = achievements
+							if locale != 1:
+								result['achievements_en'] = Plugin.xenia_get_all_achievements(self, xdbf_bytes, 1)
+
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/000B0000/"
+		title_updates = Plugin.xenia_get_title_updates(self, user_path, title_id)
+		if len(title_updates) > 0:
+			xex_bytes = Plugin.xenia_get_defaultxex(self, iso_path)
+			if not xex_bytes is None:
+				# Save default.xex to a temporary file for xextool to read
+				temp_xex_path = os.path.join("/tmp", f"{title_id}.xex")
+				with open(temp_xex_path, "wb") as temp_xex_file:
+					temp_xex_file.write(xex_bytes)
+
+				for tu in title_updates:
+					path = base_path + tu + "/default.xexp"
+					if os.path.isfile(path):
+						xdbf_bytes = Plugin.xenia_get_spaxdbf_patch(self, temp_xex_path, path, title_id)
+						if not xdbf_bytes is None:
+							achievements = Plugin.xenia_get_all_achievements(self, xdbf_bytes, locale)
+							if len(achievements) > 0:
+								result['has_tu'] = True
+								if len(achievements) > len(result['achievements']):
+									result['achievements'] = achievements
+									if locale != 1:
+										result['achievements_en'] = Plugin.xenia_get_all_achievements(self, xdbf_bytes, 1)
+
+		return json.dumps(result)
+
+	xenia = {} # title_id: { icon_id: base 64 url }
+
+	async def xenia_cache_achievement_icons(self, user_path: str, iso_path: str, title_id: str) -> None:
+		max = 0
+
+		Plugin.xenia[title_id] = {}
+
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/00000002/"
+		dlcs = Plugin.xenia_get_dlcs(self, user_path, title_id)
+		for dlc in dlcs:
+			path = base_path + dlc + "/spa.bin"
+			if os.path.isfile(path):
+				xdbf_bytes = None
+				with open(path, "rb") as spa_file:
+					xdbf_bytes = spa_file.read()
+				if not xdbf_bytes is None:
+					achievements = Plugin.xenia_get_all_achievements(self, xdbf_bytes, 1)
+					if len(achievements) > max:
+						for i in range(max, len(achievements)):
+							icon_id = achievements[i]['icon_id']
+							if not icon_id is None:
+								Plugin.xenia[title_id][icon_id] = Plugin.xenia_get_achievement_icon_xdbf(self, xdbf_bytes, icon_id)
+
+						max = len(achievements)
+
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/000B0000/"
+		title_updates = Plugin.xenia_get_title_updates(self, user_path, title_id)
+		if len(title_updates) > 0:
+			xex_bytes = Plugin.xenia_get_defaultxex(self, iso_path)
+			if not xex_bytes is None:
+				# Save default.xex to a temporary file for xextool to read
+				temp_xex_path = os.path.join("/tmp", f"{title_id}.xex")
+				with open(temp_xex_path, "wb") as temp_xex_file:
+					temp_xex_file.write(xex_bytes)
+
+				for tu in title_updates:
+					path = base_path + tu + "/default.xexp"
+					if os.path.isfile(path):
+						xdbf_bytes = Plugin.xenia_get_spaxdbf_patch(self, temp_xex_path, path, title_id)
+						if not xdbf_bytes is None:
+							achievements = Plugin.xenia_get_all_achievements(self, xdbf_bytes, 1)
+							if len(achievements) > max:
+								for i in range(max, len(achievements)):
+									icon_id = achievements[i]['icon_id']
+									if not icon_id is None:
+										Plugin.xenia[title_id][icon_id] = Plugin.xenia_get_achievement_icon_xdbf(self, xdbf_bytes, icon_id)
+
+								max = len(achievements)
+
+	async def xenia_get_achievement_icon_cache(self, title_id: str, icon_id: int) -> str:
+		if title_id in Plugin.xenia and icon_id in Plugin.xenia[title_id]:
+			return Plugin.xenia[title_id][icon_id]
+		else:
+			return ''
+
+	async def xenia_clear_achievement_icons(self, title_id: str) -> None:
+		del Plugin.xenia[title_id]
+
+
+	gametdb = {} # url: { id: { game } }
 
 	async def gametdb_get_db(self, url: str) -> None:
 		# Support WaybackMachine
@@ -1138,6 +1314,9 @@ class Plugin:
 		else:
 			return json.dumps(Plugin.gametdb[filename][id])
 
+
+	titledb = {} # language: { id: { game } }
+
 	async def titledb_get_language(self, language: str) -> None:
 		if language in Plugin.titledb:
 			return
@@ -1178,6 +1357,7 @@ class Plugin:
 			return None
 		else:
 			return json.dumps(Plugin.titledb[language][id])
+
 
 	async def hash(self, path: str) -> str | None:
 		logger.debug(f"Hashing ROM: {path}")

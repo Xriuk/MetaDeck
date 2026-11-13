@@ -220,7 +220,7 @@ export class GOGAchievementsProvider extends AchievementsProvider<'gog'>{
 		return await super.test(appId, external);
 	}
 
-	override async provide(appId: number): Promise<AchievementsData | null | undefined> {
+	override async provide(appId: number): Promise<AchievementsData | undefined> {
 		if(!this._userId)
 			await this.refreshRefreshToken();
 		if(!this._userId || !this._bearer)
@@ -410,16 +410,22 @@ export class GOGAchievementsProvider extends AchievementsProvider<'gog'>{
 							</>
 						} />
 					<Field description={
-						<>
-							<Markdown>{t("gogApiKeyInstructionsMD")
+							<Markdown>{t("gogApiKeyInstructions")
 								.replace("{gogUrl}", `[auth.gog.com/auth](${authUrl})`)
-								.replace("{gogRedirect}", redirectUri.split("://")[0] + "://..." + (redirectUri.indexOf('?') ? `?${redirectUri.split('?')[1]}&` : `/${redirectSplit[redirectSplit.length-1]}?`))}</Markdown>
-							<DialogButton
-								onClick={() => void copyToClipboard(authUrl)}>
-								{t("copyAuthUrl")}
-							</DialogButton>
-						</>
-					} />
+								.replace("{gogRedirect}",
+									"`" + 
+									redirectUri.split("://")[0] +
+									"://..." +
+									(redirectUri.indexOf('?') ? `?${redirectUri.split('?')[1]}&` : `/${redirectSplit[redirectSplit.length-1]}?`) +
+									"code=<" +
+									t("gogApiKeyInstructionsToken") +
+									">`")}</Markdown>
+					}>
+						<DialogButton
+							onClick={() => void copyToClipboard(authUrl)}>
+							{t("copyAuthUrl")}
+						</DialogButton>
+					</Field>
 				</DialogControlsSection>
 
 				<DialogControlsSection>

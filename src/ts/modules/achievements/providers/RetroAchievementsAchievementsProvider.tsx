@@ -238,7 +238,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 			if (!details)
 				return undefined;
 
-			// Retrieve parent game
+			// Retrieve parent games
 			let parents: Record<ID, typeof game> = { [game.ID]: game };
 			while((game as any).ParentGameID){
 				let newGame = await this.getGameInfoAndProgressInternal((game as any).ParentGameID);
@@ -271,45 +271,45 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 				}
 			}
 			
-			// 1 + ... + 1 sets (achievementTypes=false)
-			// 1 + 3 + ... + 1 + 3 sets (achievementTypes=true)
-			let multipleParents = (Object.keys(parents).length > 1 && this.parentSets);
-			let multipleSubsets = (Object.keys(subsets).length && this.subsets && this.subsetsSets);
 			let result: AchievementsData = {
 				title: details.strDisplayName,
 				id: parentGame.ID,
 
-				groups: [parentGame]
-					.concat(Object.values(parents).filter(g => g.ID !== parentGame.ID))
-					.concat(Object.values(subsets))
-					.flatMap(game => {
+				groups: []
+			};
 
-					let isBase = game.ID === parentGame.ID;
-					let isParent = !isBase && parents[game.ID];
-					let multipleSets = (isParent ? multipleParents : multipleSubsets);
-					if(!multipleSets && !isBase)
-						return [];
+			// Main parent, parents, subsets
+			let multipleParents = (Object.keys(parents).length > 1 && this.parentSets);
+			let multipleSubsets = (Object.keys(subsets).length && this.subsets && this.subsetsSets);
+			for(let game of [parentGame]
+				.concat(Object.values(parents).filter(g => g.ID !== parentGame.ID))
+				.concat(Object.values(subsets))){
 
-					let subsetTitle = isBase ?
-						'' :
-						game.Title.match(/\[subset\s*-\s*(.+)\s*\]/i)?.[1]
-							?? game.Title;
+				let groups = result.groups.length;
 
-					if(!this.achievementTypes){
-						return [{
-							name: subsetTitle,
-							achievements: []
-						}];
-					}
-					else{
+				let gameTitle = game.Title.match(/\[subset\s*-\s*(.+)\s*\]/i)?.[1]
+					?? game.Title;
+				
+				// Add groups
+				let isBase = game.ID === parentGame.ID;
+				let isParent = !isBase && parents[game.ID];
+				let multipleSets = (isParent ? multipleParents : multipleSubsets);
+				let isBaseGroup = !isBase && !multipleSets; // Base does not default to 0 group, but it is 0 group
+				// DEV: check if subsets are achievable/owned, how?
+				if(!isBaseGroup){
+					let subsetTitle = isBase ? '' : gameTitle;
+
+					// 1 + ... + 1 sets (achievementTypes=false)
+					// 1 + 3 + ... + 1 + 3 sets (achievementTypes=true)
+					result.groups.push({
+						name: subsetTitle,
+						achievements: []
+					});
+					if(this.achievementTypes){
 						if(multipleSets && isBase)
 							subsetTitle = t("defaultAchievementSet");
 						let baseName = (multipleSets ? `${subsetTitle} - ` : "");
-						return [
-							{
-								name: subsetTitle,
-								achievements: []
-							},
+						result.groups.push(
 							{
 								name: baseName + t("raAchievementTypeProgression"),
 								achievements: []
@@ -322,53 +322,39 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								name: baseName + t("raAchievementTypeCompletion"),
 								achievements: []
 							}
-						];
+						);
 					}
-				})
-			};
-
-			this.logger.debug(`${appId} groups: `, result.groups);
-
-			let i = 0;
-			for(let game of [parentGame]
-				.concat(Object.values(parents).filter(g => g.ID !== parentGame.ID))
-				.concat(Object.values(subsets))){
-
-				let isBase = game.ID === parentGame.ID;
-				let isParent = !isBase && parents[game.ID];
-				let isBaseGroup = !isBase && !(isParent ? multipleParents : multipleSubsets); // Base does not default to 0 group, but it is 0 group
-
+				}
+				
 				let subsetTitle = ((!this.module.hasAchievementSetsSupport && (multipleParents || multipleSubsets) && !isBase && !isBaseGroup) ? 
-					(game.Title.match(/\[subset\s*-\s*(.+)\s*\]/i)?.[1]
-						?? game.Title) : 
+					gameTitle : 
 					undefined);
 
+				// Add achievements
 				for(let achievement of Object.values(game.Achievements)
 					.sort((a, b) => Number(a.DisplayOrder) - Number(b.DisplayOrder))){
+
+					let groupId = (isBaseGroup ? 0 : groups);
 						
 					let achieved = !!achievement.DateEarned;
 
-					let groupId = isBaseGroup ? 0 : i;
 					let achievementType: string | undefined = undefined;
 					if(this.achievementTypes){
 						switch((achievement as any).Type){
 						case 'progression':
-							groupId = (groupId * 4) + 1;
+							groupId += 1;
 							if(!this.module.hasAchievementSetsSupport)
 								achievementType = t("raAchievementTypeProgression");
 							break;
 						case 'missable':
-							groupId = (groupId * 4) + 2;
+							groupId += 2;
 							if(!this.module.hasAchievementSetsSupport)
 								achievementType = t("raAchievementTypeMissable");
 							break;
 						case 'win_condition':
-							groupId = (groupId * 4) + 3;
+							groupId += 3;
 							if(!this.module.hasAchievementSetsSupport)
 								achievementType = t("raAchievementTypeCompletion");
-							break;
-						default:
-							groupId = (groupId * 4) + 0;
 							break;
 						}
 					}
@@ -394,9 +380,6 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 						strName: achievement.Title
 					});
 				}
-
-				if(!isBaseGroup)
-					i++;
 			}
 
 			return result;
@@ -443,15 +426,14 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								}}/>
 						} />
 					<Field description={
-						<>
-							<Markdown>{t("raApiKeyInstructionsMD")
-								.replace("{raUrl}", `[retroachievements.org](${authUrl})`)}</Markdown>
-							<DialogButton
-								onClick={() => void copyToClipboard(authUrl)}>
-								{t("copyAuthUrl")}
-							</DialogButton>
-						</>
-					} />
+						<Markdown>{t("raApiKeyInstructions")
+							.replace("{raUrl}", `[retroachievements.org](${authUrl})`)}</Markdown>
+					}>
+						<DialogButton
+							onClick={() => void copyToClipboard(authUrl)}>
+							{t("copyAuthUrl")}
+						</DialogButton>
+					</Field>
 				</DialogControlsSection>
 
 				<DialogControlsSection>

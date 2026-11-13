@@ -287,7 +287,7 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 		return Promise.resolve();
 	}
 
-	applyDetails(details: SteamAppDetails): Promise<void>{
+	override applyDetails(details: SteamAppDetails): Promise<void>{
 		if(!this.verified || this.excludedApps.includes(details.unAppID))
 			return Promise.resolve();
 

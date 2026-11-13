@@ -1,18 +1,20 @@
-import { call, callable, FileSelectionType, openFilePicker } from "@decky/api";
-import type { AchievementsData } from "../../../Interfaces";
+import { call, callable, fetchNoCors, FileSelectionType, openFilePicker } from "@decky/api";
+import type { AchievementsData, EntryData, IDDictionary } from "../../../Interfaces";
 import Logger from "../../../logger";
 import { t, getLanguageTitle, type Language, getCurrentLanguage, getAutoLanguageOptions } from "../../../useTranslations";
 import type { ProviderConfig, ProviderCache } from "../../Provider";
 import { AchievementsProvider } from "../AchievementsProvider";
 import { FaXbox } from "react-icons/fa";
 import { getLaunchCommand, romRegex } from "../../../shortcuts";
-import { getAppDetails, toasterToast } from "../../../util";
+import { closestWithLimit, getAppDetails, getAppHeader, toasterToast } from "../../../util";
 import { RAWGMetadataProvider } from "../../metadata/providers/RAWGMetadataProvider";
 import { DialogControlsSection, Field, TextField, DialogButton, Toggle, Dropdown } from "@decky/ui";
 import React, { useState } from "react";
 import { Markdown } from "../../../markdown";
 import { useMetaDeckState } from "../../../MetaDeckState";
 import { cloneDeep } from "lodash-es";
+import { removeAfterAndIncluding, removeBeforeAndIncluding } from "../../GamesDBResult";
+import { closest } from "fastest-levenshtein";
 
 const langMap: Partial<Record<Language, number>> = {
 	'en': 1, // US
@@ -31,6 +33,14 @@ const langMap: Partial<Record<Language, number>> = {
 	'ru': 12
 };
 
+// - DLC/Update achievements are stored inside /home/deck/Emulation/roms/xbox360/content/0000000000000000/<gameTitleId> (16 zeroes):
+// /00000002/<dlcContentId>: folder which may contain "spa.bin" file which is like "default.xex". If "spa.bin" is not present,
+// the DLC may still have achievemens through a title update
+// /000B0000/<updateContentId>: folder which contains "default.xexp" file which needs to be patched onto "default.xex" with XexTool
+// - /home/deck/Emulation/roms/xbox360/content/0000000000000000/<gameTitleId>/Headers:
+// contains folders above, with files with NULL-terminated string of 2-bytes chars starting at offset 8 for the DLC/update title
+// /00000002/<dlcContentId>.header
+// /000B0000/<updateContentId>.header
 type XeniaAchievement = {
 	id: number;
 	name: string;
@@ -53,6 +63,10 @@ type XeniaAchievement = {
 
 type XeniaGameAchievements = {
 	achievements: XeniaAchievement[];
+	achievementDlcs: Record<number, number>;
+	dlcs: string[];
+	achievementTus: Record<number, number>;
+	tus: string[];
 	rarity?: Record<number, number | null>;
 };
 
@@ -69,6 +83,12 @@ export interface XeniaAchievementsProviderConfig extends ProviderConfig<'xenia'>
 	gamerscore: boolean;
 	description_locked: boolean | null; // null: show locked/unlocked, true: show locked, false: show unlocked
 	achievement_types: boolean;
+	dlcs: boolean;
+	title_updates: boolean | null; // null: show as DLC, true/false: show/hide prefixes or create separate sets/add to base
+	ta_fuzziness: number;
+	ta_overrides: IDDictionary;
+	dlc_ownership: boolean; // If true will check if the DLCs/TUs are owned/installed
+	dlc_overrides: IDDictionary; // Packed appId and dlcId: ''
 }
 
 export interface XeniaAchievementsProviderCache extends ProviderCache{
@@ -98,9 +118,9 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		return super.isValid && !!this.userPath;
 	}
 
-	get userPath(): string | null
+	get userPath(): string
 	{
-		return this.config.user_path;
+		return this.config.user_path ?? '';
 	}
 
 	set userPath(data: string)
@@ -170,13 +190,88 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			void this.clearModuleCache();
 	}
 
+	get dlcs(): boolean
+	{
+		return this.config.dlcs;
+	}
+
+	set dlcs(data: boolean)
+	{
+		let current = this.dlcs;
+		this.config.dlcs = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
+	get titleUpdates(): boolean | null
+	{
+		return this.config.title_updates;
+	}
+
+	set titleUpdates(data: boolean | null)
+	{
+		let current = this.titleUpdates;
+		this.config.title_updates = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
+	get taOverrides(): IDDictionary{
+		return this.config.ta_overrides;
+	}
+
+	set taOverrides(data: IDDictionary){
+		this.config.ta_overrides = data;
+		void this.saveConfig();
+	}
+
+	get taFuzziness(): number{
+		return this.config.ta_fuzziness;
+	}
+
+	set taFuzziness(fuzziness: number){
+		this.config.ta_fuzziness = fuzziness;
+		void this.saveConfig();
+	}
+
+	get dlcOwnership(): boolean{
+		return this.config.dlc_ownership;
+	}
+
+	set dlcOwnership(data: boolean){
+		let current = this.dlcOwnership;
+		this.config.dlc_ownership = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
+	get dlcOverrides(): IDDictionary{
+		return this.config.dlc_overrides;
+	}
+
+	set dlcOverrides(data: IDDictionary)
+	{
+		let current = this.dlcOverrides;
+		this.config.dlc_overrides = data;
+		void this.saveConfig();
+
+		if(current != data)
+			void this.clearModuleCache();
+	}
+
 	get gameAchievements(): Record<number, XeniaGameAchievements | null>{
 		return this.cache.game_achievements;
 	}
 
 	override async mount(): Promise<void> {
 		// Try auto-detecting
-		if(this.userPath == null)
+		if(this.config.user_path == null)
 			this.userPath = await call<[], string | null>("xenia_try_autodetect_user_path") ?? '';
 
 		if(this.userPath){
@@ -192,11 +287,95 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		}
 	}
 
+	protected async getAllTAForGame(appId: number): Promise<EntryData[]>{
+		if(this.taOverrides[appId] === 0)
+			return [];
+
+		const details = await getAppDetails(appId);
+		if(!details)
+			return [];
+
+		let response = await fetchNoCors('https://www.trueachievements.com/search-results?' + new URLSearchParams({
+			cat: 'games',
+			search: details.strDisplayName
+		}).toString());
+		if(!response.ok)
+			return [];
+
+		// Results
+		let body = removeAfterAndIncluding('</div>', removeBeforeAndIncluding('</div>', removeBeforeAndIncluding('<div class="section-hdr">', await response.text()).trim()).trim()).trim();
+
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(body, "application/xml");
+
+		this.logger.debug('getAllTAForGame', appId, doc);
+
+		let result: EntryData[] = [];
+		for(let rowNode of doc.children){
+			if(rowNode.nodeName !== 'a')
+				continue;
+
+			let name = '';
+			for(let node of rowNode.children){
+				if(node.classList.contains('sst-game-name'))
+					name = node.textContent ?? '';
+				else if(node.classList.contains('sst-game-platforms') && name){
+					for(let platformNode of node.children){
+						if(!platformNode.classList.contains('sst-platform-tag'))
+							continue;
+
+						if(platformNode.textContent === 'Xbox 360'){
+							result.push({
+								id: (rowNode as HTMLAnchorElement).href.split('/')[2],
+								title: name
+							});
+						}
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	// English name: achievement id
+	protected async getAchievementsEnglishNames(
+		achievements: XeniaGameAchievements,
+		achievements_en: XeniaAchievement[] | undefined,
+		rom: string,
+		titleId: string): Promise<Record<string, number>>{
+
+		let achievementsNames: Record<string, number> = {};
+		if(this.language === langMap['en']){
+			for(let achievement of achievements.achievements){
+				achievementsNames[achievement.name] = achievement.id;
+			}
+		}
+		else if(achievements_en?.length){
+			for(let achievement of achievements_en){
+				achievementsNames[achievement.name] = achievement.id;
+			}
+		}
+		else{
+			// DEV: should we try retrieving from DLCs? Maybe it's not worth it since this is just to retrieve the icons
+
+			let result = await this.xenia_get_all_achievements_game(rom, titleId, langMap['en']!) ?? null;
+			if(result){
+				let englishAchievements = (JSON.parse(result ?? '[]') as XeniaAchievement[]);
+				for(let achievement of englishAchievements){
+					achievementsNames[achievement.name] = achievement.id;
+				}
+			}
+		}
+
+		return achievementsNames;
+	}
+
 	override async provide(appId: number): Promise<AchievementsData | undefined> {
 		if(this.gameAchievements[appId] === null)
 			return undefined;
 
-		const titleId = await this.resolve(appId);
+		const titleId = (await this.resolve(appId))?.toString();
 		if(!titleId){
 			this.gameAchievements[appId] = null;
 			return undefined;
@@ -217,31 +396,53 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 		// Retrieve from cache first, since trophies data does not change
 		let achievements: XeniaGameAchievementsStats;
-		let achievementsFromUser = true; // True if retrieved achievements from user along with the progress
+		let achievements_en: XeniaAchievement[] | undefined;
+		let achievementsNames: Record<string, number> | undefined; // English name: achievement id
+		let source: 'dlcs_tus' | 'user' | 'game' | undefined;
 		let progressRetrieved = false; // True if we retrieved progress
+		let hasDLCs = false;
+		let hasTUs = false;
 		if(this.gameAchievements[appId])
 			achievements = cloneDeep(this.gameAchievements[appId]);
 		else {
 			achievements = { } as any;
 
-			// Retrieve progress, and maybe achievements
-			let result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath ?? '', titleId.toString()) ?? null;
-			achievements.progress = JSON.parse(result ?? '{}') as Record<number, XeniaAchievement>;
-			progressRetrieved = true;
+			// Try retrieving the achievements from DLCs and title updates, we retrieve the longest set of achievements
+			let result = await call<[string, string, string, number], string>("xenia_get_all_achievements_dlcs_title_updates", this.userPath, rom, titleId, this.language) ?? null;
+			let dlcTu = JSON.parse(result ?? '{}') as {
+				achievements: XeniaAchievement[],
+				achievements_en: XeniaAchievement[],
+				has_dlc: boolean,
+				has_tu: boolean
+			};
+			achievements.achievements = dlcTu.achievements;
+			achievements_en = dlcTu.achievements_en;
+			hasDLCs = dlcTu.has_dlc;
+			hasTUs = dlcTu.has_tu;
+			if(achievements.achievements.length)
+				source = 'dlcs_tus';
+			else{
+				// Retrieve progress, and maybe achievements from user
+				result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath, titleId) ?? null;
+				achievements.progress = JSON.parse(result ?? '{}') as Record<number, XeniaAchievement>;
+				progressRetrieved = true;
 
-			// If we also have achievements (at least names) we populate them
-			achievements.achievements = Object.values(achievements.progress)
-			if(!achievements.achievements.every(a => a.name))
-				achievements.achievements = [];
+				// If we also have achievements (at least names) we populate them
+				// DEV: we do this only if we have no DLCs or title updates, cause we don't know yet if they all get added or just when achieved
+				achievements.achievements = Object.values(achievements.progress)
+				if(achievements.achievements.every(a => a.name))
+					source = 'user';
+				else
+					achievements.achievements = [];
+			}
 
 			// If we found nothing we search the game ROM
-			if(!achievements.achievements.length && rom){
+			if(!achievements.achievements.length){
 				// Retrieve achievements info from the game rom
-				result = await this.xenia_get_all_achievements_game(rom, titleId.toString(), this.language) ?? null;
-				if(result){
-					achievements.achievements = (JSON.parse(result ?? '{}') as XeniaGameAchievements).achievements;
-					achievementsFromUser = false;
-				}
+				result = await this.xenia_get_all_achievements_game(rom, titleId, this.language) ?? null;
+				if(result)
+					achievements.achievements = (JSON.parse(result ?? '[]') as XeniaAchievement[]);
+				source = 'game';
 			}
 
 			// Retrieve achievements rarity and icons from RAWG,
@@ -252,21 +453,7 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 
 				// If we have achievements we'll need to match them with local ones, but we need english titles
 				if(rawgAchievements?.length){
-					let achievementsNames: Record<string, number> = {}; // English name: achievement id
-					if(this.language === langMap['en']){
-						for(let achievement of achievements.achievements){
-							achievementsNames[achievement.name] = achievement.id;
-						}
-					}
-					else{
-						result = await this.xenia_get_all_achievements_game(rom, titleId.toString(), langMap['en']!) ?? null;
-						if(result){
-							let englishAchievements = (JSON.parse(result ?? '{}') as XeniaGameAchievements).achievements;
-							for(let achievement of englishAchievements){
-								achievementsNames[achievement.name] = achievement.id;
-							}
-						}
-					}
+					achievementsNames = await this.getAchievementsEnglishNames(achievements, achievements_en, rom, titleId);
 
 					if(Object.keys(achievementsNames).length){
 						this.logger.debug("Matching RAWG achievements with names", rawgAchievements, achievementsNames);
@@ -303,7 +490,115 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 				}
 			}
 
+			achievements.achievementDlcs = {};
+			achievements.dlcs = [];
+			achievements.achievementTus = {};
+			achievements.tus = [];
+
 			if(achievements.achievements.length){
+				// We support both scenarios where we store the numerical id or the string slug as overrides
+				let slug = this.taOverrides[appId];
+				if(!slug || typeof slug === 'number'){
+					let results = await this.getAllTAForGame(appId);
+					if(results.length){
+						this.logger.debug("TrueAchievements results", results);
+
+						const data_id = this.taOverrides[appId];
+						this.logger.debug("TrueAchievements data_id", data_id);
+
+						let games: EntryData[];
+						if (data_id === undefined){
+							const display_name = details.strDisplayName;
+							const names = results.map(value => value.title);
+							const closest_name = closestWithLimit(this.taFuzziness, display_name, names);
+
+							games = results.filter(value => value.title === closest_name);
+
+							this.logger.debug(display_name, names);
+							this.logger.debug("TrueAchievements games", games);
+						}
+						else
+							games = results.filter(value => value.id === data_id);
+
+						const game = games.reverse().pop();
+						slug = game?.id!;
+					}
+				}
+
+				if(slug && typeof slug === 'string'){
+					let response = await fetchNoCors(`https://www.trueachievements.com/game/${slug}/dlc`);
+					if(response.ok){
+						achievementsNames ??= await this.getAchievementsEnglishNames(achievements, achievements_en, rom, titleId);
+
+						let body = removeAfterAndIncluding(removeBeforeAndIncluding(await response.text(), '</h1>'), '</main>'); // Page title -> End of body
+
+						// Retrieve DLCs names and achievement names and match with achievementsNames below
+						const parser = new DOMParser();
+						const doc = parser.parseFromString(body, "application/xml");
+						let setName: string | undefined;
+						let isTU = false;
+						for(let node of doc.children){
+							if(node.classList.contains('dlc')){
+								setName = undefined;
+								isTU = false;
+
+								for(let childNode of node.children){
+									if(!childNode.classList.contains('info'))
+										continue;
+									
+									for(let infoNode of childNode.children){
+										if(infoNode.nodeName === 'img'){
+											for(let imgNode of node.children){
+												if(imgNode.nodeName !== 'span')
+													continue;
+
+												if((imgNode as HTMLSpanElement).textContent === 'Update')
+													isTU = true;
+											}
+										}
+										else if(infoNode.nodeName === 'h2'){
+											let url = node.firstElementChild;
+											if(url?.nodeName === 'a')
+												setName = (url as HTMLAnchorElement).text;
+										}
+									}
+
+									if(setName)
+										(isTU ? achievements.tus : achievements.dlcs).push(setName);
+
+									break;
+								}
+							}
+							else if(node.classList.contains('ach-panels') && setName){
+								for(let childNode of node.children){
+									if(childNode.nodeName !== 'li')
+										continue;
+									
+									for(let liNode of childNode.children){
+										if(!liNode.classList.contains('title') || liNode.nodeName !== 'a')
+											continue;
+
+										let name = (liNode as HTMLAnchorElement).text;
+										let closest_name = closest(name, Object.keys(achievementsNames));
+										if(closest_name){
+											if(isTU)
+												achievements.achievementTus[achievementsNames[closest_name]] = achievements.tus.length - 1;
+											else
+												achievements.achievementDlcs[achievementsNames[closest_name]] = achievements.dlcs.length - 1;
+										}
+										break;
+									}
+								}
+							}
+						}
+					}
+
+					this.logger.debug(`${appId} DLCs: `, achievements.achievementDlcs);
+					this.logger.debug(`${appId} TUs: `, achievements.achievementTus);
+				}
+				else
+					this.logger.debug(`${appId} no DLCs/TUs info`);
+
 				this.gameAchievements[appId] = cloneDeep(achievements);
 				delete (this.gameAchievements[appId] as any).progress;
 			}
@@ -318,18 +613,34 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 		for(let achievement of achievements.achievements){
 			if(!achievement.icon){
 				// Retrieve icon from user profile GPD first
-				if(achievementsFromUser)
-					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath ?? '', titleId.toString(), achievement.icon_id) ?? '';
+				if(source === 'user')
+					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_user", this.userPath, titleId, achievement.icon_id) ?? '';
 				
 				// If not found retrieve from game ROM
-				if(!achievement.icon && rom)
-					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_game", rom, titleId.toString(), achievement.icon_id) ?? '';
+				if(!achievement.icon)
+					achievement.icon = await call<[string, string, number], string>("xenia_get_achievement_icon_game", rom, titleId, achievement.icon_id) ?? '';
 			}
 		}
 
-		// Retrieve progress if using cached data
-		if(!progressRetrieved && achievementsFromUser){
-			let result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath ?? '', titleId.toString()) ?? null;
+		// Retrieve missing achievement icons from DLCs/TUs in bulk
+		if(achievements.achievements.some(a => !a.icon)){
+			// Cache all the icons in the backend
+			await call<[string, string, string]>("xenia_cache_achievement_icons", this.userPath, rom, titleId);
+
+			// Retrieve the cached icons
+			for(let achievement of achievements.achievements){
+				if(!achievement.icon)
+					achievement.icon = await call<[string, number], string>("xenia_get_achievement_icon_cache", titleId, achievement.icon_id) ?? '';
+			}
+
+			// Clear the cache to save space
+			await call<[string]>("xenia_clear_achievement_icons", titleId);
+		}
+
+		// Retrieve progress if using cached data (if the achivements were retrieved
+		// from game it means we have no DLCs/TUs and no progress yet)
+		if(!progressRetrieved && source !== 'game'){
+			let result = await call<[string, string], string>("xenia_get_all_achievements_status", this.userPath, titleId) ?? null;
 			achievements.progress = JSON.parse(result ?? '{}') as Record<number, XeniaAchievement>;
 			this.logger.debug(`${appId} progress: `, achievements.progress);
 		}
@@ -340,40 +651,107 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			title: details.strDisplayName,
 			id: titleId,
 
-			groups: [{
-				name: '',
-				achievements: []
-			}].concat(this.achievementTypes ? [
-				{
-					name: t("xeniaAchievementTypeCompletion"),
-					achievements: []
-				},
-				{
-					name: t("xeniaAchievementTypeLeveling"),
-					achievements: []
-				},
-				{
-					name: t("xeniaAchievementTypeUnlock"),
-					achievements: []
-				},
-				{
-					name: t("xeniaAchievementTypeEvent"),
-					achievements: []
-				},
-				{
-					name: t("xeniaAchievementTypeTournament"),
-					achievements: []
-				},
-				{
-					name: t("xeniaAchievementTypeCheckpoint"),
-					achievements: []
-				}
-			] : [])
+			groups: []
 		};
 
-		this.logger.debug(`${appId} groups: `, result.groups);
+		let ownedDlcOverrides = Object.keys(this.dlcOverrides)
+			.map(id => this.module.unpackAppAndDlcIds(+id))
+			.filter(([a, _]) => a === appId)
+			.map(([_, d]) => d);
+
+		let multipleDLCs = (hasDLCs && this.dlcs);
+		let multipleTUs = (hasTUs && this.titleUpdates !== false);
+		
+		// DEV: retrieve owned DLCs / TUs names
+		let ownedDlcNames: string[] = [];
+		let ownedTuNames: string[] = [];
+
+		// Base game, title updates, DLCs
+		for(let group of [''].concat(achievements.tus).concat(achievements.dlcs)){
+			let isBase = group === '';
+			let isDlc = !isBase && achievements.dlcs.includes(group);
+			let multipleSets = (isDlc ? multipleDLCs : multipleTUs);
+
+			// Add DLCs or TUs
+			let dlcIndex: number | undefined;
+			if(isDlc || (!isBase && this.titleUpdates === null)){
+				let dlc = {
+					name: group,
+					image: await getAppHeader(appId)
+				} as NonNullable<AchievementsData['dlcs']>[number];
+
+				result.dlcs ??= [];
+				result.dlcs.push(dlc);
+				dlcIndex = result.dlcs.length-1;
+
+				// Check if the DLC/TU is owned
+				dlc.owned = !this.dlcOwnership || ownedDlcOverrides.includes(dlcIndex) || !!closestWithLimit(5, group, (isDlc ? ownedDlcNames : ownedTuNames));
+
+				// DEV: retrieve icon or use app header
+			}
+
+			// Add groups
+			if(isBase || multipleSets){
+				// 1 + ... + 1 sets (achievementTypes=false)
+				// 1 + 6 + ... + 1 + 6 sets (achievementTypes=true)
+				result.groups.push({
+					name: group,
+					dlc: dlcIndex,
+					achievements: []
+				});
+				if(this.achievementTypes){
+					let baseName = (multipleSets ? `${(isBase ? t("defaultAchievementSet") : group)} - ` : "");
+					result.groups.push(
+						{
+							name: baseName + t("xeniaAchievementTypeCompletion"),
+							dlc: dlcIndex,
+							achievements: []
+						},
+						{
+							name: baseName + t("xeniaAchievementTypeLeveling"),
+							dlc: dlcIndex,
+							achievements: []
+						},
+						{
+							name: baseName + t("xeniaAchievementTypeUnlock"),
+							dlc: dlcIndex,
+							achievements: []
+						},
+						{
+							name: baseName + t("xeniaAchievementTypeEvent"),
+							dlc: dlcIndex,
+							achievements: []
+						},
+						{
+							name: baseName + t("xeniaAchievementTypeTournament"),
+							dlc: dlcIndex,
+							achievements: []
+						},
+						{
+							name: baseName + t("xeniaAchievementTypeCheckpoint"),
+							dlc: dlcIndex,
+							achievements: []
+						}
+					);
+				}
+			}
+		}
 
 		for(let achievement of achievements.achievements){
+			let tuIndex = achievements.achievementTus[achievement.id];
+			let dlcIndex = achievements.achievementDlcs[achievement.id];
+			let achievementGroupId = 0;
+			if(tuIndex !== undefined){
+				if(multipleTUs)
+					achievementGroupId = 1 + tuIndex;
+			}
+			else if(dlcIndex !== undefined && multipleDLCs)
+				achievementGroupId = 1 + achievements.tus.length + dlcIndex;
+
+			let groupId = achievementGroupId * (this.achievementTypes ? 7 : 1);
+
+			this.logger.debug(`${appId} achievement group`, achievement.id, tuIndex, dlcIndex, achievementGroupId, groupId);
+
 			let achieved = achievement.flags?.earned === true ||
 				achievement.flags?.earned_online === true ||
 				!!achievements.progress?.[achievement.id]?.unlock_time;
@@ -391,37 +769,36 @@ export class XeniaAchievementsProvider extends AchievementsProvider<"xenia">{
 			else
 				unlocked = 0;
 
-			let groupId = 0;
 			let achievementType: string | undefined = undefined;
 			if(this.achievementTypes){
 				switch(achievement.flags?.type){
 				case 'Completion':
-					groupId = 1;
+					groupId += 1;
 					if(!this.module.hasAchievementSetsSupport)
 						achievementType = t("xeniaAchievementTypeCompletion");
 					break;
 				case 'Leveling':
-					groupId = 2;
+					groupId += 2;
 					if(!this.module.hasAchievementSetsSupport)
 						achievementType = t("xeniaAchievementTypeLeveling");
 					break;
 				case 'Unlock':
-					groupId = 3;
+					groupId += 3;
 					if(!this.module.hasAchievementSetsSupport)
 						achievementType = t("xeniaAchievementTypeUnlock");
 					break;
 				case 'Event':
-					groupId = 4;
+					groupId += 4;
 					if(!this.module.hasAchievementSetsSupport)
 						achievementType = t("xeniaAchievementTypeEvent");
 					break;
 				case 'Tournament':
+					groupId += 5;
 					if(!this.module.hasAchievementSetsSupport)
 						achievementType = t("xeniaAchievementTypeTournament");
-					groupId = 5;
 					break;
 				case 'Checkpoint':
-					groupId = 6;
+					groupId += 6;
 					if(!this.module.hasAchievementSetsSupport)
 						achievementType = t("xeniaAchievementTypeCheckpoint");
 					break;

@@ -56,20 +56,60 @@ export async function getAppDetails(appId: number): Promise<SteamAppDetails | nu
 	});
 }
 
-export function closestWithLimit(limit: number, str: string, arr: string[]): string | undefined
-{
-	const newArr = arr.filter(value => distance(str, value) < limit)
-	return newArr.length > 0 ? closest(str, newArr) : undefined
+export async function getAppHeader(appId: number){
+	let headers = appDetailsStore.GetHeaderImages(appStore.GetAppOverviewByAppID(appId));
+	for(let header of headers){
+		// Using fetch because we are querying Steam internal endpoints
+		try{
+			let image = await imageData(header);
+			if(image)
+				return image;
+		}
+		catch{}
+	}
+
+	return undefined;
 }
 
-export function distanceWithLimit(limit: number, str: string, arr: string[]): string[]
-{
-	return arr.filter(value => distance(str, value) < limit)
+export function closestWithLimit(limit: number, str: string, arr: string[]): string | undefined{
+	str = str.toLowerCase();
+	const newArr = distanceWithLimit(limit, str, arr);
+	let closestLowercase = newArr.length ? closest(str, newArr.map(e => e.toLowerCase())) : undefined;
+	return closestLowercase ? newArr.find(e => e.toLowerCase() === closestLowercase) : undefined;
+}
+
+export function distanceWithLimit(limit: number, str: string, arr: string[]): string[]{
+	str = str.toLowerCase();
+	return arr.filter(value => distance(str, value.toLowerCase()) < limit);
+}
+
+// Base64
+export function imageData(url: string): Promise<string>{
+	return new Promise<string>((resolve, reject) => {
+		let img = new Image();
+		img.crossOrigin = 'Anonymous';
+		img.onload = () => {
+			// 1. Create off-screen canvas and context
+			const canvas = document.createElement('canvas');
+			const ctx = canvas.getContext('2d')!;
+			
+			canvas.width = img.width;
+			canvas.height = img.height;
+
+			// 2. Draw image onto canvas
+			ctx.drawImage(img, 0, 0);
+			resolve(canvas.toDataURL('image/png'));
+		};
+		
+		img.onerror = (_, __, ___, ____, e) => reject(e);
+
+		img.src = url;
+	});
 }
 
 // Base64
 export function grayScaleIcon(iconOrUrl: string): Promise<string>{
-	return new Promise<string>((resolve) => {
+	return new Promise<string>((resolve, reject) => {
 		let img = new Image();
 		img.crossOrigin = 'Anonymous';
 		img.onload = () => {
@@ -101,6 +141,8 @@ export function grayScaleIcon(iconOrUrl: string): Promise<string>{
 			ctx.putImageData(imageData, 0, 0);
 			resolve(canvas.toDataURL('image/png'));
 		};
+		
+		img.onerror = (_, __, ___, ____, e) => reject(e);
 
 		img.src = iconOrUrl;
 	});

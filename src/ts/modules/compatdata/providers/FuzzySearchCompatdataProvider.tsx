@@ -10,8 +10,8 @@ import { useMetaDeckState } from "../../../MetaDeckState";
 import { t } from "../../../useTranslations";
 
 export interface FuzzySearchCompatdataProviderConfig extends ProviderConfig{
-	fuzziness: number,
-	overrides: IDDictionary
+	fuzziness: number;
+	overrides: IDDictionary;
 }
 
 export interface FuzzySearchCompatdataProviderCache extends ProviderCache{
@@ -118,9 +118,8 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 		const details = await getAppDetails(appId);
 		if(!details)
 			return [];
-
-		const display_name = details.strDisplayName;
-		return await this.search(display_name);
+		
+		return await this.search(details.strDisplayName);
 	}
 
 	override settingsComponent = () => {

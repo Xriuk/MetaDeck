@@ -113,8 +113,9 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider<"em
 			results = results.filter(r => consoleNames.includes(r.Console));
 
 		// Take max 5 results sorted by distance
+		title = title.toLowerCase(); // Lowercase for efficiency
 		results = results
-			.sort((a, b) => distance(title, a.Game) - distance(title, b.Game))
+			.sort((a, b) => distance(title, a.Game.toLowerCase()) - distance(title, b.Game.toLowerCase()))
 			.slice(0, 5);
 
 		// Group by name

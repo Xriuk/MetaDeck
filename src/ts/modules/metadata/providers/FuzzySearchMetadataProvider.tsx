@@ -13,8 +13,8 @@ import { t } from "../../../useTranslations";
 import React from "react";
 
 export interface FuzzySearchMetadataProviderConfig extends ProviderConfig{
-	fuzziness: number,
-	overrides: IDDictionary
+	fuzziness: number;
+	overrides: IDDictionary;
 }
 
 export interface FuzzySearchMetadataProviderCache extends ProviderCache{
@@ -102,7 +102,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 			games = await this.pickDefaultEntry(results, appId);
 
 			this.logger.debug(games[0]?.title ?? "", results.map(value => value.title));
-			this.logger.debug("Games: ", games);
+			this.logger.debug("Games", games);
 		}
 		else
 			games = results.filter(value => value.id === data_id);
@@ -126,8 +126,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 		if(!details)
 			return [];
 
-		const display_name = details.strDisplayName;
-		return await this.search(display_name);
+		return await this.search(details.strDisplayName);
 	}
 
 	private file_size: (path: string) => Promise<number> = callable("file_size");

@@ -501,7 +501,7 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 				if (overview.app_type == SteamAppTypeShortcut && !module.excludedApps.includes(overview.appid))
 				{
 					module.bypassBypass = 11;
-					void this.applyApp(overview, details);
+					void module.applyApp(overview, details);
 				}
 
 				return ret;
@@ -817,10 +817,10 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 		);
 	};
 
-	async applyOverview(overview: SteamAppOverview): Promise<void>
+	applyOverview(overview: SteamAppOverview): Promise<void>
 	{
 		if(this.excludedApps.includes(overview.appid))
-			return;
+			return Promise.resolve();
 
 		const data = this.getCachedData(overview.appid);
 		if (this.rating)
@@ -843,6 +843,8 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 			overview.size_on_disk = data?.install_size?.toString() ?? "0";
 		if (this.installDate)
 			overview.rt_purchased_time = data?.install_date;
+
+		return Promise.resolve();
 	}
 	
 	// We need to retrieve the best matching metadata by preferring this criteria:

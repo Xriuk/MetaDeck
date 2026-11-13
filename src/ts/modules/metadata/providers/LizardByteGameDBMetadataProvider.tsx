@@ -105,9 +105,10 @@ export class LizardByteGameDBMetadataProvider extends FuzzySearchMetadataProvide
 		// Search with double the fuzziness to retrieve them all, they will be filtered later
 		const closest_names = distanceWithLimit(this.fuzziness * 2, title, result.map(e => e[1].name));
 		// Take max 10 results sorted by distance (since we might have different regions)
+		title = title.toLowerCase(); // Lowercase for efficiency
 		let results = result
 			.filter(e => closest_names.includes(e[1].name))
-			.sort((a, b) => distance(title, a[1].name) - distance(title, b[1].name))
+			.sort((a, b) => distance(title, a[1].name.toLowerCase()) - distance(title, b[1].name.toLowerCase()))
 			.slice(0, 10);
 
 		// Retrieve just titles, then we'll query everything

@@ -49,6 +49,7 @@ export class RyujinxSerialResolver extends RyujinxTitleIdResolver{
 		// Parse and cache the db
 		const parser = new DOMParser();
 		const doc = parser.parseFromString(await response.text(), "application/xml");
+		
 		this.logger.debug("Retrieved db", doc);
 		
 		for(let rootNode of doc.children){
@@ -62,12 +63,10 @@ export class RyujinxSerialResolver extends RyujinxTitleIdResolver{
 				let serial: string | undefined | null;
 				let titleid: string | undefined | null;
 				for(let childNode of node.children){
-					if(childNode.nodeName === 'serial'){
+					if(childNode.nodeName === 'serial')
 						serial = childNode.firstChild?.nodeValue;
-					}
-					else if(childNode.nodeName === 'titleid'){
+					else if(childNode.nodeName === 'titleid')
 						titleid = childNode.firstChild?.nodeValue;
-					}
 				}
 				// If serial contains '?' it's unknown
 				if(!serial || !titleid || serial.includes('?'))

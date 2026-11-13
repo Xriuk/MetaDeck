@@ -200,6 +200,7 @@ export class Settings
 				category: true,
 				app_details: true,
 				overlay_menu: true,
+				dlc_ribbon: true,
 				excluded_apps: [],
 				providers_overrides: {},
 				providers: {
@@ -226,6 +227,9 @@ export class Settings
 						trophy_categories: true,
 						psn_npsso: '',
 						trophy_sets: true,
+						trophy_groups: true,
+						dlc_ownership: true,
+						dlc_overrides: {},
 						excluded_apps: [],
 						resolvers: {
 							rpcs3_npwr: {
@@ -235,11 +239,17 @@ export class Settings
 					},
 					xenia: {
 						enabled: true,
-						user_path: null, // Will try auto-detecting
+						user_path: null, // Will try auto-detecting if single profile
 						language: null,
 						gamerscore: true,
 						description_locked: null,
 						achievement_types: false, // Weird categories, we'll disable them by default
+						dlcs: true,
+						title_updates: true, // Separate categories but not DLCs
+						ta_fuzziness: 5,
+						ta_overrides: {},
+						dlc_ownership: true,
+						dlc_overrides: {},
 						excluded_apps: [],
 						resolvers: {
 							xenia: {
@@ -371,12 +381,12 @@ export class Settings
 	configData: ConfigData = merge({}, Settings.defaultConfig);
 	private readonly configMutex = new Mutex();
 	private configRead = false; // To avoid writing before reading
-	private configAllowSaving = true;
+	private configAllowSaving = 0;
 
 	cacheData: CacheData = merge({}, Settings.defaultCache);
 	private readonly cacheMutex = new Mutex();
 	private cacheRead = false; // To avoid writing before reading
-	private cacheAllowSaving = true;
+	private cacheAllowSaving = 0;
 
 	constructor(state: MetaDeckState){
 		this.state = state;
@@ -503,7 +513,7 @@ export class Settings
 	public async writeConfig(): Promise<void>{
 		const release = await this.configMutex.acquire();
 		try{
-			if(!this.configRead || !this.configAllowSaving)
+			if(!this.configRead || this.configAllowSaving)
 				return;
 
 			this.logger.debug("Writing config...");
@@ -621,7 +631,7 @@ export class Settings
 	public async writeCache(): Promise<void>{
 		const release = await this.cacheMutex.acquire();
 		try{
-			if(!this.cacheRead || !this.cacheAllowSaving)
+			if(!this.cacheRead || this.cacheAllowSaving)
 				return;
 
 			this.logger.debug("Writing cache...");
@@ -658,22 +668,18 @@ export class Settings
 
 
 	public async runInDisabledSaveState(action: () => Promise<void>): Promise<void>{
-		let configAllowSavingBackup: boolean;
 		let releaseConfig = await this.configMutex.acquire();
 		try{
-			configAllowSavingBackup = this.configAllowSaving;
-			this.configAllowSaving = false;
+			this.configAllowSaving++;
 		}
 		finally{
 			releaseConfig();
 		}
 
 		try{
-			let cacheAllowSavingBackup: boolean;
 			let releaseCache = await this.cacheMutex.acquire();
 			try{
-				cacheAllowSavingBackup = this.cacheAllowSaving;
-				this.cacheAllowSaving = false;
+				this.cacheAllowSaving++;
 			}
 			finally{
 				releaseCache();
@@ -685,7 +691,11 @@ export class Settings
 			finally{
 				releaseCache = await this.cacheMutex.acquire();
 				try{
-					this.cacheAllowSaving = cacheAllowSavingBackup;
+					this.cacheAllowSaving--;
+					if(this.cacheAllowSaving < 0){
+						this.logger.warn("cacheAllowSaving was not 0 when restoring");
+						this.cacheAllowSaving = 0;
+					}
 				}
 				finally{
 					releaseCache();
@@ -695,7 +705,11 @@ export class Settings
 		finally{
 			releaseConfig = await this.configMutex.acquire();
 			try{
-				this.configAllowSaving = configAllowSavingBackup;
+				this.configAllowSaving--;
+				if(this.configAllowSaving < 0){
+					this.logger.warn("configAllowSaving was not 0 when restoring");
+					this.configAllowSaving = 0;
+				}
 			}
 			finally{
 				releaseConfig();
