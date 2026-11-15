@@ -1031,8 +1031,8 @@ class Plugin:
 
 		return json.dumps(Plugin.xenia_get_all_achievements(self, xdbf_bytes, locale))
 
-	def xenia_get_achievement_icon_xdbf(self, xdbf_bytes: bytes, icon_id: int) -> str:
-		def icon_predicate(xdbf_bytes, ns, id, offset, size):
+	def xenia_get_image_xdbf(self, xdbf_bytes: bytes, icon_id: int) -> str:
+		def image_predicate(xdbf_bytes, ns, id, offset, size):
 			if ns == 2 and id == icon_id:
 				return xdbf_bytes[offset:offset + size]
 			else:
@@ -1041,7 +1041,7 @@ class Plugin:
 		if xdbf_bytes is None:
 			return ''
 
-		icon_bytes = Plugin.xenia_parse_xdbf(self, xdbf_bytes, icon_predicate)
+		icon_bytes = Plugin.xenia_parse_xdbf(self, xdbf_bytes, image_predicate)
 		if icon_bytes is None:
 			return ''
 		else:
@@ -1049,10 +1049,10 @@ class Plugin:
 			return "data:image/png;base64," + encoded_string
 
 	async def xenia_get_achievement_icon_user(self, user_path: str, title_id: str, icon_id: int) -> str:		
-		return Plugin.xenia_get_achievement_icon_xdbf(self, Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id), icon_id) # type: ignore
+		return Plugin.xenia_get_image_xdbf(self, Plugin.xenia_get_game_gpdxbdf(self, user_path, title_id), icon_id) # type: ignore
 
 	async def xenia_get_achievement_icon_game(self, iso_path: str, title_id: str, icon_id: int) -> str:
-		return Plugin.xenia_get_achievement_icon_xdbf(self,  Plugin.xenia_get_spaxdbf_iso(self, iso_path, title_id), icon_id) # type: ignore
+		return Plugin.xenia_get_image_xdbf(self,  Plugin.xenia_get_spaxdbf_iso(self, iso_path, title_id), icon_id) # type: ignore
 
 	# entry_namespace:
 	# 1 Achievement
@@ -1209,7 +1209,7 @@ class Plugin:
 						for i in range(max, len(achievements)):
 							icon_id = achievements[i]['icon_id']
 							if not icon_id is None:
-								Plugin.xenia[title_id][icon_id] = Plugin.xenia_get_achievement_icon_xdbf(self, xdbf_bytes, icon_id)
+								Plugin.xenia[title_id][icon_id] = Plugin.xenia_get_image_xdbf(self, xdbf_bytes, icon_id)
 
 						max = len(achievements)
 
@@ -1233,7 +1233,7 @@ class Plugin:
 								for i in range(max, len(achievements)):
 									icon_id = achievements[i]['icon_id']
 									if not icon_id is None:
-										Plugin.xenia[title_id][icon_id] = Plugin.xenia_get_achievement_icon_xdbf(self, xdbf_bytes, icon_id)
+										Plugin.xenia[title_id][icon_id] = Plugin.xenia_get_image_xdbf(self, xdbf_bytes, icon_id)
 
 								max = len(achievements)
 
@@ -1245,6 +1245,46 @@ class Plugin:
 
 	async def xenia_clear_achievement_icons(self, title_id: str) -> None:
 		del Plugin.xenia[title_id]
+
+	def xenia_get_header_names(self, base_path: str, ids: list[str]) -> list[str]:
+		result = []
+
+		for id in ids:
+			path = base_path + id + ".header"		
+			if os.path.isfile(path): 
+				with open(path, "rb") as header_file:
+					header_bytes = header_file.read()
+
+					# The name starts at offset 8 and is a 2-byte null-terminated string
+					start = 8
+					end = start
+					while header_bytes[end:end+2] != b'\x00\x00' and end < len(header_bytes):
+						end += 2
+					name = header_bytes[start:end].decode('utf-16-be')
+					result.append(name)
+
+		return result
+
+	async def xenia_get_dlcs_owned_names(self, user_path: str, title_id: str) -> list[str]:
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/Headers/00000002/"
+		dlcs = Plugin.xenia_get_dlcs(self, user_path, title_id)
+
+		return Plugin.xenia_get_header_names(self, base_path, dlcs)
+
+	async def xenia_get_title_updates_owned_names(self, user_path: str, title_id: str) -> list[str]:
+		base_path = user_path.split('/content/')[0] + "/content/0000000000000000/" + title_id + "/Headers/000B0000/"
+		title_updates = Plugin.xenia_get_title_updates(self, user_path, title_id)
+
+		return Plugin.xenia_get_header_names(self, base_path, title_updates)
+
+	async def xenia_get_banner_icon(self, product_id: str) -> str:
+		url = f'http://download.xbox.com/content/images/{product_id}/banner.png'
+		temp_filename = urllib.request.urlretrieve(url)[0]
+
+		with open(temp_filename, "rb") as banner_file:
+			banner_bytes = banner_file.read()
+			encoded_string = base64.b64encode(banner_bytes).decode('utf-8')
+			return "data:image/png;base64," + encoded_string
 
 
 	gametdb = {} # url: { id: { game } }

@@ -107,7 +107,7 @@ export abstract class FuzzySearchMetadataProvider<Identifier extends "steam" | "
 		else
 			games = results.filter(value => value.id === data_id);
 
-		const game = games.reverse().pop();
+		const game = games[0];
 		if (game){
 			game.store_categories = (game.store_categories ?? []).concat(await getShortcutCategories(getLaunchCommand(details)));
 

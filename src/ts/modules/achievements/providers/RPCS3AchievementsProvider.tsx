@@ -699,7 +699,8 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 			// Base game
 			if(isBaseSet || multipleSets){
 				groups.push({
-					id: null!
+					id: null!,
+					name: ''
 				});
 				if(baseGame === -1)
 					baseGame = i;
@@ -710,7 +711,8 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 					groups.push(...trophies[trophyId].groups);
 				if(multipleSets || trophyId === trophyIds[trophyIds.length-1]){
 					groups.push({
-						id: '-1' // Generic DLCs
+						id: '-1', // Generic DLCs
+						name: t("otherDlcsAchievementSet")
 					});
 					dlcs = i + groups.length - 1;
 				}
@@ -727,9 +729,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 				// ...
 				let groupNameOrId = (group?.name ?? ((!multipleSets ? trophyId + '_' : '') + group.id));
 				let groupName = (multipleSets ? (trophySetName + (!isBaseGroup ? ' - ' : '')) : '') +
-					(isBaseGroup ? '' : 
-						group.id === '-1' ? t("otherDlcsAchievementSet") :
-						groupNameOrId);
+					groupNameOrId;
 
 				// Add DLCs
 				let dlcIndex: number | undefined;
@@ -738,9 +738,9 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 						if(genericDlcIndex === -1){
 							result.dlcs ??= [];
 							result.dlcs.push({
-								name: t("otherDlcsAchievementSet"),
+								name: groupNameOrId,
 								owned: true, // Generic DLCs are always "owned", since we don't know which DLC(s) we are referring to...
-								image: await getAppHeader(appId)
+								image: getAppHeader(appId)
 							});
 							genericDlcIndex = result.dlcs.length-1;
 						}
@@ -777,7 +777,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 						}
 
 						if(!dlc.image)
-							dlc.image = await getAppHeader(appId);
+							dlc.image = getAppHeader(appId);
 					}
 				}
 				
@@ -825,13 +825,22 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 				// < 0 the offset is absolute (negated) - 1 (multipleGroups),
 				// Number.NEGATIVE_INFINITY is dlcs (added at the end)
 				let trophyGroupId = 0;
+				let groupName: string | undefined;
 				if(multipleGroups){
-					// 001 -> 1 if base group, 0 if no base group
-					if(trophy.gid != null)
-						trophyGroupId = parseInt(trophy.gid, 10) + groups.findIndex(g => g.id == null);
-					else if(trophy.pid !== '000' && trophy.id !== '000')
-						trophyGroupId = (multipleSets ? groups.length - 1 : Number.NEGATIVE_INFINITY);
-					else if(baseGame !== -1)
+					// DLC
+					// Generic DLC
+					// Global base game
+					// https://github.com/justin-delano/PlayniteAchievements/blob/8d0b23da5f3c9abf20134e2724175ddcbaadc75d/source/Providers/RPCS3/Rpcs3Scanner.cs#L2811-L2824
+					if(trophy.gid != null && trophy.gid !== '0' && trophy.gid !== '000' && trophy.gid !== 'default' && trophy.gid !== 'base'){
+						trophyGroupId = groups.findIndex(g => g.id === trophy.gid);
+						let dlc = result.groups[i + trophyGroupId]?.dlc;
+						groupName = (dlc !== undefined ? result.dlcs?.[dlc]?.name : undefined);
+					}
+					else if(trophy.pid !== '000' && trophy.id !== '000'){
+						trophyGroupId = (multipleSets ? groups.findIndex(g => g.id === '-1') : Number.NEGATIVE_INFINITY);
+						groupName = (multipleSets ? trophySetName + ' - ' : '') + t("otherDlcsAchievementSet");
+					}
+					else if(!multipleSets && baseGame !== -1)
 						trophyGroupId = -(baseGame + 1);
 				}
 
@@ -890,9 +899,7 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 							trophies[trophyId].progress[trophy.id].unlock_time_utc! :
 							0,
 					strDescription: [
-						((!this.module.hasAchievementSetsSupport && multipleSets) ?
-							(groups.length > 1 ? result.groups[groupId].name : trophySetName) :
-							undefined),
+						(!this.module.hasAchievementSetsSupport ? groupName : undefined),
 						trophyCategory,
 						trophy.detail
 					].filter(d => d).join(' - '),
@@ -908,14 +915,17 @@ export class RPCS3AchievementsProvider extends AchievementsProvider<'rpcs3'>{
 		// Add DLCs achievements
 		if(dlcs === -1)
 			dlcs = 0;
+
+		//this.logger.debug(`${appId} DLCs`, dlcs, dlcsAchievements);
+
 		for(let i = 0; i < dlcsAchievements.length; i++){
-			result.groups[i].achievements.push(...dlcsAchievements[i]);
+			result.groups[(dlcs * dlcsAchievements.length) + i].achievements.push(...dlcsAchievements[i]);
 		}
 
 		return result;
 	}
 
-	// Used for DLC overrides
+	// Used for DLC overrides, backwards compatible
 	protected override async onOverridesChange(oldOverrides: IDDictionary, newOverrides: IDDictionary): Promise<void> {
 		// Retrieve changed ids: new values, values with changed ids and removed values,
 		// and unpack the actual app ids

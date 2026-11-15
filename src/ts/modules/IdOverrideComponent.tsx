@@ -67,7 +67,7 @@ export const IdOverrideComponent = ({
 				if(result){
 					ret[key] = {
 						...result,
-						appDisplayName: appStore.GetAppOverviewByAppID(appId).display_name,
+						appDisplayName: appStore.GetAppOverviewByAppID(appId)?.display_name ?? '',
 						appId: appId
 					};
 				}
@@ -108,7 +108,7 @@ export const IdOverrideComponent = ({
 			if(app){
 				let results = await resultsForApp(app);
 				let selected = defaultResults ? await defaultResults(results, app) : [];
-				let appDisplayName = appStore.GetAppOverviewByAppID(app).display_name;
+				let appDisplayName = appStore.GetAppOverviewByAppID(app)?.display_name ?? '';
 
 				// Set selected first, if any
 				setIdOptions(results

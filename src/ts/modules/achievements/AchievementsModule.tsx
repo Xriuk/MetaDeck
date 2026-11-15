@@ -183,10 +183,10 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 	}
 
 	providers: AchievementsProvider<any>[] = [
-		//new RetroAchievementsAchievementsProvider(this),
-		//new RPCS3AchievementsProvider(this),
+		new RetroAchievementsAchievementsProvider(this),
+		new RPCS3AchievementsProvider(this),
 		new XeniaAchievementsProvider(this),
-		//new GOGAchievementsProvider(this)
+		new GOGAchievementsProvider(this)
 	];
 
 	override async removeCache(appId: number, onlyProgress = false): Promise<void> {
@@ -971,7 +971,7 @@ export class AchievementsModule extends Module<"achievements", AchievementsProvi
 	}
 
 	progressDescription(data?: AchievementsData): string{
-		if(data?.groups.length && data.groups.length > 1){
+		if(data?.groups.length && data.groups.length > 1 && this.hasAchievementSetsSupport){
 			return t("foundAchievementsSets")
 				.replace("{num1}", data.groups.flatMap(g => g.achievements).length.toString())
 				.replace("{num2}", data.groups.filter(g => g.achievements.length).length.toString());

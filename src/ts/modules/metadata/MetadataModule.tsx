@@ -97,10 +97,6 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 		new RetroAchievementsMetadataProvider(this)
 	];
 
-	override get enabled(): boolean {
-		return false;	
-	}
-
 	override async removeCache(appId: number){
 		await super.removeCache(appId);
 		

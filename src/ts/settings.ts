@@ -246,8 +246,10 @@ export class Settings
 						achievement_types: false, // Weird categories, we'll disable them by default
 						dlcs: true,
 						title_updates: true, // Separate categories but not DLCs
-						ta_fuzziness: 5,
+						ta_fuzziness: 15, // Allows adding " (Xbox 360)" to the game name
 						ta_overrides: {},
+						dbox_fuzziness: 15, // Allows mapping "<Name> Map Pack" to just "<Name>"
+						dbox_overrides: {},
 						dlc_ownership: true,
 						dlc_overrides: {},
 						excluded_apps: [],

@@ -103,7 +103,7 @@ export abstract class FuzzySearchCompatdataProvider<Identifier extends "dolphin"
 		else
 			games = results.filter(value => value.id === data_id);
 
-		const game = games.reverse().pop();
+		const game = games[0];
 		if (game)
 			await this.enrichCompatdataForGame(appId, game);
 		this.logger.debug("Final result", appId, game);

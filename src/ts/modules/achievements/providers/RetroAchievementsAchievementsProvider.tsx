@@ -1,16 +1,17 @@
 import type { AchievementsData, ID } from "../../../Interfaces"
 import { t } from "../../../useTranslations"
-import { copyToClipboard, fetchNoCorsLegacyTimeout, getAppDetails, toasterToast } from "../../../util"
+import { copyToClipboard, fetchNoCorsLegacyTimeout, getAppDetails, getAppHeader, toasterToast } from "../../../util"
 import type { ProviderCache, ProviderConfig } from "../../Provider"
 import { AchievementsProvider } from "../AchievementsProvider"
 import Logger from "../../../logger"
-import { DialogButton, DialogControlsSection, Field, sleep, TextField, Toggle } from "@decky/ui"
+import { DialogButton, DialogControlsSection, Dropdown, Field, sleep, TextField, Toggle } from "@decky/ui"
 import { GetGameInfoAndUserProgressResponse } from "@retroachievements/api";
 import { FaGamepad } from "react-icons/fa"
 import { useMetaDeckState } from "../../../MetaDeckState"
 import { useState } from "react"
 import { Markdown } from "../../../markdown"
 import React from "react"
+import { fetchNoCors } from "@decky/api"
 
 export interface RetroAchievementsAchievementsProviderConfig extends ProviderConfig<'ra'>{
 	username: string;
@@ -20,7 +21,7 @@ export interface RetroAchievementsAchievementsProviderConfig extends ProviderCon
 	achievement_types: boolean;
 	parent_sets: boolean; // One set per parent or one single base set
 	subsets: boolean;
-	subsets_sets: boolean;
+	subsets_sets: boolean | null; // null: show as DLC, true/false: show/hide prefixes or create separate sets/add to base
 }
 
 export interface RetroAchievementsAchievementsProviderCache extends ProviderCache{
@@ -121,12 +122,12 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 			void this.clearModuleCache();
 	}
 
-	get subsetsSets(): boolean
+	get subsetsSets(): boolean | null
 	{
 		return this.config.subsets_sets;
 	}
 
-	set subsetsSets(data: boolean)
+	set subsetsSets(data: boolean | null)
 	{
 		let current = this.subsetsSets;
 		this.config.subsets_sets = data;
@@ -259,14 +260,14 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 						continue;
 
 					for(let subsetId of this.parentSubsets[gameId]){
-						if(parents[subsetId])
+						if(subsets[subsetId])
 							continue;
 
 						game = await this.getGameInfoAndProgressInternal(subsetId);
 						if(!game)
 							continue;
 
-						parents[game.ID] = game;
+						subsets[game.ID] = game;
 					}
 				}
 			}
@@ -280,7 +281,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 
 			// Main parent, parents, subsets
 			let multipleParents = (Object.keys(parents).length > 1 && this.parentSets);
-			let multipleSubsets = (Object.keys(subsets).length && this.subsets && this.subsetsSets);
+			let multipleSubsets = (Object.keys(subsets).length && this.subsets && this.subsetsSets !== false);
 			for(let game of [parentGame]
 				.concat(Object.values(parents).filter(g => g.ID !== parentGame.ID))
 				.concat(Object.values(subsets))){
@@ -290,7 +291,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 				let gameTitle = game.Title.match(/\[subset\s*-\s*(.+)\s*\]/i)?.[1]
 					?? game.Title;
 				
-				// Add groups
+				// Add DLCs and groups
 				let isBase = game.ID === parentGame.ID;
 				let isParent = !isBase && parents[game.ID];
 				let multipleSets = (isParent ? multipleParents : multipleSubsets);
@@ -299,10 +300,36 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 				if(!isBaseGroup){
 					let subsetTitle = isBase ? '' : gameTitle;
 
+					// Add DLC
+					let dlcIndex: number | undefined;
+					if(!isBase && !isParent && this.subsetsSets === null){
+						let image: string | undefined;
+						// Check for "no image available"
+						if(game.ImageIcon && game.ImageIcon !== "/Images/000002.png"){
+							try{
+								image = URL.createObjectURL(await (await fetchNoCors("https://retroachievements.org" + game.ImageIcon)).blob());
+							}
+							catch{}
+						}
+						if(!image)
+							image = getAppHeader(appId);
+
+						result.dlcs ??= [];
+						result.dlcs.push({
+							name: gameTitle,
+							image: image,
+							// DEV: all owned until fix
+							// https://retroachievements.org/forums/topic/34021?comment=447717#447717
+							owned: true
+						});
+						dlcIndex = result.dlcs.length-1;
+					}
+
 					// 1 + ... + 1 sets (achievementTypes=false)
 					// 1 + 3 + ... + 1 + 3 sets (achievementTypes=true)
 					result.groups.push({
 						name: subsetTitle,
+						dlc: dlcIndex,
 						achievements: []
 					});
 					if(this.achievementTypes){
@@ -312,14 +339,17 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 						result.groups.push(
 							{
 								name: baseName + t("raAchievementTypeProgression"),
+								dlc: dlcIndex,
 								achievements: []
 							},
 							{
 								name: baseName + t("raAchievementTypeMissable"),
+								dlc: dlcIndex,
 								achievements: []
 							},
 							{
 								name: baseName + t("raAchievementTypeCompletion"),
+								dlc: dlcIndex,
 								achievements: []
 							}
 						);
@@ -483,21 +513,45 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								this.parentSets = checked;
 							}}/>
 					</Field>
-					<Field
-						label={(this.module.hasAchievementSetsSupport ? t("raSubsetSetSets") : t("raSubsetSetPrefixes"))}
-						description={!subsets ?
-							t("settingsDependencyNotMet")
-								.replace("{setting1}", (this.module.hasAchievementSetsSupport ? t("raSubsetSetSets") : t("raSubsetSetPrefixes")))
-								.replace("{setting2}", t("raSubsets")) :
-							(this.module.hasAchievementSetsSupport ? t("raSubsetSetSetsDesc") : t("raSubsetSetPrefixesDesc"))}>
-						<Toggle
-							value={subsetsSets}
-							disabled={loadingData.loading || !subsets}
-							onChange={(checked) => {
-								setSubsetsSets(checked);
-								this.subsetsSets = checked;
-							}}/>
-					</Field>
+					{
+						this.module.hasAchievementSetsSupport ? 
+							<Field
+								label={t("raSubsetSetSets")}
+								description={!subsets ?
+									t("settingsDependencyNotMet")
+										.replace("{setting1}", t("raSubsetSetSets"))
+										.replace("{setting2}", t("raSubsets")) :
+									t("raSubsetSetSetsDesc")}
+								childrenContainerWidth={'fixed'}>
+								<Dropdown
+									rgOptions={[
+										{ data: true, label: t("settingsAchievementsCreateSetNormal") },
+										{ data: null, label: t("settingsAchievementsCreateSetDlc") },
+										{ data: false, label: t("settingsAchievementsCreateSetNone") }
+									]}
+									selectedOption={subsetsSets}
+									disabled={loadingData.loading}
+									onChange={(newVal) => {
+										setSubsetsSets(newVal.data);
+										this.subsetsSets = newVal.data;
+									}} />
+							</Field> :
+							<Field
+								label={t("raSubsetSetPrefixes")}
+								description={!subsets ?
+									t("settingsDependencyNotMet")
+										.replace("{setting1}", t("raSubsetSetPrefixes"))
+										.replace("{setting2}", t("raSubsets")) :
+									t("raSubsetSetPrefixesDesc")}>
+								<Toggle
+									value={(subsetsSets ?? true)}
+									disabled={loadingData.loading || !subsets}
+									onChange={(checked) => {
+										setSubsetsSets(checked);
+										this.subsetsSets = checked;
+									}}/>
+							</Field>
+					}
 				</DialogControlsSection>
 			</>
 		)

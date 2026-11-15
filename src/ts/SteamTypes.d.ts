@@ -340,6 +340,7 @@ type AppDetailsStore = {
 	GetAchievements(app_id: number): SteamAppAchievements;
 	GetAppData(app_id: number): AppData;
 	GetHeaderImages(overview: SteamAppOverview): string[];
+	GetHeroImages(overview: SteamAppOverview): { rgHeroImages: string[] } | undefined;
 }
 
 type AppStore = {

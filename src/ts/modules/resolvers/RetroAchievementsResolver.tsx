@@ -69,6 +69,8 @@ export class RetroAchievementsResolver extends Resolver<"ra">{
 			if(!rom)
 				return undefined;
 			md5 = await call<[string], string>("hash", rom);
+			if(!md5 && rom.endsWith(".cue"))
+				md5 = await call<[string], string>("hash", rom.substring(0, rom.length - 4) + ".bin");
 			if(md5)
 				this.hashes[appId] = md5;
 		}

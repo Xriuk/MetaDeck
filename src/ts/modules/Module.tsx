@@ -271,10 +271,14 @@ export abstract class Module<
 	}
 
 	protected cacheData(appId: number, data: Data | null){
-		if(!data || JSON.stringify(data).length < 5000)
+		if(!data || JSON.stringify(data).length < 5000){
 			this.data[appId] = data;
-		else
+			delete this.notCachedData[appId];
+		}
+		else{
+			delete this.data[appId];
 			this.notCachedData[appId] = data;
+		}
 	}
 
 	protected getCachedData(appId: number): Data | undefined{
@@ -322,7 +326,7 @@ export abstract class Module<
 			return undefined;
 
 		try{
-			if (!this.hasCachedData(appId)){				
+			if (!this.hasCachedData(appId)){
 				// Prevent saving multiple times inside providers
 				await this.state.settings.runInDisabledSaveState(async () => {
 					// Check if we have a saved provider
@@ -426,8 +430,11 @@ export abstract class Module<
 		
 		const overview = appStore.GetAppOverviewByAppID(appId);
 		this.state.loadingData.currentModule.game = overview.display_name;
-		if (overview && data)
-			this.state.loadingData.currentModule.description = !!data ? this.progressDescription(data) : this.missingDescription;
+		if (overview && data){
+			this.state.loadingData.currentModule.description = !!data ?
+				(this.dataProviders[appId] ? `${this.dataProviders[appId]} - ${this.progressDescription(data)}` : this.progressDescription(data)) :
+				this.missingDescription;
+		}
 		else
 			this.state.loadingData.currentModule.description = this.missingDescription;
 		this.state.loadingData.currentModule.processed++;

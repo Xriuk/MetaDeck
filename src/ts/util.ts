@@ -56,17 +56,16 @@ export async function getAppDetails(appId: number): Promise<SteamAppDetails | nu
 	});
 }
 
-export async function getAppHeader(appId: number){
+export function getAppHeader(appId: number){
 	let headers = appDetailsStore.GetHeaderImages(appStore.GetAppOverviewByAppID(appId));
-	for(let header of headers){
-		// Using fetch because we are querying Steam internal endpoints
-		try{
-			let image = await imageData(header);
-			if(image)
-				return image;
-		}
-		catch{}
-	}
+	let customHeader = headers.find(h => h.includes("/customimages/"));
+	if(customHeader)
+		return customHeader;
+
+	let heroes = appDetailsStore.GetHeroImages(appStore.GetAppOverviewByAppID(appId))?.rgHeroImages;
+	let customHero = heroes?.find(h => h.includes("/customimages/"));
+	if(customHero)
+		return customHero;
 
 	return undefined;
 }

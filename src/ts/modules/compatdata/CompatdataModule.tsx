@@ -73,10 +73,6 @@ export class CompatdataModule extends Module<"compatdata", CompatdataProvider<an
 		"metadata" as const
 	];
 
-	override get enabled(): boolean {
-		return false;	
-	}
-
 	addMounts(mounts: Mounts): void{
 		const module = this;
 
