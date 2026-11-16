@@ -1,4 +1,24 @@
-Decky Loader Steam Deck, Steam Machine and Steam Frame Plugin for viewing metadata, achievements and compatibility for Non-Steam games inside your game's app page just like with Steam games.
+Decky Loader Steam Deck, Steam Machine and Steam Frame Plugin for viewing metadata, achievements (also supports achievement sets!) and compatibility for Non-Steam games inside your game's app page just like with Steam games.
+
+
+## Screenshots
+#### Metadata and compatibility
+<img width="3840" height="2160" alt="metadata" src="https://github.com/user-attachments/assets/5aa3c39e-a689-4335-831a-ed23ba43fc68" />
+
+#### Compatibility, tests and notes
+<img width="3840" height="2160" alt="compatdata" src="https://github.com/user-attachments/assets/ab208e18-02bb-4836-bf01-6579f0ef3077" />
+<img width="3840" height="2160" alt="compatdata" src="https://github.com/user-attachments/assets/87bfc00c-70b5-46c0-a19a-09602b620ffd" />
+
+#### Achievements, achievement sets and DLCs
+PCSX2 (RetroAchievements with subsets)
+<img width="3840" height="2160" alt="achievements1" src="https://github.com/user-attachments/assets/6a954d60-b7f3-44aa-bda2-9697c67a5302" />
+DuckStation (RetroAchievements with subsets)
+<img width="3840" height="2160" alt="achievements2" src="https://github.com/user-attachments/assets/adbfeb50-38d5-422f-851a-7fc2f92dda58" />
+Xenia (supports DLCs, checks which ones are installed)
+<img width="3840" height="2160" alt="achievements3" src="https://github.com/user-attachments/assets/c088caf8-3cb7-4b8f-892c-8f6813e623ae" />
+RPCS3 (supports trophy categories Bronze, Silver, Gold and Platinum, also supports DLCs, checks which ones are installed)
+<img width="3840" height="2160" alt="achievements4" src="https://github.com/user-attachments/assets/2d925fb7-956e-4266-89ba-67838497c48f" />
+
 
 ## Building
 
@@ -8,6 +28,7 @@ decky plugin build # Builds installable zip file
 ```
 
 vscode and intellj IDEA run configs are included
+
 
 ## Credits
 
