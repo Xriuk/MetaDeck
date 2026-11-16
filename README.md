@@ -6,8 +6,11 @@ Decky Loader Steam Deck, Steam Machine and Steam Frame Plugin for viewing metada
 <img width="3840" height="2160" alt="metadata" src="https://github.com/user-attachments/assets/5aa3c39e-a689-4335-831a-ed23ba43fc68" />
 
 #### Compatibility, tests and notes
+PCSX2 (Verified = Playable or Perfect via official compatibility list) with compatibility test results (control glyphs, resolutions and minor issues for non-Perfect games)
 <img width="3840" height="2160" alt="compatdata" src="https://github.com/user-attachments/assets/ab208e18-02bb-4836-bf01-6579f0ef3077" />
-<img width="3840" height="2160" alt="compatdata" src="https://github.com/user-attachments/assets/87bfc00c-70b5-46c0-a19a-09602b620ffd" />
+DuckStation (Playable = EmuDeck user feedback) with compatibility test results and user notes
+<img width="3840" height="2160" alt="20261116132839_1" src="https://github.com/user-attachments/assets/b7eb157c-1235-44aa-8374-e082bd660fc9" />
+
 
 #### Achievements, achievement sets and DLCs
 PCSX2 (RetroAchievements with subsets)
