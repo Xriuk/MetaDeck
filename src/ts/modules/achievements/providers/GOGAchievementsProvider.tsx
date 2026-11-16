@@ -171,8 +171,10 @@ export class GOGAchievementsProvider extends AchievementsProvider<'gog'>{
 			this._bearer = body.access_token;
 			this._bearerExpiration = new Date();
 			this._bearerExpiration.setSeconds(this._bearerExpiration.getSeconds() + body.expires_in - 10);
-			
-			this.authCode = body.refresh_token;
+
+			// Check needed to avoid loops in settings
+			if(body.refresh_token != this.authCode)
+				this.authCode = body.refresh_token;
 		}
 		catch{
 			if(!silent){
@@ -380,8 +382,11 @@ export class GOGAchievementsProvider extends AchievementsProvider<'gog'>{
 		const refresh = async () => {
 			await this.retrieveRefreshToken(this.authCode, true);
 			await this.refreshRefreshToken(true);
-			setAuthCode(this.authCode);
-			setUserId(this._userId);
+			// Check needed to avoid loops
+			if(this.authCode !== authCode)
+				setAuthCode(this.authCode);
+			if(this._userId !== userId)
+				setUserId(this._userId);
 		};
 		void refresh();
 

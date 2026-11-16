@@ -156,7 +156,7 @@ export class SteamMetadataProvider extends FuzzySearchMetadataProvider<"steam">{
 		else if (response.status === 429)
 			return this.throttle(() => this.search(title));
 		else if (response.status >= 500)
-			return[]
+			return [];
 		else
 			throw Error(`Could not find metadata for "${title}": \n${(await response.text())}`);
 	}

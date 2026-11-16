@@ -3,7 +3,8 @@ import languages from "./translations";
 import type { DropdownOption } from "@decky/ui";
 
 type LocalizationLanguage = keyof typeof languages;
-export type Language = LocalizationLanguage | "ar" | "id" | "ms";
+const extraLanguages = ['ar', 'id', 'ms'] as const;
+export type Language = LocalizationLanguage | (typeof extraLanguages)[number];
 
 export function getCurrentLanguage(): LocalizationLanguage {
 	const steamLang = window.LocalizationManager.m_rgLocalesToUse[0]
@@ -14,7 +15,7 @@ export function getCurrentLanguage(): LocalizationLanguage {
 }
 
 export function isValidLanguage(code: string): code is Language{
-	return !!(languages as any)[code];
+	return !!(languages as any)[code] || extraLanguages.includes(code);
 }
 
 export function useTranslations() {

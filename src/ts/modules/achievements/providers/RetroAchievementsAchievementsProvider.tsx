@@ -4,7 +4,7 @@ import { copyToClipboard, fetchNoCorsLegacyTimeout, getAppDetails, getAppHeader,
 import type { ProviderCache, ProviderConfig } from "../../Provider"
 import { AchievementsProvider } from "../AchievementsProvider"
 import Logger from "../../../logger"
-import { DialogButton, DialogControlsSection, Dropdown, Field, sleep, TextField, Toggle } from "@decky/ui"
+import { DialogButton, DialogControlsSection, DialogControlsSectionHeader, Dropdown, Field, sleep, TextField, Toggle } from "@decky/ui"
 import { GetGameInfoAndUserProgressResponse } from "@retroachievements/api";
 import { FaGamepad } from "react-icons/fa"
 import { useMetaDeckState } from "../../../MetaDeckState"
@@ -17,6 +17,7 @@ export interface RetroAchievementsAchievementsProviderConfig extends ProviderCon
 	username: string;
 	api_key: string;
 	points: boolean;
+
 	// https://github.com/RetroAchievements/RAWeb/blob/fa58a24122f80e86e401443514800a49d344b7d1/public/API/API_GetGameInfoAndUserProgress.php#L31
 	achievement_types: boolean;
 	parent_sets: boolean; // One set per parent or one single base set
@@ -423,7 +424,9 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		const [username, setUsername] = useState(this.username);
 		const [apiKey, setApiKey] = useState(this.apiKey);
 		const [subsets, setSubsets] = useState(this.subsets);
+
 		const [points, setPoints] = useState(this.points);
+
 		const [achievementTypes, setAchievementTypes] = useState(this.achievementTypes);
 		const [parentSets, setParentSets] = useState(this.parentSets);
 		const [subsetsSets, setSubsetsSets] = useState(this.subsetsSets);
@@ -433,6 +436,7 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 		return (
 			<>
 				<DialogControlsSection>
+					<DialogControlsSectionHeader>{t("settings")}</DialogControlsSectionHeader>
 					<Field
 						label={t("username")}
 						description={
@@ -464,9 +468,6 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 							{t("copyAuthUrl")}
 						</DialogButton>
 					</Field>
-				</DialogControlsSection>
-
-				<DialogControlsSection>
 					<Field
 						label={t("raSubsets")}
 						description={t("raSubsetsDesc")}>
@@ -491,6 +492,10 @@ export class RetroAchievementsAchievementsProvider extends AchievementsProvider<
 								this.points = checked;
 							}}/>
 					</Field>
+				</DialogControlsSection>
+
+				<DialogControlsSection>
+					<DialogControlsSectionHeader>{(this.module.hasAchievementSetsSupport ? t("settingsAchievementsSets") : t("settingsAchievementsPrefixes"))}</DialogControlsSectionHeader>
 					<Field
 						label={(this.module.hasAchievementSetsSupport ? t("raAchievementTypesSets") : t("raAchievementTypesPrefix"))}
 						description={(this.module.hasAchievementSetsSupport ? t("raAchievementTypesSetsDesc") : t("raAchievementTypesPrefixDesc"))}>

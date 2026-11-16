@@ -43,6 +43,7 @@ import { FaRegFileLines } from "react-icons/fa6";
 import { RetroAchievementsMetadataProvider, type RetroAchievementsMetadataProviderCache, type RetroAchievementsMetadataProviderConfig } from "./providers/RetroAchievementsMetadataProvider";
 import { TitleDbMetadataProvider, type TitleDbMetadataProviderCache, type TitleDbMetadataProviderConfig } from "./providers/TitleDbMetadataProvider";
 import type { ProviderIdentifier } from "../Provider";
+import { DBoxMetadataProvider, type DBoxMetadataProviderCache, type DBoxMetadataProviderConfig } from "./providers/DBoxMetadataProvider";
 
 export interface MetadataConfig extends ModuleConfig<MetadataProviderConfigs>{
 	type_override: boolean,
@@ -69,6 +70,7 @@ export interface MetadataProviderConfigs{
 	lizardbyte: LizardByteGameDBMetadataProviderConfig;
 	ra: RetroAchievementsMetadataProviderConfig;
 	titledb: TitleDbMetadataProviderConfig;
+	dbox: DBoxMetadataProviderConfig;
 }
 
 export interface MetadataProviderCaches{
@@ -79,6 +81,7 @@ export interface MetadataProviderCaches{
 	lizardbyte: LizardByteGameDBMetadataProviderCache;
 	ra: RetroAchievementsMetadataProviderCache;
 	titledb: TitleDbMetadataProviderCache;
+	dbox: DBoxMetadataProviderCache;
 }
 
 export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
@@ -88,6 +91,7 @@ export class MetadataModule extends Module<"metadata", MetadataProvider<any>>{
 	logger = new Logger(this.identifier);
 
 	providers: MetadataProvider<any>[] = [
+		new DBoxMetadataProvider(this),
 		new TitleDbMetadataProvider(this),
 		new GameTDBMetadataProvider(this),
 		new GOGMetadataProvider(this),

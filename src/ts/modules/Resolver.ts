@@ -18,6 +18,7 @@ import type { GOGMetadataProviderHeroicResolverConfig, GOGMetadataProviderHeroic
 import type { Provider } from "./Provider";
 import { merge } from "lodash-es";
 import { Settings } from "../settings";
+import type { XeniaMarketplaceResolverCache, XeniaMarketplaceResolverConfig } from "./resolvers/XeniaMarketplaceResolver";
 
 export interface ResolverConfig{
 	
@@ -35,6 +36,7 @@ export interface ResolverConfigs{
 	rpcs3_npwr: MultiIdRPCS3NPWRResolverConfig;
 
 	xenia: XeniaResolverConfig;
+	xenia_marketplace: XeniaMarketplaceResolverConfig;
 
 	dolphin: MultiIdDolphinResolverConfig;
 	cemu: MultiIdCemuResolverConfig;
@@ -54,6 +56,7 @@ export interface ResolverCaches{
 	rpcs3_npwr: MultiIdRPCS3NPWRResolverCache;
 
 	xenia: XeniaResolverCache;
+	xenia_marketplace: XeniaMarketplaceResolverCache;
 
 	dolphin: MultiIdDolphinResolverCache;
 	cemu: MultiIdCemuResolverCache;

@@ -1,4 +1,4 @@
-import {Resolver, ResolverCache, ResolverConfig} from "../Resolver";
+import {Resolver, ResolverCache, ResolverConfig, type ResolverCaches} from "../Resolver";
 import {getLaunchCommand, isXeniaGame, romRegex} from "../../shortcuts";
 import {getAppDetails} from "../../util";
 import { call } from "@decky/api";
@@ -13,9 +13,18 @@ export interface XeniaResolverCache extends ResolverCache{
 	title_ids: Record<number, string | null>;
 }
 
+// Returns title id (eg: 545107D1)
+// Shares cache with XeniaMarketplaceResolver but not settings
+export class XeniaResolver extends Resolver<"xenia" | "xenia_marketplace">{
+	identifier: "xenia" | "xenia_marketplace" = "xenia" as const;
 
-export class XeniaResolver extends Resolver<"xenia">{
-	identifier = "xenia" as const;
+	// Shares cache
+	override get cache(){
+		return this.state.settings.cache.resolvers["xenia_marketplace"];
+	}
+	override set cache(cache: ResolverCaches["xenia_marketplace"]){
+		this.state.settings.cache.resolvers["xenia_marketplace"] = cache;
+	}
 
 	get titleIds(): Record<number, string | null>{
 		return this.cache.title_ids;

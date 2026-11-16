@@ -1,3 +1,4 @@
+import {configure} from "mobx";
 import { definePlugin, Plugin, type DeckyRequestInit } from "@decky/api";
 import { name } from "@decky/manifest"
 import {FaDatabase} from "react-icons/fa";
@@ -11,6 +12,8 @@ import {staticClasses} from "@decky/ui";
 import {SettingsComponent} from "./modules/SettingsComponent";
 import {ProviderSettingsComponent} from "./modules/ProviderSettingsComponent";
 import type {  CachedAppDetails } from "@decky/ui/dist/globals/steam-client/App";
+
+configure({isolateGlobalState: true});
 
 declare global
 {

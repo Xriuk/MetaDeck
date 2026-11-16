@@ -51,6 +51,16 @@ export class Settings
 				providers_overrides: {},
 				providers: {
 					// Id-based (localized)
+					dbox: {
+						enabled: true,
+						excluded_apps: [],
+						language: null,
+						resolvers: {
+							xenia_marketplace: {
+								enabled: true
+							}
+						}
+					},
 					titledb: {
 						enabled: true,
 						excluded_apps: [],
@@ -241,6 +251,7 @@ export class Settings
 						enabled: true,
 						user_path: null, // Will try auto-detecting if single profile
 						language: null,
+						openxbl_api_key: '',
 						gamerscore: true,
 						description_locked: null,
 						achievement_types: false, // Weird categories, we'll disable them by default
@@ -288,6 +299,7 @@ export class Settings
 				hdd_path: '/home/deck/Emulation/storage/rpcs3/dev_hdd0/'
 			},
 			xenia: {},
+			xenia_marketplace: {},
 			dolphin: {},
 			cemu: {},
 			ryujinx_titleid: {},
@@ -311,7 +323,8 @@ export class Settings
 					gametdb: {},
 					lizardbyte: {},
 					ra: {},
-					titledb: {}
+					titledb: {},
+					dbox: {}
 				}
 			},
 			compatdata: {
@@ -371,8 +384,13 @@ export class Settings
 			pcsx2: {
 				title_ids: {}
 			},
+			// Not used, uses xenia_marketplace below instead
 			xenia: {
 				title_ids: {}
+			},
+			xenia_marketplace: {
+				title_ids: {},
+				product_ids: {}
 			},
 			ra: {
 				hashes: {}
@@ -615,6 +633,17 @@ export class Settings
 							}]
 						};
 					}
+				}
+
+				// If we are lower than 4.2.0 we move xenia resolver cache to xenia_marketplace
+				if(Object.keys(savedData.resolvers?.xenia?.title_ids ?? {}).length &&
+					savedData.version.localeCompare("4.2.0", undefined, { numeric: true }) < 0){
+					
+					this.logger.debug("Migrating Xenia resolver cache");
+
+					savedData.resolvers.xenia_marketplace ??= {} as any;
+					savedData.resolvers.xenia_marketplace.title_ids = savedData.resolvers.xenia.title_ids;
+					savedData.resolvers.xenia.title_ids = {};
 				}
 			}
 			savedData.version = version;

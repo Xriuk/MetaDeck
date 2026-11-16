@@ -138,9 +138,8 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 		predicate: (locale: NonNullable<GameTDBGame['locales']>[string]) => any):
 			NonNullable<GameTDBGame['locales']>[string] | undefined{
 
-		let language = this.language;
-
 		// Retrieve localized version
+		let language = this.language;
 		let locale = locales.find(l => l[0] === language && predicate(l[1]));
 
 		// If we haven't found anything we try retrieving english
@@ -165,10 +164,6 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 
 			if(entries.length){
 				cats.push(StoreCategory.TrackedControllerSupport);
-				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
-					cats.push(StoreCategory.MultiPlayer);
-				if(entries.some(e => e["wi-fi-players"]))
-					cats.push(StoreCategory.OnlineMultiPlayer);
 				if (entries.some(e => e.controls?.some(c => c.type === 'gamecube' || c.type === 'classiccontroller')) ||
 					(await this.resolve(appId))!.toString().split(separator).some(i => isGameCubeId6(i))){
 
@@ -183,10 +178,6 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 
 			if(entries.length){
 				cats.push(StoreCategory.FullController);
-				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
-					cats.push(StoreCategory.MultiPlayer);
-				if(entries.some(e => e["wi-fi-players"]))
-					cats.push(StoreCategory.OnlineMultiPlayer);
 				if(entries.some(e => e.controls?.some(c => c.type === 'wiimote' || c.type === 'nunchuk')))
 					cats.push(StoreCategory.TrackedControllerSupport);
 			}
@@ -196,10 +187,6 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 
 			if(entries.length){
 				cats.push(StoreCategory.FullController);
-				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
-					cats.push(StoreCategory.MultiPlayer);
-				if(entries.some(e => e["wi-fi-players"]))
-					cats.push(StoreCategory.OnlineMultiPlayer);
 				if(entries.some(e => e.controls?.some(c => c.type === 'joycon' && c.required === true)))
 					cats.push(StoreCategory.TrackedControllerSupport);
 			}
@@ -208,11 +195,6 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 			entries = await this.getRPCS3GameEntries(appId);
 
 			if(entries.length){
-				cats.push(StoreCategory.FullController);
-				if(entries.some(e => e["local-players"] && e["local-players"] > 1))
-					cats.push(StoreCategory.MultiPlayer);
-				if(entries.some(e => e["wi-fi-players"]))
-					cats.push(StoreCategory.OnlineMultiPlayer);
 				if(entries.some(e => e.controls?.some(c => c.type === 'move')))
 					cats.push(StoreCategory.TrackedControllerSupport);
 			}
@@ -220,6 +202,15 @@ export class GameTDBMetadataProvider extends MetadataProvider<"gametdb">{
 
 		if(!entries.length)
 			return undefined;
+
+		if(entries.some(e => e["local-players"] && e["local-players"] > 1)){
+			cats.push(StoreCategory.LocalMultiPlayer);
+			cats.push(StoreCategory.MultiPlayer);
+		}
+		if(entries.some(e => e["wi-fi-players"])){
+			cats.push(StoreCategory.OnlineMultiPlayer);
+			cats.push(StoreCategory.MultiPlayer);
+		}
 
 		let locales = entries.flatMap(e => Object.entries(e.locales ?? {}));
 		let release = entries.find(e => e.date)?.date;

@@ -153,10 +153,11 @@ export class EmuDeckCompatdataProvider extends FuzzySearchCompatdataProvider<"em
 				deck_compat_category: compat,
 				frame_compat_category: compat, // We assume the Frame to be as powerful as the Deck
 
+				// We need to duplicate the arrays since they might be edited later
 				deck_test_results: notes,
-				machine_test_results: notes,
-				os_test_results: notes,
-				frame_test_results: notes
+				machine_test_results: [...notes],
+				os_test_results: [...notes],
+				frame_test_results: [...notes]
 			};
 
 			return result;

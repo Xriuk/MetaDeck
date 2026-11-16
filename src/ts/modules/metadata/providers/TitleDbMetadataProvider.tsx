@@ -197,7 +197,7 @@ export class TitleDbMetadataProvider extends MetadataProvider<'titledb'>{
 				finalLanguage = lang;
 
 			return (isValidLanguage(finalLanguage) ? getLanguageTitle(finalLanguage) : finalLanguage) +
-				(this.languages.filter(l => l.startsWith(country + ".") || l.endsWith("." + finalLanguage)).length > 1 ? ` (${country})` : "");
+				(this.languages.filter(l => l.startsWith(country + ".") || l.endsWith("." + lang)).length > 1 ? ` (${country})` : "");
 		};
 
 		return (

@@ -22,6 +22,7 @@ import { MultiIdRPCS3NPWRResolver } from "./modules/resolvers/MultiId/MultiIdRPC
 import { RyujinxSerialResolver } from "./modules/resolvers/RyujinxSerialResolver";
 import { RyujinxTitleIdResolver } from "./modules/resolvers/RyujinxTitleIdResolver";
 import { XeniaResolver } from "./modules/resolvers/XeniaResolver";
+import { XeniaMarketplaceResolver } from "./modules/resolvers/XeniaMarketplaceResolver";
 
 interface GlobalLoadingData
 {
@@ -328,6 +329,7 @@ export class MetaDeckState implements AsyncMountable
 			rpcs3_npwr: new MultiIdRPCS3NPWRResolver(this),
 
 			xenia: new XeniaResolver(this),
+			xenia_marketplace: new XeniaMarketplaceResolver(this),
 
 			dolphin: new MultiIdDolphinResolver(this),
 			cemu: new MultiIdCemuResolver(this),

@@ -108,7 +108,7 @@ export enum StoreCategory{
 	CommentaryAvailable = 14,
 	PartialController = 18,
 	MMO = 20,
-	// Do not use in Metadata providers
+	// Do not use in Metadata providers, will be added by Achievements module
 	Achievements = 22,
 	SplitScreen = 24,
 	CrossPlatformMultiPlayer = 27,
